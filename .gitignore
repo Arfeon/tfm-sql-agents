@@ -1,0 +1,72 @@
+# Ignorar archivos de entorno y configuraciones locales
+# Archivos de entorno
+.env
+.env.*
+!.env.example
+
+# Node / JavaScript
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.log
+
+# Build / dist
+dist/
+build/
+.next/
+.vite/
+.out/
+.svelte-kit/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+env/
+venv/
+.venv/
+ENV/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and coverage
+logs/
+coverage/
+.coverage
+coverage.xml
+
+# Docker
+docker-compose.override.yml
+
+# Secrets / keys / local config
+*.key
+*.pem
+*.crt
+credentials.json
+secrets.json
+*.local
+*.local.*
+
+# Roadmap y spikes (trabajo en progreso, no versionados hasta que estén listos)
+docs/roadmap/
+docs/spikes/
+
+# Temporary files
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# Database files
+*.sqlite
+*.sqlite3

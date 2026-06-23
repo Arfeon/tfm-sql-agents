@@ -1,0 +1,312 @@
+# =====================================================================
+# Golden set — Arcadia (BD-propia, decisión D-03)
+# =====================================================================
+# Conjunto de evaluación NL->SQL. Preguntas en ESPAÑOL, esquema en INGLÉS.
+#
+# Cada caso:
+#   id          identificador estable (G-NN)
+#   question    pregunta en lenguaje natural (lo que el usuario escribe)
+#   difficulty  easy | medium | hard
+#   tables      tablas que la SQL correcta DEBE tocar -> métrica schema-linking recall
+#   sql         SQL de referencia (PostgreSQL, SOLO LECTURA). Puede haber otras
+#               equivalentes; para "execution accuracy" se compara el RESULTADO.
+#   note        (opcional) por qué el caso es interesante (multi-hop, etc.)
+# =====================================================================
+
+- id: G-01
+  question: "¿Cuántos juegos hay en el catálogo?"
+  difficulty: easy
+  tables: [game]
+  sql: |
+    SELECT COUNT(*) AS total_games FROM game;
+  note: "Lookup de una sola tabla; línea base."
+
+- id: G-02
+  question: "Dame los 5 juegos con mayor precio base."
+  difficulty: easy
+  tables: [game]
+  sql: |
+    SELECT title, base_price
+    FROM game
+    ORDER BY base_price DESC
+    LIMIT 5;
+
+- id: G-03
+  question: "Lista los planes de suscripción con su precio mensual."
+  difficulty: easy
+  tables: [subscription_plan]
+  sql: |
+    SELECT name, monthly_price
+    FROM subscription_plan
+    ORDER BY monthly_price;
+
+- id: G-04
+  question: "¿Cuántos clientes hay en cada región?"
+  difficulty: easy
+  tables: [customer, region]
+  sql: |
+    SELECT r.name AS region, COUNT(*) AS customers
+    FROM customer c
+    JOIN region r ON r.region_id = c.region_id
+    GROUP BY r.name
+    ORDER BY customers DESC;
+
+- id: G-05
+  question: "¿Qué juegos tienen clasificación de edad para adultos (M)?"
+  difficulty: easy
+  tables: [game]
+  sql: |
+    SELECT title
+    FROM game
+    WHERE age_rating = 'M'
+    ORDER BY title;
+
+- id: G-06
+  question: "Muéstrame los 10 juegos con más minutos jugados en total."
+  difficulty: medium
+  tables: [play_session, game]
+  sql: |
+    SELECT g.title, SUM(ps.duration_minutes) AS total_minutes
+    FROM play_session ps
+    JOIN game g ON g.game_id = ps.game_id
+    GROUP BY g.title
+    ORDER BY total_minutes DESC
+    LIMIT 10;
+
+- id: G-07
+  question: "¿Cuál es la valoración media de cada género?"
+  difficulty: medium
+  tables: [rating, game_genre, genre]
+  sql: |
+    SELECT ge.name AS genre, ROUND(AVG(r.score), 2) AS avg_score
+    FROM rating r
+    JOIN game_genre gg ON gg.game_id = r.game_id
+    JOIN genre ge ON ge.genre_id = gg.genre_id
+    GROUP BY ge.name
+    ORDER BY avg_score DESC;
+  note: "Tres tablas vía M:N game_genre."
+
+- id: G-08
+  question: "¿Cuántos ingresos por compras de DLC se generaron en 2025?"
+  difficulty: medium
+  tables: [purchase]
+  sql: |
+    SELECT SUM(amount) AS dlc_revenue_2025
+    FROM purchase
+    WHERE purchase_date >= DATE '2025-01-01'
+      AND purchase_date <  DATE '2026-01-01';
+
+- id: G-09
+  question: "¿Cuántas suscripciones activas hay por plan?"
+  difficulty: medium
+  tables: [subscription, subscription_plan]
+  sql: |
+    SELECT sp.name AS plan, COUNT(*) AS active_subscriptions
+    FROM subscription s
+    JOIN subscription_plan sp ON sp.plan_id = s.plan_id
+    WHERE s.status = 'active'
+    GROUP BY sp.name
+    ORDER BY active_subscriptions DESC;
+
+- id: G-10
+  question: "Top 5 desarrolladoras por número de juegos desarrollados."
+  difficulty: medium
+  tables: [game, company]
+  sql: |
+    SELECT c.name AS developer, COUNT(*) AS games_developed
+    FROM game g
+    JOIN company c ON c.company_id = g.developer_company_id
+    GROUP BY c.name
+    ORDER BY games_developed DESC
+    LIMIT 5;
+  note: "Usa la FK developer_company_id (no publisher)."
+
+- id: G-11
+  question: "¿Cuál es el pico máximo de jugadores concurrentes de cada juego? Dame el top 10."
+  difficulty: medium
+  tables: [concurrent_snapshot, game]
+  sql: |
+    SELECT g.title, MAX(cs.concurrent_players) AS peak_concurrent
+    FROM concurrent_snapshot cs
+    JOIN game g ON g.game_id = cs.game_id
+    GROUP BY g.title
+    ORDER BY peak_concurrent DESC
+    LIMIT 10;
+  note: "Métrica estrella tipo 'espectadores simultáneos'."
+
+- id: G-12
+  question: "¿Cuál es la duración media de sesión por plataforma?"
+  difficulty: medium
+  tables: [play_session, platform]
+  sql: |
+    SELECT p.name AS platform, ROUND(AVG(ps.duration_minutes), 1) AS avg_minutes
+    FROM play_session ps
+    JOIN platform p ON p.platform_id = ps.platform_id
+    GROUP BY p.name
+    ORDER BY avg_minutes DESC;
+
+- id: G-13
+  question: "¿Qué juegos tienen una editora distinta de su desarrolladora?"
+  difficulty: hard
+  tables: [game, company]
+  sql: |
+    SELECT g.title,
+           dev.name AS developer,
+           pub.name AS publisher
+    FROM game g
+    JOIN company dev ON dev.company_id = g.developer_company_id
+    JOIN company pub ON pub.company_id = g.publisher_company_id
+    WHERE g.developer_company_id <> g.publisher_company_id
+    ORDER BY g.title;
+  note: "Dos JOIN a company desde dos FK distintas del mismo registro (developer y publisher)."
+
+- id: G-14
+  question: "¿Qué compañías han ejercido de editoras pero nunca de desarrolladoras?"
+  difficulty: hard
+  tables: [game, company]
+  sql: |
+    SELECT DISTINCT c.name
+    FROM company c
+    JOIN game gp ON gp.publisher_company_id = c.company_id
+    WHERE c.company_id NOT IN (
+        SELECT developer_company_id FROM game
+    )
+    ORDER BY c.name;
+  note: "Anti-join sobre los dos roles (developer/publisher) de la tabla company."
+
+- id: G-15
+  question: "¿Cuál es el ingreso recurrente mensual (MRR) actual?"
+  difficulty: hard
+  tables: [subscription]
+  sql: |
+    SELECT SUM(monthly_price) AS mrr
+    FROM subscription
+    WHERE status = 'active';
+  note: "Definición de negocio: MRR = suma de cuotas de las suscripciones activas."
+
+- id: G-16
+  question: "¿Cuáles son las 5 franquicias que más ingresos de DLC han generado?"
+  difficulty: hard
+  tables: [purchase, dlc, game, franchise]
+  sql: |
+    SELECT f.name AS franchise, SUM(p.amount) AS dlc_revenue
+    FROM purchase p
+    JOIN dlc d ON d.dlc_id = p.dlc_id
+    JOIN game g ON g.game_id = d.game_id
+    JOIN franchise f ON f.franchise_id = g.franchise_id
+    GROUP BY f.name
+    ORDER BY dlc_revenue DESC
+    LIMIT 5;
+  note: "Multi-hop de 4 tablas: purchase -> dlc -> game -> franchise."
+
+- id: G-17
+  question: "¿Qué clientes cancelaron su suscripción en menos de 30 días desde el alta?"
+  difficulty: hard
+  tables: [subscription, customer]
+  sql: |
+    SELECT DISTINCT c.customer_id, c.username
+    FROM subscription s
+    JOIN customer c ON c.customer_id = s.customer_id
+    WHERE s.status = 'cancelled'
+      AND s.end_date IS NOT NULL
+      AND (s.end_date - s.start_date) < 30
+    ORDER BY c.customer_id;
+  note: "Churn rápido; aritmética de fechas."
+
+- id: G-18
+  question: "¿Qué desarrolladoras tienen juegos en más de 3 géneros distintos?"
+  difficulty: hard
+  tables: [game, company, game_genre]
+  sql: |
+    SELECT c.name AS developer, COUNT(DISTINCT gg.genre_id) AS distinct_genres
+    FROM game g
+    JOIN company c ON c.company_id = g.developer_company_id
+    JOIN game_genre gg ON gg.game_id = g.game_id
+    GROUP BY c.name
+    HAVING COUNT(DISTINCT gg.genre_id) > 3
+    ORDER BY distinct_genres DESC;
+
+- id: G-19
+  question: "¿Cuáles son las 5 franquicias mejor valoradas (con al menos 50 valoraciones)?"
+  difficulty: hard
+  tables: [rating, game, franchise]
+  sql: |
+    SELECT f.name AS franchise,
+           ROUND(AVG(r.score), 2) AS avg_score,
+           COUNT(*) AS n_ratings
+    FROM rating r
+    JOIN game g ON g.game_id = r.game_id
+    JOIN franchise f ON f.franchise_id = g.franchise_id
+    GROUP BY f.name
+    HAVING COUNT(*) >= 50
+    ORDER BY avg_score DESC
+    LIMIT 5;
+  note: "Ranking con umbral mínimo de muestras; HAVING sobre el conteo, no sobre un corte arbitrario de nota."
+
+- id: G-20
+  question: "Dame los ingresos por DLC desglosados por región del cliente."
+  difficulty: hard
+  tables: [purchase, customer, region]
+  sql: |
+    SELECT r.name AS region, SUM(p.amount) AS dlc_revenue
+    FROM purchase p
+    JOIN customer c ON c.customer_id = p.customer_id
+    JOIN region r ON r.region_id = c.region_id
+    GROUP BY r.name
+    ORDER BY dlc_revenue DESC;
+
+- id: G-21
+  question: "¿Qué género acumula el mayor pico de jugadores concurrentes?"
+  difficulty: hard
+  tables: [concurrent_snapshot, game, game_genre, genre]
+  sql: |
+    SELECT ge.name AS genre, MAX(cs.concurrent_players) AS peak_concurrent
+    FROM concurrent_snapshot cs
+    JOIN game g ON g.game_id = cs.game_id
+    JOIN game_genre gg ON gg.game_id = g.game_id
+    JOIN genre ge ON ge.genre_id = gg.genre_id
+    GROUP BY ge.name
+    ORDER BY peak_concurrent DESC
+    LIMIT 1;
+  note: "Multi-hop telemetría -> catálogo -> género."
+
+- id: G-22
+  question: "¿Qué juego tiene el mayor número de DLCs publicados?"
+  difficulty: medium
+  tables: [dlc, game]
+  sql: |
+    SELECT g.title, COUNT(*) AS dlc_count
+    FROM dlc d
+    JOIN game g ON g.game_id = d.game_id
+    GROUP BY g.title
+    ORDER BY dlc_count DESC
+    LIMIT 1;
+
+- id: G-23
+  question: "¿Qué porcentaje de las suscripciones iniciadas en 2024 sigue activo?"
+  difficulty: hard
+  tables: [subscription]
+  sql: |
+    SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'active') / COUNT(*), 1)
+             AS active_pct_2024
+    FROM subscription
+    WHERE start_date >= DATE '2024-01-01'
+      AND start_date <  DATE '2025-01-01';
+  note: "Tasa de retención con agregación condicional (FILTER)."
+
+- id: G-24
+  question: "Lista los juegos que no están disponibles en ninguna plataforma de consola."
+  difficulty: hard
+  tables: [game, game_platform, platform]
+  sql: |
+    SELECT g.title
+    FROM game g
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM game_platform gp
+        JOIN platform p ON p.platform_id = gp.platform_id
+        WHERE gp.game_id = g.game_id
+          AND p.kind = 'console'
+    )
+    ORDER BY g.title;
+  note: "Negación / NOT EXISTS sobre la M:N con filtro por tipo de plataforma."
