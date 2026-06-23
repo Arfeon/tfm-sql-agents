@@ -1,5 +1,5 @@
 # GraphSQL
-> Sistema multi-agente que traduce preguntas en **lenguaje natural** a consultas **SQL de solo lectura**, sobre bases de datos relacionales grandes y multilingües.
+> Sistema multi-agente que traduce preguntas en **lenguaje natural** a consultas **SQL de solo lectura**
 
 ## 1. Motivación y Problema
 
