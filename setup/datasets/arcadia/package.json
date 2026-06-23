@@ -1,0 +1,20 @@
+{
+  "name": "arcadia",
+  "version": "1.0.0",
+  "description": "> **Estado: validado.** Levanté el esquema en PostgreSQL 16 + pgvector (vía > `docker-compose.yml`), poblé con `seed_data.py` (seed=42: 60 compañías, 320 juegos, > 5 000 clientes, 80 000 sesiones, 55 000 snapshots) y ejecuté las 24 consultas del > golden set contra la BD real: **24/24 corren y devuelven filas**. El proceso me > destapó un bug en el seeder (PK de `subscription_plan`) y dos preguntas frágiles > que corregí (G-14 sin editoras puras, G-19 con umbral inalcanzable).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@faker-js/faker": "^10.5.0",
+    "@types/pg": "^8.20.0",
+    "dotenv": "^17.4.2",
+    "pg": "^8.22.0",
+    "seedrandom": "^3.0.5"
+  }
+}

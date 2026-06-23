@@ -60,6 +60,7 @@ secrets.json
 # Roadmap y spikes (trabajo en progreso, no versionados hasta que estén listos)
 docs/roadmap/
 docs/spikes/
+docs/investigacion
 
 # Temporary files
 *.swp
