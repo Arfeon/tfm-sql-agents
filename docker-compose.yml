@@ -1,0 +1,55 @@
+# Infraestructura local del TFM: Postgres+pgvector y Neo4j.
+# Levanto todo con `docker compose up -d`. Las credenciales cuadran con mi .env.
+#
+# Postgres expone dos bases en la misma instancia:
+#   - graphsql_memory  -> memoria/checkpoints de LangGraph + pgvector
+#   - arcadia          -> BD objetivo que consulto en lenguaje natural (setup/datasets/arcadia)
+# La imagen pgvector/pgvector ya trae el binario de pgvector instalado, pero cada
+# base hay que activarla con `CREATE EXTENSION vector`. Eso lo hace automáticamente
+# el script setup/infra/postgres/init/01-init.sh en las dos bases, en el primer arranque.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: graphsql_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      POSTGRES_DB: ${POSTGRES_DB:-graphsql_memory}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./setup/infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d graphsql_memory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: graphsql_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-Patata1234$$}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"   # navegador web de Neo4j
+      - "7687:7687"   # protocolo Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:

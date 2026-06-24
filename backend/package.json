@@ -1,0 +1,24 @@
+{
+  "name": "graphsql-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "tsx ../setup/datasets/arcadia/seedData.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "@types/seedrandom": "^2.4.34",
+    "seedrandom": "^3.0.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
