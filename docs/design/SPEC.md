@@ -36,6 +36,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 |----|-----------|--------|
 | SPEC-00 | Infraestructura: BD objetivo (puerto + adaptador Postgres) | ✅ Cerrada |
 | SPEC-00B | Infraestructura: proveedor LLM (puerto `IChatModel` + factory) | ✅ Cerrada |
+| SPEC-00C | CLI inicial: punto de entrada, selección de proveedor y primera conversación | ✅ Cerrada |
 | SPEC-01 | Supervisor (enrutador determinista) | ⏳ Pendiente |
 | SPEC-02 | Memory Agent | ⏳ Pendiente |
 | SPEC-03 | Schema Agent (GraphRAG) | ⏳ Pendiente |
@@ -52,14 +53,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 
 **Objetivo.** Necesito una forma de que los agentes puedan consultar la base de datos sin que les importe si por debajo hay un `pg.Client` o cualquier otra cosa: dependen de una interfaz, no del driver.
 
-**Contrato.** El puerto que conocerán los agentes —`fetchAll` para ejecutar cualquier SELECT y devolver las filas, y `rowCount` para contar registros de una tabla:
-
-```typescript
-interface ITargetDatabase {
-  fetchAll<T extends Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>
-  rowCount(table: string): Promise<number>
-}
-```
+**Contrato.** El puerto `ITargetDatabase` que conocerán los agentes expone dos métodos: `fetchAll(sql, params)`, que ejecuta cualquier SELECT y devuelve las filas, y `rowCount(table)`, que cuenta los registros de una tabla.
 
 **Pasos**
 
@@ -90,16 +84,7 @@ cd backend && npm test
 
 **Objetivo.** Todos los agentes van a necesitar hablar con un LLM, y quiero poder elegir entre la API de OpenAI (nube) y un modelo local servido por LM Studio sin que los agentes se enteren del cambio. Es la misma idea que `ITargetDatabase`: el agente depende de una interfaz, no del proveedor concreto.
 
-**Contrato.** El puerto que conocerán los agentes —recibe una conversación (mensajes de sistema/usuario/asistente) y devuelve el texto de la respuesta:
-
-```typescript
-type ChatRole = 'system' | 'user' | 'assistant'
-interface ChatMessage { role: ChatRole; content: string }
-
-interface IChatModel {
-  chat(messages: ChatMessage[]): Promise<string>
-}
-```
+**Contrato.** El puerto `IChatModel` que conocerán los agentes expone un único método `chat(messages)`: recibe una conversación (una lista de mensajes, cada uno con su rol —sistema, usuario o asistente— y su contenido de texto) y devuelve el texto de la respuesta del modelo.
 
 **Pasos**
 
@@ -122,6 +107,38 @@ interface IChatModel {
 ```bash
 cd backend && npm test              # unitarios del factory (sin red)
 cd backend && npm run test:integration   # smoke test contra el LLM real (opt-in)
+```
+
+---
+
+### SPEC-00C — CLI inicial: punto de entrada, selección de proveedor y primera conversación
+
+**Objetivo.** Quiero una primera interfaz de consola, agradable y con color, que me deje arrancar la aplicación, elegir con qué LLM hablar y hacerle una pregunta. Es el primer hito visible de extremo a extremo: del menú al modelo y vuelta. La versión completa (CLI integrado con todo el pipeline de agentes y la aprobación humana) queda para SPEC-09; aquí solo monto el esqueleto y la primera conversación directa con el modelo.
+
+**Contrato.** El punto de entrada arranca un flujo interactivo: muestra una cabecera, ofrece un menú principal y, si elijo conversar, me deja escoger proveedor (OpenAI o LM Studio) y escribir preguntas que se envían al modelo a través de `ChatModelFactory` e `IChatModel`. No expongo un puerto nuevo: el CLI es la capa más externa (composición), reutiliza lo construido en SPEC-00B y muestra las respuestas por consola.
+
+**Pasos**
+
+1. Añadir las dependencias de presentación: `@inquirer/prompts` (menús y captura de texto), `boxen` (cabecera en caja) y `chalk` (color).
+2. Crear el punto de entrada de la aplicación (`npm start`), que cargue las variables de entorno y lance el flujo del CLI.
+3. Mostrar al arrancar una cabecera «GraphSQL Agent» dentro de un recuadro con color.
+4. Mostrar un menú principal donde pueda elegir entre iniciar una conversación o salir.
+5. Si elijo iniciar conversación, mostrar un submenú para escoger el proveedor: OpenAI o LM Studio (que mapea al proveedor local).
+6. Crear el modelo del proveedor elegido con `ChatModelFactory` y entrar en un bucle: pedirme una pregunta, enviarla con `chat()` y mostrar la respuesta con formato y color.
+7. Manejar con elegancia que el proveedor no responda (LM Studio apagado, sin red…): los adaptadores fallarán rápido (pocos reintentos) y el CLI mostrará un mensaje claro, dejándome reintentar sin que la app se caiga.
+8. Permitir salir del bucle de conversación y del menú de forma limpia (incluido Ctrl+C).
+
+**Criterios de aceptación**
+
+- [X] Al ejecutar `npm start`, aparece la cabecera «GraphSQL Agent» en un recuadro con color
+- [X] El menú principal permite iniciar una conversación o salir
+- [X] Al iniciar conversación, puedo elegir entre OpenAI y LM Studio
+- [X] Tras elegir proveedor, puedo escribir una pregunta y recibo por consola la respuesta del modelo
+- [X] Si el proveedor no está disponible, veo un mensaje de error claro (rápido, sin esperas largas) y puedo reintentar sin que la app se caiga
+- [X] Puedo encadenar varias preguntas y salir cuando quiera sin que la app se rompa
+
+```bash
+cd backend && npm start
 ```
 
 

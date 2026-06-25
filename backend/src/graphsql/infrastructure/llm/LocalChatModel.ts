@@ -14,7 +14,9 @@ export class LocalChatModel implements IChatModel {
   private readonly client: ChatOpenAI
 
   constructor(baseUrl: string, apiKey: string, model: string, temperature?: number) {
-    this.client = new ChatOpenAI({ apiKey, model, temperature, configuration: { baseURL: baseUrl } })
+    // Pocos reintentos para fallar rápido si LM Studio no está levantado,
+    // en vez de esperar el backoff largo por defecto de LangChain.
+    this.client = new ChatOpenAI({ apiKey, model, temperature, maxRetries: 1, configuration: { baseURL: baseUrl } })
   }
 
   /** Creo el adaptador leyendo la configuración de LM Studio del entorno. */

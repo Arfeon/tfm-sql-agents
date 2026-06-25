@@ -13,7 +13,9 @@ export class OpenAIChatModel implements IChatModel {
   private readonly client: ChatOpenAI
 
   constructor(apiKey: string, model: string, temperature?: number) {
-    this.client = new ChatOpenAI({ apiKey, model, temperature })
+    // Pocos reintentos para fallar rápido si el proveedor no responde,
+    // en vez de esperar el backoff largo por defecto de LangChain.
+    this.client = new ChatOpenAI({ apiKey, model, temperature, maxRetries: 1 })
   }
 
   /** Creo el adaptador leyendo la configuración de OpenAI del entorno. */
