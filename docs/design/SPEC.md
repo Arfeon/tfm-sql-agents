@@ -37,15 +37,16 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-00 | Infraestructura: BD objetivo (puerto + adaptador Postgres) | ✅ Cerrada |
 | SPEC-00B | Infraestructura: proveedor LLM (puerto `IChatModel` + factory) | ✅ Cerrada |
 | SPEC-00C | CLI inicial: punto de entrada, selección de proveedor y primera conversación | ✅ Cerrada |
-| SPEC-01 | Supervisor (enrutador determinista) | ⏳ Pendiente |
-| SPEC-02 | Memory Agent | ⏳ Pendiente |
-| SPEC-03 | Schema Agent (GraphRAG) | ⏳ Pendiente |
-| SPEC-04 | SQL Agent | ⏳ Pendiente |
-| SPEC-05 | Judge Agent (seguridad + LLM) | ⏳ Pendiente |
-| SPEC-06 | Human Review (interrupt) | ⏳ Pendiente |
-| SPEC-07 | Execute SQL | ⏳ Pendiente |
-| SPEC-08 | Store Feedback | ⏳ Pendiente |
-| SPEC-09 | CLI | ⏳ Pendiente |
+| SPEC-01 | Primer grafo LangGraph: conversar y completar acciones (un nodo + una tool + checkpointer) | ✅ Cerrada |
+| SPEC-02 | Ingesta del esquema: tool que, al invocarse, escanea el esquema, lo vectoriza (pgvector) y lo vuelca a nodos Neo4j | ⏳ Pendiente |
+| SPEC-03 | Schema Agent: recuperación (búsqueda semántica + expansión por FKs en el grafo) | ⏳ Pendiente |
+| SPEC-04 | SQL Agent (NL→SQL con el esquema recuperado) | ⏳ Pendiente |
+| SPEC-05 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ⏳ Pendiente |
+| SPEC-06 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
+| SPEC-07 | Execute SQL (solo lectura) | ⏳ Pendiente |
+| SPEC-08 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
+| SPEC-09 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
+| SPEC-10 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
 
 ---
 
@@ -139,6 +140,36 @@ cd backend && npm run test:integration   # smoke test contra el LLM real (opt-in
 
 ```bash
 cd backend && npm start
+```
+
+---
+
+### SPEC-01 — Primer grafo LangGraph: conversar y completar acciones
+
+**Objetivo.** Antes de montar los agentes especializados quiero validar el esqueleto de orquestación: un primer grafo de LangGraph.js capaz de mantener una conversación con estado y de **completar acciones** llamando a herramientas (tools). Es la prueba de que LangGraph hace lo que necesito (nodos, edges condicionales, estado por hilo) antes de invertir en el pipeline real.
+
+**Contrato.** Un grafo compilado que, dado un mensaje del usuario y el identificador de un hilo, decide si responder directamente o invocar una tool, la ejecuta si hace falta y devuelve la respuesta final; conserva el historial de la conversación por hilo mediante un checkpointer. Para esta validación incluyo una tool de demostración (comprobar el estado del sistema). El grafo usa el modelo LangChain por debajo —que sí admite tool-calling y mensajes con estado—, no el puerto `IChatModel`, que seguirá sirviendo para el chat simple.
+
+**Pasos**
+
+1. Añadir `@langchain/langgraph` (y `zod` para describir las tools).
+2. Definir el estado del grafo: la lista de mensajes que se va acumulando turno a turno.
+3. Exponer el modelo LangChain del proveedor elegido (reutilizando la selección OpenAI/LM Studio ya construida en SPEC-00B) para poder asociarle tools.
+4. Crear una tool de demostración (comprobar el estado del sistema) que el agente pueda invocar.
+5. Construir el grafo: un nodo de agente (modelo + tools) y un nodo de tools, con un edge condicional que enrute a la tool cuando el modelo la pida y vuelva al agente; compilarlo con un checkpointer en memoria para mantener el estado por hilo.
+6. Integrar el grafo en el CLI: la conversación pasa por el grafo (un hilo por sesión), de modo que pueda conversar y ver cómo completa acciones.
+7. Cubrirlo con un test (opt-in) que invoque el grafo con una pregunta que dispare la tool y compruebe que completa y responde.
+
+**Criterios de aceptación**
+
+- [X] El grafo mantiene el contexto de la conversación dentro de un mismo hilo (checkpointer)
+- [X] Cuando la pregunta lo requiere, el agente invoca la tool de demostración y usa su resultado en la respuesta
+- [X] Desde el CLI puedo conversar a través del grafo y ver la respuesta
+- [X] Un test opt-in invoca el grafo, dispara la tool y verifica que responde
+
+```bash
+cd backend && npm start                  # conversar a través del grafo
+cd backend && npm run test:integration   # incluye el test del grafo (opt-in)
 ```
 
 

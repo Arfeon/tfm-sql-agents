@@ -2,22 +2,20 @@
  * Punto de entrada del CLI de GraphSQL.
  *
  * Es la capa más externa de la aplicación (composición): muestra una cabecera,
- * un menú, deja elegir el proveedor del modelo y abre una conversación directa
- * con él. Reutiliza el factory y el puerto `IChatModel` de SPEC-00B.
+ * un menú, deja elegir el proveedor del modelo y abre una conversación a través
+ * del grafo de LangGraph (SPEC-01), que puede completar acciones con tools.
  *
  * Arrancar con: npm start
  */
 import { config } from 'dotenv'
 config({ path: '../.env' })
 
+import { randomUUID } from 'node:crypto'
 import boxen from 'boxen'
 import chalk from 'chalk'
 import { select, input } from '@inquirer/prompts'
-import { ChatModelFactory } from '../graphsql/infrastructure/llm/ChatModelFactory'
 import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
-import type { IChatModel } from '../graphsql/domain/ports/IChatModel'
-
-const SYSTEM_PROMPT = 'Eres GraphSQL Agent, un asistente experto en SQL. Responde de forma clara y en español.'
+import { createConversationGraph, askGraph } from '../graphsql/graph/agentGraph'
 
 /** Muestro la cabecera de bienvenida dentro de un recuadro con color. */
 function showHeader(): void {
@@ -55,8 +53,10 @@ function askProvider(): Promise<LlmProvider> {
   })
 }
 
-/** Bucle de conversación: pregunto, envío al modelo y muestro la respuesta. */
-async function runConversation(model: IChatModel): Promise<void> {
+/** Bucle de conversación: pregunto, paso por el grafo y muestro la respuesta. */
+async function runConversation(provider: LlmProvider): Promise<void> {
+  const graph = createConversationGraph(provider)
+  const threadId = randomUUID() // un hilo por conversación, para el checkpointer
   console.log(chalk.dim('\nEscribe tu pregunta. Pon "salir" para volver al menú.\n'))
 
   while (true) {
@@ -67,10 +67,7 @@ async function runConversation(model: IChatModel): Promise<void> {
     }
 
     try {
-      const reply = await model.chat([
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: question },
-      ])
+      const reply = await askGraph(graph, threadId, question)
       console.log(`\n${chalk.cyan('Agente:')} ${reply}\n`)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
@@ -94,8 +91,7 @@ async function main(): Promise<void> {
     }
 
     const provider = await askProvider()
-    const model = ChatModelFactory.create(provider)
-    await runConversation(model)
+    await runConversation(provider)
   }
 }
 

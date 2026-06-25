@@ -31,6 +31,11 @@ export class OpenAIChatModel implements IChatModel {
     return response.text
   }
 
+  /** Expongo el modelo LangChain para los grafos/agentes que necesitan tool-calling. */
+  get langChainModel(): ChatOpenAI {
+    return this.client
+  }
+
   private toLangChainMessages(messages: ChatMessage[]): BaseMessage[] {
     return messages.map((message) => {
       if (message.role === 'system') return new SystemMessage(message.content)
