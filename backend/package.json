@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run tests/diagnostic tests/unit",
+    "test:watch": "vitest tests/diagnostic tests/unit",
+    "test:integration": "vitest run tests/integration",
     "seed": "tsx ../setup/datasets/arcadia/seedData.ts"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.1",
+    "@langchain/openai": "^1.5.3",
     "dotenv": "^16.6.1",
     "pg": "^8.22.0"
   },
