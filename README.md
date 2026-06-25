@@ -61,15 +61,30 @@ flowchart LR
 
 ## 4. Tecnologías (visión general)
 
-- **LangGraph** — orquestación del flujo entre agentes.
+- **TypeScript (Node.js 20+)** — lenguaje del proyecto.
+- **LangGraph.js** — orquestación del flujo entre agentes.
 - **Neo4j** — esquema de la base de datos como grafo de conocimiento (GraphRAG).
 - **PostgreSQL + pgvector** — memoria y búsqueda semántica.
-- **Modelo de lenguaje (LLM)** — generación y validación de la SQL.
+- **Modelo de lenguaje (LLM) configurable** — OpenAI (nube) o un modelo local (LM Studio); genera y valida la SQL.
+- **CLI en terminal** — `@inquirer/prompts` + `boxen` + `chalk`.
 
 > El *porqué* de algunas decisiones técnica se documenta en [`docs/design/arquitectura.md`](docs/design/arquitectura.md) a medida que se toma.
+
+## 5. Estado actual
+
+Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medida que valido cada pieza. Lo que ya funciona:
+
+- ✅ **Infraestructura** — Docker Compose con PostgreSQL + pgvector y Neo4j; el dataset de pruebas *Arcadia* se carga al arrancar y está validado.
+- ✅ **Acceso a la BD objetivo** — puerto `ITargetDatabase` con un adaptador Postgres que fuerza la sesión en **solo lectura**.
+- ✅ **Proveedor LLM configurable** — puerto `IChatModel` + factory que crea OpenAI (nube) o un modelo local de LM Studio, eligiendo por configuración.
+- ✅ **CLI en terminal** — cabecera, menú y selección de proveedor; puedo conversar con el modelo (`npm start`).
+- ✅ **Primer grafo LangGraph** — conversa con estado (checkpointer por hilo) y completa acciones llamando a *tools*, tanto con OpenAI como en local.
+
+Lo siguiente es el corazón del proyecto: **ingesta del esquema** (escanear → vectorizar en pgvector → volcar a nodos Neo4j) y la **recuperación GraphRAG**. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
 
 ## Documentación del proyecto
 
 - [`docs/design/arquitectura.md`](docs/design/arquitectura.md) — diseño detallado (incremental, se completa por fases).
+- [`docs/design/SPEC.md`](docs/design/SPEC.md) — especificación e historial de componentes (SDD).
 
 
