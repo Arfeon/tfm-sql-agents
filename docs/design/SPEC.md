@@ -38,8 +38,8 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-00B | Infraestructura: proveedor LLM (puerto `IChatModel` + factory) | ✅ Cerrada |
 | SPEC-00C | CLI inicial: punto de entrada, selección de proveedor y primera conversación | ✅ Cerrada |
 | SPEC-01 | Primer grafo LangGraph: conversar y completar acciones (un nodo + una tool + checkpointer) | ✅ Cerrada |
-| SPEC-02 | Ingesta del esquema: tool que, al invocarse, escanea el esquema, lo vectoriza (pgvector) y lo vuelca a nodos Neo4j | ⏳ Pendiente |
-| SPEC-03 | Schema Agent: recuperación (búsqueda semántica + expansión por FKs en el grafo) | ⏳ Pendiente |
+| SPEC-02 | Ingesta del esquema: conectar a la BD objetivo, extraer su esquema y volcarlo a nodos Neo4j; tools para el agente | ✅ Cerrada |
+| SPEC-03 | Schema Agent: vectorización (pgvector) + recuperación (semántica + expansión por FKs en el grafo) | ⏳ Pendiente |
 | SPEC-04 | SQL Agent (NL→SQL con el esquema recuperado) | ⏳ Pendiente |
 | SPEC-05 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ⏳ Pendiente |
 | SPEC-06 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
@@ -148,7 +148,7 @@ cd backend && npm start
 
 **Objetivo.** Antes de montar los agentes especializados quiero validar el esqueleto de orquestación: un primer grafo de LangGraph.js capaz de mantener una conversación con estado y de **completar acciones** llamando a herramientas (tools). Es la prueba de que LangGraph hace lo que necesito (nodos, edges condicionales, estado por hilo) antes de invertir en el pipeline real.
 
-**Contrato.** Un grafo compilado que, dado un mensaje del usuario y el identificador de un hilo, decide si responder directamente o invocar una tool, la ejecuta si hace falta y devuelve la respuesta final; conserva el historial de la conversación por hilo mediante un checkpointer. Para esta validación incluyo una tool de demostración (comprobar el estado del sistema). El grafo usa el modelo LangChain por debajo —que sí admite tool-calling y mensajes con estado—, no el puerto `IChatModel`, que seguirá sirviendo para el chat simple.
+**Contrato.** Un grafo compilado que, dado un mensaje del usuario y el identificador de un hilo, decide si responder directamente o invocar una tool, la ejecuta si hace falta y devuelve la respuesta final; conserva el historial de la conversación por hilo mediante un checkpointer. Para esta validación incluyo una tool de demostración (comprobar el estado del sistema). El grafo usa el modelo LangChain por debajo —que sí admite tool-calling y mensajes con estado—, no el puerto `IChatModel`. `IChatModel` queda como abstracción de chat sin tools (hoy solo la ejercita su smoke test); el CLI ya conversa a través del grafo.
 
 **Pasos**
 
@@ -170,6 +170,42 @@ cd backend && npm start
 ```bash
 cd backend && npm start                  # conversar a través del grafo
 cd backend && npm run test:integration   # incluye el test del grafo (opt-in)
+```
+
+---
+
+### SPEC-02 — Ingesta del esquema: BD objetivo → nodos Neo4j
+
+**Objetivo.** Quiero conectarme a la base de datos que me dé el cliente —definida en el `.env` por `TARGET_DB_TYPE` (p. ej. `postgresql`) y `TARGET_DB_NAME`—, extraer su esquema (tablas, columnas, claves primarias y foráneas) y volcarlo a Neo4j como grafo de conocimiento. Después expongo ese escaneo+ingesta como tool(s) para que un agente pueda dispararlo. Es el primer ladrillo del GraphRAG. La vectorización en pgvector la dejo para SPEC-03, donde está la recuperación que la usa.
+
+**Contrato.**
+
+- *Lectura del esquema*: dado el tipo y el nombre de la BD objetivo más las credenciales del `.env`, obtengo la lista de tablas; de cada una, sus columnas (nombre, tipo, si admite nulos), sus claves primarias y sus claves foráneas (columna → tabla y columna referenciadas). En SPEC-02 implemento el lector de PostgreSQL; la estructura queda preparada para añadir otros tipos.
+- *Volcado a Neo4j*: por cada tabla creo un nodo `Table` (nombre, nombre completo, esquema, claves primarias, nº de columnas) y un nodo `Column` por columna (nombre, tipo, nullable, si es clave primaria), unidos con la relación `HAS_COLUMN`; por cada clave foránea creo una relación `REFERENCES` entre las tablas. Aseguro `Table.name` único y limpio el grafo de esquema antes de reimportar.
+- *Tools para el agente*: una tool que escanea la BD objetivo e ingiere el esquema en Neo4j devolviendo un resumen (nº de tablas, columnas y relaciones), y otra que devuelve el resumen del esquema ya ingerido.
+- *Catálogo de BDs objetivo*: cargo de la configuración un mapa de las BDs disponibles (tipo + nombre) para mostrarlo en el CLI y que el cliente elija cuál escanear. Por ahora tiene una entrada (la del `.env`: `postgresql` / `arcadia`), extensible.
+
+**Pasos**
+
+1. Añadir el driver oficial `neo4j-driver`.
+2. Definir en el dominio el modelo del esquema: una tabla con sus columnas, claves primarias y claves foráneas.
+3. Leer del `.env` la configuración de la BD objetivo (`TARGET_DB_TYPE`, `TARGET_DB_NAME`, host, puerto, usuario, contraseña, esquema) y exponer un catálogo (mapa tipo+nombre) de BDs disponibles para el CLI.
+4. Implementar el lector de esquema para PostgreSQL (consultando `information_schema` / `pg_catalog`): tablas, columnas, claves primarias y foráneas.
+5. Implementar la conexión a Neo4j y el gestor del grafo de esquema: constraints/índices, nodos `Table` y `Column`, relaciones `HAS_COLUMN` y `REFERENCES`, y limpieza previa.
+6. Exponer las tools al agente —«escanear e ingerir esquema» y «resumen del esquema»— y añadirlas al grafo de SPEC-01.
+7. En el CLI: una opción para elegir la BD objetivo (mostrando tipo + nombre del catálogo) y lanzar el escaneo e ingesta.
+8. Escribir los tests: (a) Neo4j responde, (b) se obtiene el esquema de Arcadia con las tablas esperadas, (c) una tabla queda convertida en su nodo de Neo4j con sus columnas.
+
+**Criterios de aceptación**
+
+- [X] Conecto a la BD objetivo según `TARGET_DB_TYPE` + `TARGET_DB_NAME` del `.env` y extraigo su esquema (tablas, columnas, claves primarias y foráneas)
+- [X] El CLI muestra el catálogo de BDs objetivo (tipo + nombre) y puedo elegir cuál escanear
+- [X] Tras ingerir, en Neo4j existen los nodos `Table` y `Column` y las relaciones `HAS_COLUMN` y `REFERENCES`
+- [X] El agente dispone de una tool para escanear e ingerir el esquema y otra para ver el resumen
+- [X] Tests: (a) Neo4j responde; (b) se obtiene el esquema de Arcadia con las tablas esperadas; (c) una tabla queda convertida en su nodo de Neo4j con sus columnas
+
+```bash
+cd backend && npm test   # incluye los tests de esquema y de Neo4j (requiere docker up)
 ```
 
 

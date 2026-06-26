@@ -79,8 +79,9 @@ Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medi
 - ✅ **Proveedor LLM configurable** — puerto `IChatModel` + factory que crea OpenAI (nube) o un modelo local de LM Studio, eligiendo por configuración.
 - ✅ **CLI en terminal** — cabecera, menú y selección de proveedor; puedo conversar con el modelo (`npm start`).
 - ✅ **Primer grafo LangGraph** — conversa con estado (checkpointer por hilo) y completa acciones llamando a *tools*, tanto con OpenAI como en local.
+- ✅ **Ingesta del esquema en Neo4j** — escaneo de la BD objetivo (tablas, columnas, claves) y volcado a un grafo de conocimiento (nodos `Table`/`Column`, relaciones `HAS_COLUMN`/`REFERENCES`), disparable desde el CLI o como *tool* del agente.
 
-Lo siguiente es el corazón del proyecto: **ingesta del esquema** (escanear → vectorizar en pgvector → volcar a nodos Neo4j) y la **recuperación GraphRAG**. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
+Lo siguiente es el corazón del proyecto: la **recuperación GraphRAG** (vectorización en pgvector + búsqueda semántica de tablas + expansión por claves foráneas en el grafo). El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
 
 ## Documentación del proyecto
 

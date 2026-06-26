@@ -16,6 +16,8 @@ import chalk from 'chalk'
 import { select, input } from '@inquirer/prompts'
 import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
 import { createConversationGraph, askGraph } from '../graphsql/graph/agentGraph'
+import { loadTargetDatabases, targetDatabaseLabel } from '../graphsql/infrastructure/config/targetDatabases'
+import { ingestSchema } from '../graphsql/application/schemaIngestion'
 
 /** Muestro la cabecera de bienvenida dentro de un recuadro con color. */
 function showHeader(): void {
@@ -31,15 +33,39 @@ function showHeader(): void {
   )
 }
 
-/** Menú principal: elijo si quiero conversar o salir. */
-function askMainAction(): Promise<'chat' | 'exit'> {
+/** Menú principal: elijo qué hacer. */
+function askMainAction(): Promise<'chat' | 'scan' | 'exit'> {
   return select({
     message: '¿Qué quieres hacer?',
     choices: [
       { name: 'Iniciar una conversación', value: 'chat' },
+      { name: 'Escanear el esquema de la BD objetivo', value: 'scan' },
       { name: 'Salir', value: 'exit' },
     ],
   })
+}
+
+/** Escaneo de esquema: elijo la BD objetivo del catálogo y la ingiero en Neo4j. */
+async function runSchemaScan(): Promise<void> {
+  const targets = loadTargetDatabases()
+  const target = await select({
+    message: 'Elige la base de datos objetivo a escanear',
+    choices: targets.map((t) => ({ name: targetDatabaseLabel(t), value: t })),
+  })
+
+  console.log(chalk.dim(`\nEscaneando "${targetDatabaseLabel(target)}" e ingiriendo en Neo4j...\n`))
+  try {
+    const summary = await ingestSchema(target)
+    console.log(
+      chalk.green('✔ Esquema ingerido:') +
+        ` ${summary.tables} tablas, ${summary.columns} columnas, ${summary.relationships} relaciones.\n`,
+    )
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.log(chalk.red('\n⚠ No he podido ingerir el esquema.'))
+    console.log(chalk.dim('¿Están disponibles la BD objetivo y Neo4j? (docker compose up -d)'))
+    console.log(chalk.dim(`Detalle: ${detail}\n`))
+  }
 }
 
 /** Submenú de proveedor: OpenAI (nube) o LM Studio (local). */
@@ -88,6 +114,11 @@ async function main(): Promise<void> {
     if (action === 'exit') {
       console.log(chalk.dim('¡Hasta luego!'))
       return
+    }
+
+    if (action === 'scan') {
+      await runSchemaScan()
+      continue
     }
 
     const provider = await askProvider()

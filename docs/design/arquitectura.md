@@ -45,13 +45,29 @@ flowchart LR
 
 ## 5. Grafo de conocimiento (Neo4j)
 
+Modelo el esquema relacional de la BD objetivo como un grafo en Neo4j, porque un esquema *es* un grafo: tablas unidas por claves foráneas. Tenerlo así me deja, dada una tabla candidata, expandir a las relacionadas siguiendo las FKs (lo que necesito para los JOINs).
+
+**Modelo de datos (lo ya implementado):**
+
+```
+(:Table)-[:HAS_COLUMN]->(:Column)
+(:Table)-[:REFERENCES {from_column, to_column}]->(:Table)   // una por cada clave foránea
+```
+
+- `Table`: `name`, `full_name`, `schema`, `primary_keys`, `column_count`.
+- `Column`: `name`, `type`, `nullable`, `is_primary_key`, `table_name`.
+- `REFERENCES`: relación dirigida de la tabla con la FK hacia la tabla referenciada, guardando las columnas origen/destino.
+
+**Ingesta.** Leo el esquema de la BD objetivo (vía `information_schema` en PostgreSQL) y lo vuelco en dos pasadas: primero todos los nodos `Table` con sus `Column`, y después las relaciones `REFERENCES` (cuando ya existen todas las tablas). Antes de reimportar limpio el grafo, y aseguro `Table.name` único con un constraint. El escaneo se dispara desde el CLI o como *tool* del agente.
+
+**Pendiente (SPEC-03).** Sobre este grafo añadiré la capa semántica: descripciones y conceptos, y la recuperación que combina búsqueda vectorial (pgvector) para encontrar tablas candidatas con la expansión por FKs en el grafo para traer las relacionadas.
 
 ## 6. Memoria vectorial (PostgreSQL + pgvector)
 
 
 ## 7. Decisiones técnicas
 
-**TypeScript (Node.js 20+), no Python.** Tengo más soltura con el lenguaje y LangGraph.js, `neo4j-driver` y `@langchain/openai` cubren lo que necesito; la toolchain de Node me simplifica el entorno en Windows. El punto a vigilar es que la cadena de *checkpointers* Postgres+pgvector está algo más rodada en Python. (Lo decidí tras un spike comparando ambas opciones.) **Descarto Python para este proyecto.**
+**TypeScript (Node.js 20+).** Tengo más soltura con el lenguaje y `@langchain/langgraph`, `neo4j-driver` y `@langchain/openai` cubren todo lo que necesito; la toolchain de Node me simplifica el entorno de desarrollo en Windows.
 
 **LangGraph (orquestación).** Mi flujo es una máquina de estados determinista con un bucle de reintento y una pausa para aprobación humana. LangGraph lo modela de forma nativa: routing por reglas sobre el estado (sin LLM supervisor), *checkpointers* para persistir el estado e `interrupt_before` para el *human-in-the-loop*. Frente a un agente ReAct (indeterminista, una llamada LLM por decisión de routing), es más predecible, auditable y barato. **Descarto ReAct.**
 

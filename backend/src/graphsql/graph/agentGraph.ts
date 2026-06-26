@@ -12,14 +12,17 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
 import { LlmProvider } from '../infrastructure/llm/LlmProvider'
 import { demoTools } from './tools'
+import { schemaTools } from './schemaTools'
+
+const tools = [...demoTools, ...schemaTools]
 
 const SYSTEM_PROMPT =
   'Eres GraphSQL Agent, un asistente experto en SQL. Responde de forma clara y en español. ' +
-  'Si el usuario pregunta por el estado del sistema, usa la herramienta disponible.'
+  'Si el usuario pregunta por el estado del sistema o por escanear/ingerir el esquema de la base de datos, usa las herramientas disponibles.'
 
 /** Construyo y compilo el grafo de conversación para el proveedor elegido. */
 export function createConversationGraph(provider: LlmProvider) {
-  const model = ChatModelFactory.createLangChainModel(provider).bindTools(demoTools)
+  const model = ChatModelFactory.createLangChainModel(provider).bindTools(tools)
 
   async function callAgent(state: typeof MessagesAnnotation.State) {
     // Antepongo el prompt de sistema sin guardarlo en el estado, para que esté
@@ -30,7 +33,7 @@ export function createConversationGraph(provider: LlmProvider) {
 
   return new StateGraph(MessagesAnnotation)
     .addNode('agent', callAgent)
-    .addNode('tools', new ToolNode(demoTools))
+    .addNode('tools', new ToolNode(tools))
     .addEdge(START, 'agent')
     .addConditionalEdges('agent', toolsCondition)
     .addEdge('tools', 'agent')
