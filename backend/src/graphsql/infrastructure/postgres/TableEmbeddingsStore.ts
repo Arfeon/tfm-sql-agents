@@ -9,6 +9,7 @@
  * todo), así no tengo que lidiar con cambios de dimensión a medias.
  */
 import { Client } from 'pg'
+import type { IEmbeddingsStore } from '../../domain/ports/IEmbeddingsStore'
 
 export interface IndexedModel {
   provider: string
@@ -16,7 +17,7 @@ export interface IndexedModel {
   dimensions: number
 }
 
-export class TableEmbeddingsStore {
+export class TableEmbeddingsStore implements IEmbeddingsStore {
   private constructor(private readonly client: Client) {}
 
   static async fromEnv(env: NodeJS.ProcessEnv = process.env): Promise<TableEmbeddingsStore> {

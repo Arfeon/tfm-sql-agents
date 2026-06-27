@@ -8,7 +8,7 @@
  * `importSchema` limpia el grafo de esquema y lo reconstruye desde cero a partir
  * del esquema leído de la BD objetivo.
  */
-import type { TableSchema } from '../../domain/schema/TableSchema'
+import { fullTableName, type TableSchema } from '../../domain/schema/TableSchema'
 import type { Neo4jConnection } from './Neo4jConnection'
 
 export interface SchemaSummary {
@@ -56,7 +56,7 @@ export class SchemaGraphManager {
   }
 
   private async createTableNode(table: TableSchema, description: string | null): Promise<void> {
-    const fullName = table.schema ? `${table.schema}.${table.name}` : table.name
+    const fullName = fullTableName(table)
 
     await this.neo4j.run(
       `CREATE (t:Table {

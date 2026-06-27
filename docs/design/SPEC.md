@@ -77,7 +77,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 
 ```bash
 docker compose up -d
-cd backend && npm test
+cd backend && npm run test:diagnostic
 ```
 
 ---
@@ -206,7 +206,7 @@ cd backend && npm run test:integration   # incluye el test del grafo (opt-in)
 - [X] Tests: (a) Neo4j responde; (b) se obtiene el esquema de Arcadia con las tablas esperadas; (c) una tabla queda convertida en su nodo de Neo4j con sus columnas
 
 ```bash
-cd backend && npm test   # incluye los tests de esquema y de Neo4j (requiere docker up)
+cd backend && npm run test:diagnostic   # tests de esquema y de Neo4j (requiere docker up)
 ```
 
 ---

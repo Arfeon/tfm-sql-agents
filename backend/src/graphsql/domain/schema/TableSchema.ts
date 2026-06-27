@@ -24,3 +24,8 @@ export interface TableSchema {
   primaryKeys: string[]
   foreignKeys: ForeignKeySchema[]
 }
+
+/** Nombre cualificado de la tabla (`esquema.tabla`), o solo el nombre si no tiene esquema. */
+export function fullTableName(table: Pick<TableSchema, 'name' | 'schema'>): string {
+  return table.schema ? `${table.schema}.${table.name}` : table.name
+}

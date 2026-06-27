@@ -1,15 +1,18 @@
 /**
  * Caso de uso: vectorizar el esquema de una BD objetivo en pgvector.
  *
- * Lee el esquema, compone un texto por tabla (nombre + columnas, y descripción
- * si se aporta), lo embebe con el modelo configurado y lo guarda en pgvector
- * junto al modelo y la dimensión usados. Reconstruye el índice entero.
+ * Leo el esquema, compongo un texto por tabla (nombre + columnas, y descripción
+ * si se aporta), lo embebo con el modelo configurado y lo guardo en pgvector
+ * junto al modelo y la dimensión usados. Reconstruyo el índice entero.
+ *
+ * Recibo como dependencias el lector de esquema y el almacén (con implementación
+ * real por defecto), para poder probar la orquestación con dobles.
  */
-import { PostgresTargetDatabase } from '../infrastructure/postgres/PostgresTargetDatabase'
-import { PostgresSchemaReader } from '../infrastructure/postgres/PostgresSchemaReader'
 import { TableEmbeddingsStore } from '../infrastructure/postgres/TableEmbeddingsStore'
+import { readTargetSchema } from './readTargetSchema'
+import { fullTableName, type TableSchema } from '../domain/schema/TableSchema'
 import type { IEmbeddings } from '../domain/ports/IEmbeddings'
-import type { TableSchema } from '../domain/schema/TableSchema'
+import type { IEmbeddingsStore } from '../domain/ports/IEmbeddingsStore'
 import type { TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
 
 export interface VectorizationSummary {
@@ -17,6 +20,18 @@ export interface VectorizationSummary {
   provider: string
   model: string
   dimensions: number
+}
+
+/** Lo que necesita la vectorización del mundo exterior. */
+export interface SchemaVectorizationDependencies {
+  readSchema(target: TargetDatabaseConfig): Promise<TableSchema[]>
+  openEmbeddingsStore(): Promise<IEmbeddingsStore>
+}
+
+/** Implementación real: Postgres para leer el esquema, pgvector para guardar. */
+export const defaultSchemaVectorizationDependencies: SchemaVectorizationDependencies = {
+  readSchema: readTargetSchema,
+  openEmbeddingsStore: () => TableEmbeddingsStore.fromEnv(),
 }
 
 /** Texto que represento de cada tabla para la búsqueda semántica. */
@@ -35,39 +50,23 @@ export async function vectorizeSchema(
   provider: string,
   embeddings: IEmbeddings,
   descriptions?: Map<string, string>,
+  deps: SchemaVectorizationDependencies = defaultSchemaVectorizationDependencies,
 ): Promise<VectorizationSummary> {
-  if (target.type !== 'postgresql') {
-    throw new Error(`Tipo de BD objetivo no soportado todavía: "${target.type}". De momento solo PostgreSQL.`)
-  }
-
   // 1. Leer el esquema de la BD objetivo.
-  const db = await PostgresTargetDatabase.fromParams({
-    host: target.host,
-    port: target.port,
-    database: target.name,
-    user: target.user,
-    password: target.password,
-  })
-  let tables: TableSchema[]
-  try {
-    tables = await new PostgresSchemaReader(db, target.schema).readSchema()
-  } finally {
-    await db.close()
-  }
+  const tables = await deps.readSchema(target)
 
   // 2. Componer los textos y embeberlos (una sola llamada).
   const texts = tables.map((table) => composeSearchText(table, descriptions?.get(table.name)))
   const vectors = await embeddings.embedMany(texts)
 
   // 3. Reconstruir el índice y guardar cada tabla con su vector.
-  const store = await TableEmbeddingsStore.fromEnv()
+  const store = await deps.openEmbeddingsStore()
   try {
     await store.prepare(embeddings.dimensions)
     for (let i = 0; i < tables.length; i++) {
       const table = tables[i]
-      const fullName = table.schema ? `${table.schema}.${table.name}` : table.name
       const description = descriptions?.get(table.name) ?? null
-      await store.upsertTable(table.name, fullName, provider, description, texts[i], vectors[i], embeddings.model, embeddings.dimensions)
+      await store.upsertTable(table.name, fullTableName(table), provider, description, texts[i], vectors[i], embeddings.model, embeddings.dimensions)
     }
     return { count: await store.count(), provider, model: embeddings.model, dimensions: embeddings.dimensions }
   } finally {

@@ -39,9 +39,41 @@ flowchart LR
 
 ## 3. Arquitectura técnica (grafo de estados)
 
+El pipeline de una consulta lo monto como una máquina de estados en LangGraph: cada paso es un agente y, según cómo queda el estado compartido (la pregunta, las tablas recuperadas, la SQL, lo que diga el Judge…), se decide el siguiente. El enrutado lo llevo con reglas, no con un LLM: el flujo es siempre el mismo, así que no necesito que un modelo decida por dónde seguir.
+
+De momento tengo el esqueleto del grafo (SPEC-01) y la ingesta/vectorización del esquema (SPEC-02/03); los agentes los voy montando a partir de SPEC-04 (el estado de cada uno está en [SPEC.md](SPEC.md)).
+
+```mermaid
+flowchart TD
+    START([Inicio]) --> MA[Memory Agent\nBuscar ejemplos similares]
+    MA --> SA[Schema Agent\nLocalizar tablas relevantes]
+    SA --> SQL[SQL Agent\nGenerar consulta SQL]
+    SQL --> JA[Judge Agent\nValidar la consulta]
+    JA -->|Inválida y quedan reintentos| SQL
+    JA -->|Válida o reintentos agotados| HR[Human Review\n⏸ aprobación humana]
+    HR -->|Aprobado| EX[Execute SQL\nEjecutar en solo lectura]
+    HR -->|Rechazado| END2([Cancelado])
+    HR -->|Modificación| SQL
+    EX --> SF[Store Feedback\nGuardar consulta aprobada]
+    SF --> FR[Format Response\nMostrar resultados]
+    FR --> END1([Fin])
+```
+
+Lo importante del flujo es la pausa para aprobar la SQL antes de ejecutarla: el nodo de revisión humana detiene el grafo (`interrupt_before`), guarda el estado y espera mi decisión; cuando respondo, sigue donde estaba. Hoy el estado se guarda en memoria; cuando lo necesite lo paso a PostgreSQL.
 
 ## 4. Los agentes
 
+Todavía no he montado estos agentes (sí su infraestructura: el lector de esquema, el grafo en Neo4j y los vectores). La idea de cada uno:
+
+- **Supervisor.** Decide el siguiente paso con reglas sobre el estado, sin LLM.
+- **Memory** (opcional). Busca consultas pasadas parecidas y se las pasa como ejemplos al SQL Agent. Es lo primero que recorto si voy justo de tiempo.
+- **Schema** (el GraphRAG). Encuentra las tablas que hacen falta combinando la búsqueda por significado en pgvector (da con `customer` cuando escribo "clientes") y la expansión por claves foráneas en Neo4j para arrastrar las tablas relacionadas que necesitan los JOIN.
+- **SQL.** Escribe la consulta a partir de la pregunta y de las tablas que le pasa el Schema Agent (y de los ejemplos del Memory Agent, si los hay).
+- **Judge.** Revisa que la SQL sea segura. Lo primero y obligatorio es comprobar que solo lee (empieza por `SELECT`/`WITH`, sin palabras peligrosas ni inyección); si eso falla, no se ejecuta diga lo que diga el resto. Por encima puede ir una comprobación de sintaxis y una revisión con el propio LLM.
+- **Human Review.** Me enseña la SQL y espera a que la apruebe, la rechace o la corrija.
+- **Execute.** Ejecuta la consulta aprobada en solo lectura y devuelve los resultados.
+- **Store Feedback.** Guarda la consulta aprobada para reutilizarla como ejemplo. Si falla, no rompe nada (no es crítico).
+- **Format.** Pinta la SQL y los resultados en el CLI; los agentes devuelven datos y la presentación es cosa aparte.
 
 ## 5. Grafo de conocimiento (Neo4j)
 
@@ -90,9 +122,26 @@ Uso PostgreSQL + pgvector (en la base `graphsql_memory`) para la búsqueda semá
 
 ## 8. Seguridad
 
+La seguridad es lo que no me quiero saltar. De todo esto, lo único que ya está montado y probado es la sesión de solo lectura: el adaptador de Postgres abre la conexión en modo `READ ONLY`, así que un INSERT falla aunque me equivoque. El resto llega con el Judge (SPEC-06) y la aprobación humana (SPEC-07).
+
+Lo que quiero garantizar:
+
+- **Solo lectura**: rechazo cualquier consulta que no empiece por `SELECT`/`WITH`.
+- **Nada de operaciones peligrosas ni inyección**: detecto palabras como `DROP`, `DELETE`, `INSERT`, `UPDATE`… y patrones tipo `;`, `--` o `/* */`.
+- **Aprobación humana**: nada se ejecuta sin que yo dé el visto bueno.
+- **Usuario sin permisos de escritura** en la BD objetivo: la última defensa está en el motor, no en mi código (esto ya está).
+- **Secretos solo en el `.env`**: nunca en el código ni en los logs.
+- **No registro** consultas con datos sensibles.
+
+Antes de entregar repaso que cada punto tenga al menos un test que lo compruebe.
 
 ## 9. Evaluación experimental
 
+Quiero poder enseñar que el GraphRAG sirve de algo, no solo decirlo. El problema es que los modelos ya han visto los esquemas públicos de siempre (Northwind, Chinook…) cuando se entrenaron, así que si pruebo sobre ellos no sabría si aciertan porque mi sistema les da el contexto bueno o porque se lo saben de memoria. Por eso evalúo sobre Arcadia, la base de datos que me he montado para el TFM: nombres en inglés, preguntas en español y algún nombre poco evidente, para que tenga que buscar de verdad las tablas.
+
+Tengo preparado un conjunto de preguntas con su SQL de referencia en [`golden_set.yaml`](../../setup/datasets/arcadia/golden_set.yaml) (24 casos, anotando qué tablas debería tocar cada uno). La idea es lanzar esas preguntas de tres formas —sin recuperación, solo con la búsqueda vectorial, y con el GraphRAG completo— y comparar cuántas devuelven el resultado correcto y si se recuperaron las tablas que hacían falta. Si el GraphRAG aporta, debería verse ahí, y más cuanto más grande es el esquema.
+
+Cuando tenga los números los enseñaré con sus límites por delante (el golden set es pequeño, es un solo dominio y un solo modelo): decirlo es parte de hacerlo bien. Más adelante, si da tiempo, estaría bien repetir la prueba sobre una base de datos pública grande para ver cómo aguanta la recuperación con cientos de tablas.
 
 ## 10. Mejoras futuras
 

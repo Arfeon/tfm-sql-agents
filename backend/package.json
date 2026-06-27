@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "start": "tsx src/cli/main.ts",
-    "test": "vitest run tests/diagnostic tests/unit",
-    "test:watch": "vitest tests/diagnostic tests/unit",
+    "test": "vitest run tests/unit",
+    "test:watch": "vitest tests/unit",
+    "test:diagnostic": "vitest run tests/diagnostic",
     "test:integration": "vitest run tests/integration",
     "seed": "tsx ../setup/datasets/arcadia/seedData.ts"
   },
