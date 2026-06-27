@@ -80,8 +80,9 @@ Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medi
 - ✅ **CLI en terminal** — cabecera, menú y selección de proveedor; puedo conversar con el modelo (`npm start`).
 - ✅ **Primer grafo LangGraph** — conversa con estado (checkpointer por hilo) y completa acciones llamando a *tools*, tanto con OpenAI como en local.
 - ✅ **Ingesta del esquema en Neo4j** — escaneo de la BD objetivo (tablas, columnas, claves) y volcado a un grafo de conocimiento (nodos `Table`/`Column`, relaciones `HAS_COLUMN`/`REFERENCES`), disparable desde el CLI o como *tool* del agente.
+- ✅ **Vectorización del esquema en pgvector** — cada tabla se embebe (con OpenAI o un modelo local de LM Studio, a elegir) y se guarda para la búsqueda semántica; descripciones opcionales sincronizadas en Neo4j y pgvector.
 
-Lo siguiente es el corazón del proyecto: la **recuperación GraphRAG** (vectorización en pgvector + búsqueda semántica de tablas + expansión por claves foráneas en el grafo). El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
+Lo siguiente es el corazón del proyecto: la **recuperación GraphRAG** (búsqueda semántica de tablas candidatas + expansión por claves foráneas en el grafo). El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
 
 ## Documentación del proyecto
 

@@ -10,8 +10,15 @@ import { Neo4jConnection } from '../infrastructure/neo4j/Neo4jConnection'
 import { SchemaGraphManager, type SchemaSummary } from '../infrastructure/neo4j/SchemaGraphManager'
 import type { TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
 
-/** Lee el esquema de la BD objetivo y lo vuelca a Neo4j. Devuelve el resumen. */
-export async function ingestSchema(target: TargetDatabaseConfig): Promise<SchemaSummary> {
+/**
+ * Lee el esquema de la BD objetivo y lo vuelca a Neo4j. Devuelve el resumen.
+ * Si se aportan descripciones, las guarda en el atributo `description` de cada
+ * tabla (sincronizado con lo que se vectoriza en pgvector).
+ */
+export async function ingestSchema(
+  target: TargetDatabaseConfig,
+  descriptions?: Map<string, string>,
+): Promise<SchemaSummary> {
   if (target.type !== 'postgresql') {
     throw new Error(`Tipo de BD objetivo no soportado todavía: "${target.type}". De momento solo PostgreSQL.`)
   }
@@ -34,7 +41,7 @@ export async function ingestSchema(target: TargetDatabaseConfig): Promise<Schema
   const neo4j = Neo4jConnection.fromEnv()
   try {
     const manager = new SchemaGraphManager(neo4j)
-    await manager.importSchema(tables)
+    await manager.importSchema(tables, descriptions)
     return await manager.getSchemaSummary()
   } finally {
     await neo4j.close()

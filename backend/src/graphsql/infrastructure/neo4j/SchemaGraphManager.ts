@@ -20,12 +20,12 @@ export interface SchemaSummary {
 export class SchemaGraphManager {
   constructor(private readonly neo4j: Neo4jConnection) {}
 
-  async importSchema(tables: TableSchema[]): Promise<void> {
+  async importSchema(tables: TableSchema[], descriptions?: Map<string, string>): Promise<void> {
     await this.clearSchemaGraph()
     await this.createConstraints()
 
     for (const table of tables) {
-      await this.createTableNode(table)
+      await this.createTableNode(table, descriptions?.get(table.name) ?? null)
     }
     // Las relaciones van en una segunda pasada, cuando ya existen todas las tablas.
     for (const table of tables) {
@@ -51,20 +51,11 @@ export class SchemaGraphManager {
   }
 
   private async createConstraints(): Promise<void> {
-    const statements = [
-      'CREATE CONSTRAINT table_name IF NOT EXISTS FOR (t:Table) REQUIRE t.name IS UNIQUE',
-      'CREATE INDEX table_search IF NOT EXISTS FOR (t:Table) ON (t.name)',
-    ]
-    for (const statement of statements) {
-      try {
-        await this.neo4j.run(statement)
-      } catch {
-        // El constraint/índice puede existir ya; no es un error.
-      }
-    }
+    await this.neo4j.run('CREATE CONSTRAINT table_name IF NOT EXISTS FOR (t:Table) REQUIRE t.name IS UNIQUE')
+    await this.neo4j.run('CREATE INDEX table_search IF NOT EXISTS FOR (t:Table) ON (t.name)')
   }
 
-  private async createTableNode(table: TableSchema): Promise<void> {
+  private async createTableNode(table: TableSchema, description: string | null): Promise<void> {
     const fullName = table.schema ? `${table.schema}.${table.name}` : table.name
 
     await this.neo4j.run(
@@ -72,6 +63,7 @@ export class SchemaGraphManager {
         name: $name,
         full_name: $fullName,
         schema: $schema,
+        description: $description,
         primary_keys: $primaryKeys,
         column_count: $columnCount
       })`,
@@ -79,6 +71,7 @@ export class SchemaGraphManager {
         name: table.name,
         fullName,
         schema: table.schema,
+        description,
         primaryKeys: table.primaryKeys,
         columnCount: table.columns.length,
       },

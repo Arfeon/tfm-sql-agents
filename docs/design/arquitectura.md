@@ -54,16 +54,25 @@ Modelo el esquema relacional de la BD objetivo como un grafo en Neo4j, porque un
 (:Table)-[:REFERENCES {from_column, to_column}]->(:Table)   // una por cada clave foránea
 ```
 
-- `Table`: `name`, `full_name`, `schema`, `primary_keys`, `column_count`.
+- `Table`: `name`, `full_name`, `schema`, `description` (opcional), `primary_keys`, `column_count`.
 - `Column`: `name`, `type`, `nullable`, `is_primary_key`, `table_name`.
 - `REFERENCES`: relación dirigida de la tabla con la FK hacia la tabla referenciada, guardando las columnas origen/destino.
 
 **Ingesta.** Leo el esquema de la BD objetivo (vía `information_schema` en PostgreSQL) y lo vuelco en dos pasadas: primero todos los nodos `Table` con sus `Column`, y después las relaciones `REFERENCES` (cuando ya existen todas las tablas). Antes de reimportar limpio el grafo, y aseguro `Table.name` único con un constraint. El escaneo se dispara desde el CLI o como *tool* del agente.
 
-**Pendiente (SPEC-03).** Sobre este grafo añadiré la capa semántica: descripciones y conceptos, y la recuperación que combina búsqueda vectorial (pgvector) para encontrar tablas candidatas con la expansión por FKs en el grafo para traer las relacionadas.
+Sobre este grafo se apoya la recuperación: la búsqueda vectorial (pgvector) encuentra las tablas candidatas y la expansión por FKs en el grafo trae las relacionadas. La capa de descripciones/conceptos enriquece ambos.
 
 ## 6. Memoria vectorial (PostgreSQL + pgvector)
 
+Uso PostgreSQL + pgvector (en la base `graphsql_memory`) para la búsqueda semántica de tablas: encontrar `customer` cuando el usuario dice "clientes", o casar una pregunta en español con un esquema en inglés. Reutilizo la instancia que ya necesito para los checkpoints de LangGraph, así que es una pieza de infraestructura, no dos.
+
+**Vectorización del esquema (lo ya implementado).** Al escanear, por cada tabla compongo un texto (`Tabla: <nombre>. Columnas: <...>`, más la descripción si la hay), lo embebo y lo guardo en `table_embeddings`: el texto de búsqueda, el `embedding vector(N)`, el proveedor, el modelo y la dimensión usados, y la descripción cruda en su propia columna. Guardar el proveedor/modelo/dimensión deja el índice autodescrito, para que el retriever consulte con el mismo modelo. La tabla se reconstruye entera en cada vectorización.
+
+**Proveedor de embeddings configurable.** Detrás del puerto `IEmbeddings` hay un adaptador OpenAI-compatible que sirve para OpenAI (`text-embedding-3-small`, 1536) y para un modelo local en LM Studio (`bge-m3`); el proveedor se elige al escanear, igual que el del chat.
+
+**Principio innegociable.** Indexo y consulto con el **mismo modelo**: la similitud solo tiene sentido dentro del mismo espacio vectorial. Por eso guardo el modelo y la dimensión con cada vector, la dimensión de la columna es configurable, y cambiar de modelo obliga a una re-vectorización explícita (con aviso). Detalle en [`docs/investigacion/embeddings.md`](../investigacion/embeddings.md).
+
+**Pendiente (SPEC-04).** La recuperación que usa estos vectores: dada una pregunta, búsqueda semántica de tablas candidatas + expansión por FKs en el grafo para el contexto del SQL Agent.
 
 ## 7. Decisiones técnicas
 

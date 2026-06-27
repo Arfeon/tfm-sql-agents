@@ -39,14 +39,15 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-00C | CLI inicial: punto de entrada, selección de proveedor y primera conversación | ✅ Cerrada |
 | SPEC-01 | Primer grafo LangGraph: conversar y completar acciones (un nodo + una tool + checkpointer) | ✅ Cerrada |
 | SPEC-02 | Ingesta del esquema: conectar a la BD objetivo, extraer su esquema y volcarlo a nodos Neo4j; tools para el agente | ✅ Cerrada |
-| SPEC-03 | Schema Agent: vectorización (pgvector) + recuperación (semántica + expansión por FKs en el grafo) | ⏳ Pendiente |
-| SPEC-04 | SQL Agent (NL→SQL con el esquema recuperado) | ⏳ Pendiente |
-| SPEC-05 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ⏳ Pendiente |
-| SPEC-06 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
-| SPEC-07 | Execute SQL (solo lectura) | ⏳ Pendiente |
-| SPEC-08 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
-| SPEC-09 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
-| SPEC-10 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
+| SPEC-03 | Vectorización del esquema: puerto `IEmbeddings` (OpenAI/local) + almacenamiento en pgvector + vectorizar al escanear | ✅ Cerrada |
+| SPEC-04 | Schema Agent: recuperación (búsqueda semántica + expansión por FKs en el grafo) + tool de schema-linking | ⏳ Pendiente |
+| SPEC-05 | SQL Agent (NL→SQL con el esquema recuperado) | ⏳ Pendiente |
+| SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ⏳ Pendiente |
+| SPEC-07 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
+| SPEC-08 | Execute SQL (solo lectura) | ⏳ Pendiente |
+| SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
+| SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
+| SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
 
 ---
 
@@ -207,5 +208,54 @@ cd backend && npm run test:integration   # incluye el test del grafo (opt-in)
 ```bash
 cd backend && npm test   # incluye los tests de esquema y de Neo4j (requiere docker up)
 ```
+
+---
+
+### SPEC-03 — Vectorización del esquema (embeddings → pgvector)
+
+**Objetivo.** Quiero poder encontrar las tablas relevantes para una pregunta aunque el usuario no use los nombres exactos del esquema (pregunta "clientes" → tabla `customer`; pregunta en español sobre esquema en inglés). Para eso vectorizo cada tabla con un modelo de embeddings y guardo el vector en pgvector, listo para la búsqueda semántica que hará el Schema Agent (SPEC-04). El razonamiento de fondo está en [`docs/investigacion/embeddings.md`](../investigacion/embeddings.md).
+
+**Contrato.**
+
+- *Puerto de embeddings*: una forma de convertir texto en vector, sin que el resto sepa si por debajo hay OpenAI o un modelo local. El **proveedor se elige al escanear** (igual que el chat pregunta el suyo); el modelo y la dimensión van **por proveedor** en config (`OPENAI_EMBEDDING_*`, `LMSTUDIO_EMBEDDING_*`). Como LM Studio expone embeddings por el endpoint OpenAI-compatible, un único adaptador parametrizado por `baseURL` cubre ambos (mismo patrón que `IChatModel`).
+- *Principio innegociable*: indexo y consulto con el **mismo modelo**; guardo el **modelo y la dimensión junto a cada vector** para detectar mezclas. La columna pgvector tiene dimensión configurable.
+- *Almacenamiento*: por cada tabla guardo en pgvector su texto de búsqueda (nombre + columnas, y descripción si la hay), el vector, el **proveedor, el modelo y la dimensión** usados, y la **descripción cruda en su propia columna** (para poder buscarla o mostrarla por texto, no solo por similitud). Guardar el proveedor permite que el retriever (SPEC-04) reconstruya el mismo modelo al consultar.
+- *Vectorización integrada en el escaneo, pero confirmada*: al escanear, tras volcar a Neo4j, vectorizo a pgvector **solo tras un aviso explícito** — en rojo el coste si el proveedor es OpenAI, y el tiempo estimado en cualquier caso. Si el modelo activo no coincide con el indexado, aviso y pido re-vectorización explícita (nunca automática).
+- *Descripciones opcionales*: si hay en la carpeta `descriptions/` un fichero JSON con un array de objetos `{ tableName, description }`, pregunto una vez si incluirlas; si digo que sí, quedan **sincronizadas en ambos sitios** — el atributo `description` del nodo `Table` en Neo4j y la columna/embedding en pgvector —; si digo que no (o no hay fichero), se ignoran. Dejo un `descriptions.example.json` como guía del formato, que la detección ignora.
+
+**Pasos**
+
+1. Definir el puerto `IEmbeddings` (texto → vector) y la configuración de embeddings **por proveedor** (`OPENAI_EMBEDDING_MODEL`/`DIMENSIONS`, `LMSTUDIO_EMBEDDING_MODEL`/`DIMENSIONS`) en `.env`/`.env.example`. El CLI pregunta el proveedor al escanear, igual que el chat.
+2. Implementar el factory + adaptador OpenAI-compatible (OpenAI y local por `baseURL`), espejo de `ChatModelFactory`.
+3. Crear el almacén pgvector: tabla de embeddings (texto de búsqueda, `embedding vector(N)`, modelo, dimensión, metadata), extensión `vector` e índice de similitud coseno; dimensión configurable.
+4. Componer el texto a embeber por tabla: nombre + columnas, y la descripción si está disponible.
+5. Integrar la vectorización en el escaneo: detectar fichero de descripciones en `descriptions/` (ignorando el `.example.json`) y preguntar si incluirlas; avisar del coste (rojo si OpenAI) y del tiempo estimado; confirmar; vectorizar y guardar con modelo/dimensión.
+6. Detectar mismatch de modelo/dimensión y pedir re-vectorización explícita con el mismo aviso.
+7. Preflight en local: en modo local hay que tener cargados a la vez el modelo de chat y el de embeddings en LM Studio; antes de usar uno, consulto `/v1/models` y aviso claro si no está cargado.
+8. Tests: (a) el factory crea el adaptador correcto según el proveedor; (b) integración opt-in: vectorizar Arcadia deja un vector por tabla en pgvector, con el modelo y la dimensión correctos.
+
+**Criterios de aceptación**
+
+- [X] `IEmbeddings` + factory crea un adaptador OpenAI o local según el proveedor elegido (en el CLI, o `EMBEDDING_PROVIDER` por defecto)
+- [X] Vectorizar el esquema guarda en pgvector un vector por tabla, con su proveedor, modelo y dimensión
+- [X] Antes de vectorizar, el CLI avisa (coste en rojo si OpenAI, tiempo estimado) y pide confirmación
+- [X] Si hay un fichero JSON de descripciones en `descriptions/` (el `.example.json` no cuenta), el CLI pregunta si incluirlas — y se guardan en Neo4j y en pgvector
+- [X] Si el modelo activo no coincide con el indexado, aviso y pido re-vectorización explícita (no automática)
+- [X] En local, si el modelo (chat o embeddings) no está cargado en LM Studio, aviso claro antes de usarlo
+- [X] Tests: (a) factory de embeddings (unit, sin red); (b) integración opt-in que vectoriza Arcadia y comprueba las filas en pgvector
+
+```bash
+cd backend && npm test                   # unit del factory de embeddings
+cd backend && npm run test:integration   # vectorización real contra pgvector (opt-in)
+```
+
+**Resultados (hallazgos no contemplados al redactar la spec)**
+
+- **Validado en ambos proveedores**: OpenAI (`text-embedding-3-small`, 1536) y local (`text-embedding-bge-m3` en LM Studio, 256) — 16 tablas de Arcadia vectorizadas en pgvector.
+- **bge-m3 en LM Studio devuelve 256 dimensiones, no las 1024 nativas.** Por eso la dimensión es **configurable por proveedor** y se guarda junto a cada vector. 256 funciona; 1024 daría mejor calidad de recuperación (queda como mejora si LM Studio puede servirlo a su dimensión completa).
+- **El proveedor de embeddings se elige al escanear** (igual que el chat), no solo por `.env`. La config de modelo/dimensión es **por proveedor** (`OPENAI_EMBEDDING_*`, `LMSTUDIO_EMBEDDING_*`); `EMBEDDING_PROVIDER` queda como default no interactivo.
+- **Descripciones sincronizadas** en Neo4j (atributo `description` del `Table`) y en pgvector (columna `description` + texto embebido), a partir de una sola pregunta.
+- **Re-vectorización = reconstrucción completa** (drop + recreate), siempre explícita y con aviso; nunca automática.
+- **Chat y embeddings son independientes**: el modelo de chat solo consume el contexto del esquema como texto, así que es indiferente al proveedor de embeddings. El acoplamiento real (mismo modelo para indexar y consultar) vive dentro del retriever/vectorizador. Preflight en local para avisar si falta algún modelo cargado.
 
 

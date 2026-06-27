@@ -1,0 +1,14 @@
+[
+  {
+    "tableName": "game",
+    "description": "Catálogo de videojuegos de la plataforma: cada fila es un juego con su desarrolladora, editora, franquicia y clasificación por edad."
+  },
+  {
+    "tableName": "company",
+    "description": "Empresas del sector. Una misma empresa puede actuar como desarrolladora y/o editora de juegos."
+  },
+  {
+    "tableName": "customer",
+    "description": "Clientes (usuarios) de la plataforma de suscripción de videojuegos."
+  }
+]
