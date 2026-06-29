@@ -97,6 +97,7 @@ const N_CUSTOMERS = 5_000
 const N_SESSIONS = 80_000
 const N_RATINGS = 16_000
 const N_SNAPSHOTS = 55_000
+const N_WISHLIST = 8_000
 
 // Ventana temporal de la telemetría
 const DATA_START = new Date(2023, 0, 1)
@@ -250,7 +251,7 @@ async function main(): Promise<void> {
 
     if (TRUNCATE) {
       await client.query(
-        'TRUNCATE concurrent_snapshot, rating, play_session, purchase, subscription, ' +
+        'TRUNCATE t_042, concurrent_snapshot, rating, play_session, purchase, subscription, ' +
         'customer, subscription_plan, region, dlc, game_platform, game_genre, ' +
         'platform, genre, game, franchise, company RESTART IDENTITY CASCADE'
       )
@@ -547,12 +548,27 @@ async function main(): Promise<void> {
       snapshots
     )
 
+    // ---- t_042 (lista de deseos; nombre opaco a propósito) -----------------
+    // Juegos que un cliente quiere pero aún no ha comprado. El nombre no revela
+    // su contenido: es el caso de prueba del schema-linking por descripción.
+    const wishlist: unknown[][] = []
+    const seenWishlist = new Set<string>()
+    while (wishlist.length < N_WISHLIST) {
+      const customerId = rng.choice(customerIds)
+      const gameId = rng.choices(popularGames, popularityWeights)
+      const key = `${customerId}-${gameId}`
+      if (seenWishlist.has(key)) continue
+      seenWishlist.add(key)
+      wishlist.push([customerId, gameId, randomDate(customerSignupDate.get(customerId)!, TODAY, rng)])
+    }
+    await batchInsert(client, 't_042', ['customer_id', 'game_id', 'added_at'], wishlist)
+
     await client.query('COMMIT')
 
     console.log('\nDatos generados (seed=42):')
     console.log(`  company=${companyIds.length} franchise=${franchiseIds.length} game=${gameIds.length}`)
     console.log(`  dlc=${dlcIds.length} customer=${customerIds.length} subscription=${subscriptions.length}`)
-    console.log(`  purchase=${purchases.length} session=${sessions.length} rating=${ratings.length} snapshot=${snapshots.length}`)
+    console.log(`  purchase=${purchases.length} session=${sessions.length} rating=${ratings.length} snapshot=${snapshots.length} wishlist=${wishlist.length}`)
 
   } catch (err) {
     await client.query('ROLLBACK')

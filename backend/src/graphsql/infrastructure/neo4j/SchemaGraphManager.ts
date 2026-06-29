@@ -8,7 +8,7 @@
  * `importSchema` limpia el grafo de esquema y lo reconstruye desde cero a partir
  * del esquema leído de la BD objetivo.
  */
-import { fullTableName, type TableSchema } from '../../domain/schema/TableSchema'
+import { fullTableName, type TableSchema, type ColumnSchema, type ForeignKeySchema } from '../../domain/schema/TableSchema'
 import type { Neo4jConnection } from './Neo4jConnection'
 
 export interface SchemaSummary {
@@ -48,6 +48,58 @@ export class SchemaGraphManager {
              count(DISTINCT r) AS relationships
     `)
     return rows[0] ?? { tables: 0, columns: 0, relationships: 0 }
+  }
+
+  /**
+   * Dadas unas tablas candidatas, devuelve esas tablas más sus vecinas por clave
+   * foránea (relación `REFERENCES`, un salto en ambos sentidos), cada una con sus
+   * columnas, claves primarias y foráneas. Es la expansión por grafo del GraphRAG.
+   */
+  async getTablesWithForeignKeyNeighbors(tableNames: string[]): Promise<TableSchema[]> {
+    if (tableNames.length === 0) {
+      return []
+    }
+
+    // 1. Expando: las candidatas + sus vecinas por FK (un salto, ambos sentidos).
+    const expanded = await this.neo4j.run<{ names: string[] }>(
+      `MATCH (t:Table) WHERE t.name IN $names
+       OPTIONAL MATCH (t)-[:REFERENCES]-(neighbor:Table)
+       WITH collect(t.name) + collect(neighbor.name) AS names
+       UNWIND names AS name
+       WITH DISTINCT name WHERE name IS NOT NULL
+       RETURN collect(name) AS names`,
+      { names: tableNames },
+    )
+    const allNames = expanded[0]?.names ?? []
+    if (allNames.length === 0) {
+      return []
+    }
+
+    // 2. Reconstruyo cada tabla con sus columnas y FKs (comprehensions: sin producto cartesiano).
+    const rows = await this.neo4j.run<{
+      name: string
+      schema: string | null
+      primaryKeys: string[]
+      columns: ColumnSchema[]
+      foreignKeys: ForeignKeySchema[]
+    }>(
+      `MATCH (t:Table) WHERE t.name IN $names
+       RETURN t.name AS name,
+              t.schema AS schema,
+              t.primary_keys AS primaryKeys,
+              [(t)-[:HAS_COLUMN]->(c:Column) | {name: c.name, type: c.type, nullable: c.nullable}] AS columns,
+              [(t)-[fk:REFERENCES]->(ref:Table) | {column: fk.from_column, referencesTable: ref.name, referencesColumn: fk.to_column}] AS foreignKeys
+       ORDER BY t.name`,
+      { names: allNames },
+    )
+
+    return rows.map((row) => ({
+      name: row.name,
+      schema: row.schema ?? null,
+      columns: row.columns,
+      primaryKeys: row.primaryKeys ?? [],
+      foreignKeys: row.foreignKeys,
+    }))
   }
 
   private async createConstraints(): Promise<void> {

@@ -27,7 +27,7 @@ describe.skipIf(!hasCredentials)(`vectorizeSchema (integración, provider=${prov
 
       console.log(`\n🔢 Vectorizadas ${summary.count} tablas (${summary.provider}, ${summary.model}, ${summary.dimensions} dims)\n`)
 
-      expect(summary.count).toBe(16)
+      expect(summary.count).toBe(17)
       expect(summary.model).toBe(embeddings.model)
 
       const store = await TableEmbeddingsStore.fromEnv()

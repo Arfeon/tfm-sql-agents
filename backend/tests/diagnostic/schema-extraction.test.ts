@@ -15,6 +15,7 @@ const EXPECTED_TABLES = [
   'game_genre', 'game_platform', 'dlc',
   'region', 'subscription_plan', 'customer', 'subscription',
   'purchase', 'play_session', 'rating', 'concurrent_snapshot',
+  't_042',
 ]
 
 let db: PostgresTargetDatabase
@@ -37,7 +38,7 @@ afterAll(async () => {
 })
 
 describe('PostgresSchemaReader (Arcadia)', () => {
-  it('extrae las 16 tablas esperadas', () => {
+  it('extrae las 17 tablas esperadas', () => {
     const names = new Set(tables.map((t) => t.name))
     const missing = EXPECTED_TABLES.filter((t) => !names.has(t))
     expect(missing).toEqual([])

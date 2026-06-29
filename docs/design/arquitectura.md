@@ -63,7 +63,7 @@ Lo importante del flujo es la pausa para aprobar la SQL antes de ejecutarla: el 
 
 ## 4. Los agentes
 
-Todavía no he montado estos agentes (sí su infraestructura: el lector de esquema, el grafo en Neo4j y los vectores). La idea de cada uno:
+De estos, el **Schema Agent** (la recuperación GraphRAG) ya está hecho (SPEC-04); los demás los voy montando. La idea de cada uno:
 
 - **Supervisor.** Decide el siguiente paso con reglas sobre el estado, sin LLM.
 - **Memory** (opcional). Busca consultas pasadas parecidas y se las pasa como ejemplos al SQL Agent. Es lo primero que recorto si voy justo de tiempo.
@@ -104,7 +104,7 @@ Uso PostgreSQL + pgvector (en la base `graphsql_memory`) para la búsqueda semá
 
 **Principio innegociable.** Indexo y consulto con el **mismo modelo**: la similitud solo tiene sentido dentro del mismo espacio vectorial. Por eso guardo el modelo y la dimensión con cada vector, la dimensión de la columna es configurable, y cambiar de modelo obliga a una re-vectorización explícita (con aviso). Detalle en [`docs/investigacion/embeddings.md`](../investigacion/embeddings.md).
 
-**Pendiente (SPEC-04).** La recuperación que usa estos vectores: dada una pregunta, búsqueda semántica de tablas candidatas + expansión por FKs en el grafo para el contexto del SQL Agent.
+**Recuperación (SPEC-04, hecho).** Dada una pregunta, busco las tablas candidatas por significado en pgvector y las expando por claves foráneas en Neo4j para componer el contexto (tablas relevantes + DDL) que usará el SQL Agent. A esta escala uso búsqueda exacta por coseno, sin índice ANN.
 
 ## 7. Decisiones técnicas
 
@@ -140,6 +140,8 @@ Antes de entregar repaso que cada punto tenga al menos un test que lo compruebe.
 Quiero poder enseñar que el GraphRAG sirve de algo, no solo decirlo. El problema es que los modelos ya han visto los esquemas públicos de siempre (Northwind, Chinook…) cuando se entrenaron, así que si pruebo sobre ellos no sabría si aciertan porque mi sistema les da el contexto bueno o porque se lo saben de memoria. Por eso evalúo sobre Arcadia, la base de datos que me he montado para el TFM: nombres en inglés, preguntas en español y algún nombre poco evidente, para que tenga que buscar de verdad las tablas.
 
 Tengo preparado un conjunto de preguntas con su SQL de referencia en [`golden_set.yaml`](../../setup/datasets/arcadia/golden_set.yaml) (24 casos, anotando qué tablas debería tocar cada uno). La idea es lanzar esas preguntas de tres formas —sin recuperación, solo con la búsqueda vectorial, y con el GraphRAG completo— y comparar cuántas devuelven el resultado correcto y si se recuperaron las tablas que hacían falta. Si el GraphRAG aporta, debería verse ahí, y más cuanto más grande es el esquema.
+
+Hay una pieza que quiero medir por separado: las descripciones, que son lo más propio de mi enfoque. Así que, además de las tres formas de arriba, compararé el GraphRAG con y sin descripciones. Y para que tengan algo que demostrar, meteré en Arcadia una tabla con un nombre opaco —que no delate qué guarda— y una pregunta que la necesite: sin descripción, por nombre no debería aparecer; con descripción, sí. Lo dejo pendiente para cuando monte la recuperación (SPEC-04).
 
 Cuando tenga los números los enseñaré con sus límites por delante (el golden set es pequeño, es un solo dominio y un solo modelo): decirlo es parte de hacerlo bien. Más adelante, si da tiempo, estaría bien repetir la prueba sobre una base de datos pública grande para ver cómo aguanta la recuperación con cientos de tablas.
 

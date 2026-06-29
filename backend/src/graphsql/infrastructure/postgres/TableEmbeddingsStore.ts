@@ -9,7 +9,7 @@
  * todo), así no tengo que lidiar con cambios de dimensión a medias.
  */
 import { Client } from 'pg'
-import type { IEmbeddingsStore } from '../../domain/ports/IEmbeddingsStore'
+import type { IEmbeddingsStore, TableMatch } from '../../domain/ports/IEmbeddingsStore'
 
 export interface IndexedModel {
   provider: string
@@ -66,9 +66,6 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
         updated_at TIMESTAMPTZ DEFAULT now()
       )
     `)
-    await this.client.query(
-      'CREATE INDEX table_embeddings_vector ON table_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)',
-    )
   }
 
   async upsertTable(
@@ -95,6 +92,18 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
          updated_at = now()`,
       [tableName, fullName, provider, description, searchText, `[${embedding.join(',')}]`, model, dimensions],
     )
+  }
+
+  /** Las `limit` tablas más parecidas al vector, por distancia coseno */
+  async searchSimilar(embedding: number[], limit: number): Promise<TableMatch[]> {
+    const result = await this.client.query<{ table_name: string; score: number }>(
+      `SELECT table_name, 1 - (embedding <=> $1::vector) AS score
+       FROM table_embeddings
+       ORDER BY embedding <=> $1::vector
+       LIMIT $2`,
+      [`[${embedding.join(',')}]`, limit],
+    )
+    return result.rows.map((row) => ({ tableName: row.table_name, score: Number(row.score) }))
   }
 
   async count(): Promise<number> {

@@ -7,6 +7,12 @@
  * que en los tests le puedo pasar un doble en memoria. Igual que `ITargetDatabase`
  * o `IEmbeddings`.
  */
+/** Una tabla candidata devuelta por la búsqueda semántica, con su similitud. */
+export interface TableMatch {
+  tableName: string
+  score: number
+}
+
 export interface IEmbeddingsStore {
   /** Reconstruye la tabla de embeddings con la dimensión indicada. */
   prepare(dimensions: number): Promise<void>
@@ -22,6 +28,9 @@ export interface IEmbeddingsStore {
     model: string,
     dimensions: number,
   ): Promise<void>
+
+  /** Las `limit` tablas más parecidas a un vector de consulta (por similitud coseno, descendente). */
+  searchSimilar(embedding: number[], limit: number): Promise<TableMatch[]>
 
   /** Número de tablas guardadas. */
   count(): Promise<number>

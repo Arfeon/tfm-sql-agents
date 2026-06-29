@@ -77,6 +77,9 @@ class FakeEmbeddingsStore implements IEmbeddingsStore {
   async count(): Promise<number> {
     return this.upserts.length
   }
+  async searchSimilar() {
+    return [] // la vectorización no busca; stub para cumplir el puerto
+  }
   async close(): Promise<void> {
     this.closed = true
   }

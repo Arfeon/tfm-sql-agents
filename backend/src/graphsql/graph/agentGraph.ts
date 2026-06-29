@@ -17,8 +17,10 @@ import { schemaTools } from './schemaTools'
 const tools = [...demoTools, ...schemaTools]
 
 const SYSTEM_PROMPT =
-  'Eres GraphSQL Agent, un asistente experto en SQL. Responde de forma clara y en español. ' +
-  'Si el usuario pregunta por el estado del sistema o por escanear/ingerir el esquema de la base de datos, usa las herramientas disponibles.'
+  'Eres GraphSQL Agent, un asistente experto en SQL. Responde de forma clara, en el idioma del usuario. ' +
+  'NO conoces el esquema de la base de datos de memoria y NUNCA te inventes nombres de tablas ni de columnas. ' +
+  'Siempre que el usuario pregunte por datos, por qué tablas usar o dónde está cierta información, usa la herramienta de schema-linking para averiguar qué tablas son relevantes y responde solo con lo que te devuelva. ' +
+  'Para comprobar el estado del sistema o escanear/ingerir el esquema, usa también las herramientas disponibles.'
 
 /** Construyo y compilo el grafo de conversación para el proveedor elegido. */
 export function createConversationGraph(provider: LlmProvider) {

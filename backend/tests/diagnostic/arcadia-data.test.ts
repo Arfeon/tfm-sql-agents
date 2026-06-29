@@ -20,6 +20,7 @@ const EXPECTED_TABLES = [
   'game_genre', 'game_platform', 'dlc',
   'region', 'subscription_plan', 'customer', 'subscription',
   'purchase', 'play_session', 'rating', 'concurrent_snapshot',
+  't_042',
 ]
 
 const EXPECTED_ROW_COUNTS: Record<string, number> = {
@@ -31,6 +32,7 @@ const EXPECTED_ROW_COUNTS: Record<string, number> = {
   region: 6,
   subscription_plan: 3,
   customer: 5_000,
+  t_042: 8_000,
 }
 
 let db: PostgresTargetDatabase

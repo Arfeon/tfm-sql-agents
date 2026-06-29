@@ -42,4 +42,37 @@ export class EmbeddingsFactory {
     const provider = (env.EMBEDDING_PROVIDER ?? EmbeddingProvider.OpenAI) as EmbeddingProvider
     return EmbeddingsFactory.create(provider, env)
   }
+
+  /**
+   * Reconstruyo el modelo con el que se indexó (proveedor + modelo + dimensión
+   * guardados en el índice), no el del `.env`: para consultar hay que estar en el
+   * mismo espacio vectorial con el que se vectorizó. Lo usa el retriever (SPEC-04).
+   */
+  static forIndexedModel(
+    indexed: { provider: string; model: string; dimensions: number },
+    env: NodeJS.ProcessEnv = process.env,
+  ): IEmbeddings {
+    const provider = indexed.provider as EmbeddingProvider
+    switch (provider) {
+      case EmbeddingProvider.OpenAI:
+        return new OpenAICompatibleEmbeddings({
+          apiKey: env.OPENAI_API_KEY ?? '',
+          model: indexed.model,
+          dimensions: indexed.dimensions,
+          sendDimensions: true,
+        })
+      case EmbeddingProvider.Local:
+        return new OpenAICompatibleEmbeddings({
+          apiKey: env.LMSTUDIO_API_KEY ?? 'lm-studio',
+          model: indexed.model,
+          dimensions: indexed.dimensions,
+          baseUrl: env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234/v1',
+          sendDimensions: false,
+        })
+      default:
+        throw new Error(
+          `Proveedor de embeddings indexado no soportado: "${indexed.provider}". Valores válidos: ${Object.values(EmbeddingProvider).join(', ')}.`,
+        )
+    }
+  }
 }

@@ -40,7 +40,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-01 | Primer grafo LangGraph: conversar y completar acciones (un nodo + una tool + checkpointer) | ✅ Cerrada |
 | SPEC-02 | Ingesta del esquema: conectar a la BD objetivo, extraer su esquema y volcarlo a nodos Neo4j; tools para el agente | ✅ Cerrada |
 | SPEC-03 | Vectorización del esquema: puerto `IEmbeddings` (OpenAI/local) + almacenamiento en pgvector + vectorizar al escanear | ✅ Cerrada |
-| SPEC-04 | Schema Agent: recuperación (búsqueda semántica + expansión por FKs en el grafo) + tool de schema-linking | ⏳ Pendiente |
+| SPEC-04 | Schema Agent: recuperación (búsqueda semántica + expansión por FKs en el grafo) + tool de schema-linking | ✅ Cerrada |
 | SPEC-05 | SQL Agent (NL→SQL con el esquema recuperado) | ⏳ Pendiente |
 | SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ⏳ Pendiente |
 | SPEC-07 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
@@ -48,6 +48,8 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
+
+> **Pendiente para SPEC-04 / SPEC-11 (evaluación).** Para comprobar que las descripciones aportan de verdad, añadir a Arcadia una tabla con un **nombre opaco** (que no delate qué guarda) y una pregunta del golden set que la necesite; y medir la recuperación **con y sin descripciones**, no solo con y sin grafo. Sin un caso así, las descripciones no tienen nada que demostrar. El porqué, en [arquitectura.md §9](arquitectura.md).
 
 ---
 
@@ -257,5 +259,95 @@ cd backend && npm run test:integration   # vectorización real contra pgvector (
 - **Descripciones sincronizadas** en Neo4j (atributo `description` del `Table`) y en pgvector (columna `description` + texto embebido), a partir de una sola pregunta.
 - **Re-vectorización = reconstrucción completa** (drop + recreate), siempre explícita y con aviso; nunca automática.
 - **Chat y embeddings son independientes**: el modelo de chat solo consume el contexto del esquema como texto, así que es indiferente al proveedor de embeddings. El acoplamiento real (mismo modelo para indexar y consultar) vive dentro del retriever/vectorizador. Preflight en local para avisar si falta algún modelo cargado.
+
+---
+
+### SPEC-04 — Schema Agent: recuperación de tablas relevantes (GraphRAG)
+
+**Objetivo.** Quiero que, dada una pregunta en lenguaje natural, el sistema encuentre las tablas que hacen falta para responderla — aunque no use los nombres exactos del esquema ("clientes" → `customer`), aunque la pregunta vaya en español y el esquema en inglés, y aunque algún nombre de tabla no diga qué guarda (ahí entran las descripciones). Es el corazón del proyecto: la recuperación GraphRAG que luego alimentará al SQL Agent. Combino dos cosas que ya tengo a medias: buscar tablas candidatas por significado (vectores en pgvector, SPEC-03) y, desde esas candidatas, traer las tablas relacionadas siguiendo las claves foráneas en el grafo (Neo4j, SPEC-02) — porque para un JOIN suelen hacer falta tablas que la pregunta ni menciona.
+
+**Contrato.** Dada una pregunta (texto), devuelvo un contexto de esquema: la lista de tablas relevantes con sus columnas, claves primarias y foráneas, y un texto tipo DDL listo para meter en el prompt del SQL Agent. El contexto deja claro qué tablas elegí, porque lo necesitaré para medir el *schema-linking recall* en la evaluación.
+
+Cómo lo construyo, en dos pasos. Primero embebo la pregunta y busco en pgvector las tablas más parecidas por coseno: las candidatas, hasta un tope configurable. Después, en Neo4j, expando esas candidatas siguiendo las relaciones `REFERENCES` (en ambos sentidos, un salto) para incluir las tablas vecinas que harían falta en los JOIN. Con el conjunto final, leo del grafo las columnas y claves de cada tabla y compongo el contexto.
+
+Hay un punto innegociable que viene de SPEC-03: consulto con el **mismo modelo de embeddings con el que indexé**. Para eso leo del índice el proveedor, el modelo y la dimensión que guardé y reconstruyo ese mismo modelo, no el del `.env`. Si ese modelo no está disponible (por ejemplo, en local no está cargado en LM Studio), aviso claro y no consulto con otro: comparar vectores de espacios distintos no tiene sentido.
+
+Lo expongo de dos formas, igual que la ingesta y la vectorización: como caso de uso (recibe la pregunta y sus colaboradores inyectados, con implementación real por defecto, para poder probarlo con dobles) y como *tool* del agente, para preguntarle desde el chat "¿qué tablas usarías para …?".
+
+**Pasos**
+
+1. En el dominio, definir el **contexto de esquema**: las tablas relevantes elegidas (reutilizo `TableSchema` para cada una) y una función que las renderiza a un texto tipo DDL (solo esas tablas, con sus columnas y FKs). Expone también la lista de nombres elegidos, para la evaluación.
+2. **Búsqueda semántica**: añadir al puerto del almacén (`IEmbeddingsStore`) y a su adaptador de pgvector una búsqueda por similitud — dado un vector, las N tablas más parecidas por coseno usando el índice que ya creé — que devuelva el nombre de la tabla y su score.
+3. **Reconstruir el modelo indexado**: a partir del proveedor/modelo/dimensión guardados en el índice (`getIndexedModel`, SPEC-03), construir el mismo adaptador de embeddings, sin leer del `.env`. Preflight en local: avisar si ese modelo no está cargado, igual que al escanear.
+4. **Expansión por FK**: añadir al grafo (Neo4j) una lectura que, dadas unas tablas candidatas, devuelva esas tablas más sus vecinas por `REFERENCES` (un salto, ambos sentidos), cada una con sus columnas, claves primarias y foráneas (como `TableSchema`).
+5. **Caso de uso de recuperación**: embeber la pregunta → candidatas (pgvector) → expandir (Neo4j) → componer el contexto. Con dependencias inyectadas y defaults reales, siguiendo el patrón de la ingesta y la vectorización, para testearlo con dobles sin levantar Docker.
+6. **Constantes nombradas**: el tope de candidatas (`SEMANTIC_TOP_K`) y la profundidad de expansión (un salto, de momento).
+7. **Tool de schema-linking**: una tool que, dada una pregunta, devuelva qué tablas elegiría (un resumen del contexto). Añadirla al grafo de SPEC-01.
+8. *(Opcional, CLI)* una forma de probar la recuperación desde el chat: preguntar y ver qué tablas saldrían.
+9. **Tests**: unit con dobles (el mapeo multilingüe, la expansión por FK, que el contexto trae solo las tablas relevantes, que una tabla se recupera por su descripción aunque el nombre no encaje, y el aviso si el modelo no coincide); integración opt-in que recupera sobre Arcadia de verdad.
+
+**Criterios de aceptación**
+
+- [X] Dada la pregunta "clientes", entre las candidatas aparece `customer` (mapeo multilingüe español→inglés)
+- [X] Dadas unas candidatas con FKs, el contexto incluye las tablas relacionadas necesarias para los JOIN (expansión por el grafo)
+- [X] El contexto trae **solo las tablas relevantes** (con sus columnas y FKs) y un texto DDL con esas mismas tablas, no el esquema entero
+- [X] El caso de uso expone **qué tablas eligió** (para medir el schema-linking recall en SPEC-11)
+- [X] La consulta usa el **mismo modelo y dimensión que el índice**; si no coincide o no está disponible, avisa y no consulta con otro
+- [X] Una tabla se puede recuperar **por su descripción**, no solo por su nombre (validado con `t_042`)
+- [X] Si todavía no hay índice vectorizado, la recuperación avisa de que primero hay que escanear y vectorizar
+- [X] El agente dispone de una **tool de schema-linking** que, dada una pregunta, dice qué tablas usaría
+- [X] Tests: (a) unit con dobles para el mapeo multilingüe, la expansión por FK y "solo tablas relevantes"; (b) integración opt-in que recupera sobre Arcadia real
+- [X] *(Validado a mano)* Con vs sin descripciones sobre `t_042`: **con** descripciones la recupera para "wishlist"; **sin** ellas el sistema responde que no hay tabla de wishlist y no la encuentra. La cuantificación sobre todo el golden set queda para el ablation (SPEC-11)
+
+**Antes de implementar — dataset.** Para que el criterio de las descripciones tenga algo que demostrar, primero añado a Arcadia una tabla con **nombre opaco** (que no delate qué guarda) — por ejemplo, una lista de deseos cliente↔juego —, con sus claves foráneas, su descripción en `descriptions/` y una pregunta en el golden set que la necesite. Toca el esquema (`schema.sql` y su copia `02-schema.sql`), el seed (`seedData.ts` + regenerar `03-dataset.sql` con `pg_dump`), el golden set y el test de diagnóstico (de 16 a 17 tablas), y requiere recargar Docker (`down -v && up`).
+
+```bash
+cd backend && npm test                   # unit de la recuperación (con dobles)
+cd backend && npm run test:integration   # recuperación real sobre Arcadia (opt-in)
+```
+
+**Resultados (hallazgos al implementar)**
+
+- Recuperación validada sobre Arcadia con embeddings locales (bge-m3): "¿cuántos clientes por región?" trae `customer` y `region`; "lista de deseos" trae `t_042` —la tabla de nombre opaco— **solo por su descripción**. El caso de las descripciones funciona, y el contraste lo confirma: si vectorizo **sin** descripciones, el sistema no encuentra `t_042` para "wishlist" (responde que no existe tabla de wishlist); **con** descripciones, la encuentra. Es justo el resultado que quería poder enseñar.
+- **Los embeddings locales devolvían ceros**: el cliente de embeddings de LangChain, con LM Studio, devolvía vectores de ceros (por cómo el SDK maneja base64). Reescribí el adaptador para llamar a `/v1/embeddings` con `encoding_format: "float"` directamente; ahora devuelve los vectores reales. Añadí un guard que rechaza vectores degenerados (todo ceros, o dimensión que no cuadra), para no volver a guardar basura sin enterarme.
+- **bge-m3 en LM Studio da 1024 dims** (antes había anotado 256): dejé la dimensión del proveedor local en 1024.
+- **Quité el índice ivfflat**: con pocas filas y `probes=1`, una consulta nueva caía en una lista vacía y devolvía 0 resultados. A la escala de un esquema, la búsqueda exacta por coseno es precisa e instantánea; el ANN solo compensaría con miles de tablas.
+- **Acotación del contexto (hecho)**: ordeno todas las tablas por similitud, tomo las top-K (`SEMANTIC_TOP_K`=5), expando por FK y me quedo con las mejores hasta un tope (`MAX_CONTEXT_TABLES`=8), re-ordenando el conjunto expandido por similitud. Así una tabla muy conectada (como `customer`) ya no arrastra medio esquema; `topK` y `maxTables` son las palancas de precisión del ablation.
+
+**Próximas mejoras de la recuperación (anotadas, aún sin hacer)**
+
+- **Tablas fijadas por el usuario (must-include).** Permitir que el usuario indique una o varias tablas que deben entrar **sí o sí** en el contexto, aunque la búsqueda no las priorice. Así no dependo de que la recuperación acierte siempre, y evito que el agente improvise rodeos por otras relaciones cuando ya sé qué tabla toca. Las fijadas se fusionan con las recuperadas y se expanden igual por FK.
+
+---
+
+### SPEC-05 — SQL Agent (NL→SQL con el esquema recuperado)
+
+**Objetivo.** Quiero que, dada una pregunta y el contexto de tablas que recupera el Schema Agent (SPEC-04), el sistema genere la consulta SQL que la responde. Es el paso que convierte "qué tablas" en "qué consulta". De momento me centro en generar la SQL a partir de la pregunta + el contexto; el bucle de reintento con los errores del Judge llega cuando existan el Judge (SPEC-06) y el supervisor (SPEC-10).
+
+**Contrato.** Dada la pregunta (texto) y el contexto de esquema (el DDL de las tablas relevantes, de SPEC-04), devuelvo una sentencia SQL de solo lectura (empieza por `SELECT` o `WITH`). Para generarla uso un LLM a través del puerto `IChatModel` —el que monté en SPEC-00B y que hasta ahora solo ejercía el smoke test—: le paso un mensaje de sistema con las reglas estrictas y un mensaje de usuario con el DDL y la pregunta, y me devuelve el texto de la SQL, que limpio (quito las vallas ```` ```sql ```` y los espacios) antes de devolverlo. El caso de uso recibe el `IChatModel` inyectado (con el real por defecto, vía `ChatModelFactory`), para poder probarlo con un doble sin llamar al modelo.
+
+Reglas del prompt (van en el mensaje de sistema y se comprueban por comportamiento): usar exactamente los nombres de tablas y columnas del DDL; no traducir identificadores (la pregunta va en español, el esquema en inglés); solo lectura (`SELECT`/`WITH`, nunca escritura); `GROUP BY` coherente con lo que se agrega; poner `LIMIT` cuando la pregunta pida un "top N"; y, si la pregunta no se puede responder con las tablas dadas, decirlo en vez de inventar columnas.
+
+**Pasos**
+
+1. Definir el mensaje de sistema con las reglas (constante con nombre).
+2. Componer el mensaje de usuario a partir del DDL del contexto y la pregunta.
+3. Caso de uso `generateSql(question, schemaContext, deps)` que arma los mensajes, llama a `IChatModel.chat()` y limpia la respuesta. Dependencias inyectadas (el modelo de chat) con el real por defecto.
+4. Limpiar la salida del LLM: quitar las vallas de código y los espacios sobrantes, quedarme con la sentencia.
+5. Dejarlo listo para el supervisor (SPEC-10) y, si ayuda a probar de extremo a extremo, exponerlo como tool del agente.
+6. Tests: unit con `IChatModel` doblado (que el prompt incluye el DDL y la pregunta; que limpia las vallas; que devuelve la sentencia); integración opt-in con el LLM real (una pregunta del golden set sobre Arcadia produce un `SELECT` plausible).
+
+**Criterios de aceptación**
+
+- [ ] Dada una pregunta y el DDL, devuelve una sentencia que empieza por `SELECT` o `WITH`
+- [ ] El prompt que recibe el LLM incluye el DDL del contexto y la pregunta (verificable doblando `IChatModel`)
+- [ ] Si el LLM devuelve la SQL entre vallas de código, la salida viene limpia (sin vallas)
+- [ ] El caso de uso recibe el `IChatModel` inyectable (real por defecto); los tests usan un doble sin red
+- [ ] (Integración, opt-in) una pregunta del golden set sobre Arcadia produce un `SELECT` plausible con los nombres reales del esquema
+
+```bash
+cd backend && npm test                   # unit del SQL Agent (con doble de IChatModel)
+cd backend && npm run test:integration   # generación real con el LLM (opt-in)
+```
 
 

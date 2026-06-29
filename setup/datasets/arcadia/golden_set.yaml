@@ -310,3 +310,16 @@
     )
     ORDER BY g.title;
   note: "Negación / NOT EXISTS sobre la M:N con filtro por tipo de plataforma."
+
+- id: G-25
+  question: "¿Qué 5 clientes tienen más juegos en su lista de deseos?"
+  difficulty: medium
+  tables: [t_042, customer]
+  sql: |
+    SELECT c.customer_id, c.username, COUNT(*) AS wishlist_games
+    FROM t_042 w
+    JOIN customer c ON c.customer_id = w.customer_id
+    GROUP BY c.customer_id, c.username
+    ORDER BY wishlist_games DESC
+    LIMIT 5;
+  note: "Tabla de nombre OPACO (t_042 = lista de deseos): solo se localiza por su descripción, no por el nombre. Caso de schema-linking por descripción (SPEC-04)."

@@ -13,6 +13,7 @@
 --     consultará con un usuario de SOLO LECTURA distinto (seguridad por diseño).
 -- =====================================================================
 
+DROP TABLE IF EXISTS t_042 CASCADE;
 DROP TABLE IF EXISTS concurrent_snapshot CASCADE;
 DROP TABLE IF EXISTS rating CASCADE;
 DROP TABLE IF EXISTS play_session CASCADE;
@@ -184,6 +185,21 @@ CREATE TABLE concurrent_snapshot (
 );
 
 -- ---------------------------------------------------------------------
+-- Lista de deseos (nombre OPACO a propósito: t_042)
+-- ---------------------------------------------------------------------
+-- Juegos que un cliente ha marcado como deseados pero todavía no ha comprado.
+-- El nombre no dice nada de su contenido: es el caso de prueba del schema-linking
+-- por DESCRIPCIÓN — el retriever solo debería encontrarla por su descripción, no
+-- por el nombre (ver docs/design/SPEC.md SPEC-04 y arquitectura.md §9).
+CREATE TABLE t_042 (
+    id          SERIAL PRIMARY KEY,
+    customer_id INT  NOT NULL REFERENCES customer(customer_id),
+    game_id     INT  NOT NULL REFERENCES game(game_id),
+    added_at    DATE NOT NULL,
+    UNIQUE (customer_id, game_id)
+);
+
+-- ---------------------------------------------------------------------
 -- Índices sobre las FK más consultadas (rendimiento de los JOIN del agente)
 -- ---------------------------------------------------------------------
 CREATE INDEX idx_game_developer   ON game(developer_company_id);
@@ -199,3 +215,5 @@ CREATE INDEX idx_session_customer ON play_session(customer_id);
 CREATE INDEX idx_rating_game      ON rating(game_id);
 CREATE INDEX idx_snapshot_game    ON concurrent_snapshot(game_id);
 CREATE INDEX idx_snapshot_region  ON concurrent_snapshot(region_id);
+CREATE INDEX idx_t042_customer    ON t_042(customer_id);
+CREATE INDEX idx_t042_game        ON t_042(game_id);

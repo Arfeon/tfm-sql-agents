@@ -8,6 +8,7 @@
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import { ingestSchema, getSchemaSummary } from '../application/schemaIngestion'
+import { retrieveSchemaContext } from '../application/schemaRetrieval'
 import { loadTargetDatabases, targetDatabaseLabel } from '../infrastructure/config/targetDatabases'
 
 const ingestSchemaTool = tool(
@@ -37,4 +38,20 @@ const schemaSummaryTool = tool(
   },
 )
 
-export const schemaTools = [ingestSchemaTool, schemaSummaryTool]
+const schemaLinkingTool = tool(
+  async ({ pregunta }) => {
+    const context = await retrieveSchemaContext(pregunta)
+    if (context.tableNames.length === 0) {
+      return 'No encontré tablas relevantes. ¿Está vectorizado el esquema? (CLI → "Escanear el esquema").'
+    }
+    return `Para "${pregunta}" usaría estas tablas: ${context.tableNames.join(', ')}.`
+  },
+  {
+    name: 'schema_linking',
+    description:
+      'Averigua qué tablas del esquema son relevantes para una pregunta (búsqueda semántica + expansión por claves foráneas). Úsala SIEMPRE que el usuario pregunte por datos, por qué tablas usar o dónde está cierta información. No adivines nombres de tablas: consulta esta herramienta.',
+    schema: z.object({ pregunta: z.string().describe('La pregunta en lenguaje natural') }),
+  },
+)
+
+export const schemaTools = [ingestSchemaTool, schemaSummaryTool, schemaLinkingTool]
