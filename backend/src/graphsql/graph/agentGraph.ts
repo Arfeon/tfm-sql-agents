@@ -22,6 +22,7 @@ const SYSTEM_PROMPT =
   'NO conoces el esquema de la base de datos de memoria y NUNCA te inventes nombres de tablas ni de columnas. ' +
   'Si el usuario pregunta qué tablas usar o dónde está cierta información, usa la herramienta de schema-linking. ' +
   'Si el usuario pide la consulta SQL (o cómo obtener ciertos datos), usa la herramienta de generar SQL, que ya recupera las tablas por su cuenta. ' +
+  'Esa herramienta ya devuelve el resultado formateado en dos secciones (la consulta SQL y la evaluación del Judge): muéstralo SIEMPRE al usuario TAL CUAL, sin reescribirlo, resumirlo ni mezclarlo con comentarios propios. La evaluación es del Judge, no tuya: no la omitas ni inventes una. ' +
   'Después de usar una herramienta, responde siempre al usuario con su resultado en texto claro; no dejes la respuesta vacía. ' +
   'Para comprobar el estado del sistema o escanear/ingerir el esquema, usa también las herramientas disponibles.'
 
