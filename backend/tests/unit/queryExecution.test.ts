@@ -31,6 +31,7 @@ function fakeDeps(
       spy?.onFetch?.(sql, maxRows)
       return result as never
     },
+    dryRun: async () => {},
     rowCount: async () => result.rows.length,
     close: async () => {},
   }

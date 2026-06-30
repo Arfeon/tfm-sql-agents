@@ -7,14 +7,14 @@
  * su ciclo de vida.
  */
 import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
-import { PostgresSchemaReader } from '../infrastructure/postgres/PostgresSchemaReader'
+import { SchemaReaderFactory } from '../infrastructure/targetdb/SchemaReaderFactory'
 import type { TableSchema } from '../domain/schema/TableSchema'
 import type { TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
 
 export async function readTargetSchema(target: TargetDatabaseConfig): Promise<TableSchema[]> {
   const db = await TargetDatabaseFactory.connect(target)
   try {
-    return await new PostgresSchemaReader(db, target.schema).readSchema()
+    return await SchemaReaderFactory.create(target, db).readSchema()
   } finally {
     await db.close()
   }

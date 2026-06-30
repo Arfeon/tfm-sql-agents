@@ -1,11 +1,11 @@
 /**
  * Comprobación de sintaxis del Judge (SPEC-06): valida la sintaxis real contra la BD objetivo.
  *
- * Es la verificación objetiva: en PostgreSQL hago un `EXPLAIN <sql>`, que planifica
- * la consulta (comprueba sintaxis y que tablas/columnas existan) **sin ejecutarla**.
- * Si planifica, la sintaxis es correcta; si lanza, devuelvo el error de la BD. Tomé
- * la idea del juez del proyecto Python anterior, que hacía lo mismo (EXPLAIN en
- * PostgreSQL/MySQL, `SET NOEXEC ON` en SQL Server).
+ * Es la verificación objetiva: le pido a la conexión un `dryRun` (validar la consulta
+ * sin ejecutarla); cada adaptador sabe cómo hacerlo en su motor. Si valida, la
+ * sintaxis es correcta; si lanza, devuelvo el error de la BD. Tomé la idea del juez
+ * del proyecto Python anterior, que hacía lo mismo (EXPLAIN en PostgreSQL/MySQL,
+ * `SET NOEXEC ON` en SQL Server).
  *
  * Esto es lo que arregla los falsos positivos del juez LLM: la BD es la autoridad
  * sobre si una consulta es válida, no la opinión (a veces demasiado estricta) del LLM.
@@ -40,8 +40,7 @@ export async function checkSqlSyntax(
 ): Promise<SqlSyntaxCheck> {
   const db = await deps.connectDatabase()
   try {
-    // EXPLAIN planifica la consulta (comprueba sintaxis y existencia) sin ejecutarla.
-    await db.fetchAll(`EXPLAIN ${sql.text}`)
+    await db.dryRun(sql.text)
     return { valid: true }
   } catch (error) {
     return { valid: false, error: error instanceof Error ? error.message : String(error) }

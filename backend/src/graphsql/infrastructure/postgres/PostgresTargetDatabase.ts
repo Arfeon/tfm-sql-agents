@@ -50,6 +50,12 @@ export class PostgresTargetDatabase implements ITargetDatabase {
     }
   }
 
+  async dryRun(sql: string): Promise<void> {
+    // En PostgreSQL, EXPLAIN planifica la consulta (comprueba sintaxis y que
+    // tablas/columnas existan) sin ejecutarla; si no es válida, lanza.
+    await this.client.query(`EXPLAIN ${stripTrailingSemicolon(sql)}`)
+  }
+
   async rowCount(table: string): Promise<number> {
     const result = await this.client.query<{ count: string }>(
       `SELECT COUNT(*) AS count FROM ${table}`
