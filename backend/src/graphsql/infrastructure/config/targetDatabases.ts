@@ -24,6 +24,14 @@ export function targetDatabaseLabel(target: TargetDatabaseConfig): string {
   return `${target.type} / ${target.name}`
 }
 
+/** Nombre del dialecto SQL del motor, para inyectarlo en el prompt del SQL Agent. */
+const DIALECT_LABELS: Record<TargetDbType, string> = {
+  postgresql: 'PostgreSQL',
+}
+export function sqlDialectFor(target: TargetDatabaseConfig): string {
+  return DIALECT_LABELS[target.type] ?? target.type
+}
+
 /** Catálogo de BDs objetivo declaradas en el `.env`. */
 export function loadTargetDatabases(env: NodeJS.ProcessEnv = process.env): TargetDatabaseConfig[] {
   const numbered = loadNumberedTargets(env)

@@ -41,7 +41,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-02 | Ingesta del esquema: conectar a la BD objetivo, extraer su esquema y volcarlo a nodos Neo4j; tools para el agente | ✅ Cerrada |
 | SPEC-03 | Vectorización del esquema: puerto `IEmbeddings` (OpenAI/local) + almacenamiento en pgvector + vectorizar al escanear | ✅ Cerrada |
 | SPEC-04 | Schema Agent: recuperación (búsqueda semántica + expansión por FKs en el grafo) + tool de schema-linking | ✅ Cerrada |
-| SPEC-05 | SQL Agent (NL→SQL con el esquema recuperado) | ⏳ Pendiente |
+| SPEC-05 | SQL Agent (NL→SQL con el esquema recuperado) | ✅ Cerrada |
 | SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ⏳ Pendiente |
 | SPEC-07 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
 | SPEC-08 | Execute SQL (solo lectura) | ⏳ Pendiente |
@@ -49,7 +49,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
 
-> **Pendiente para SPEC-04 / SPEC-11 (evaluación).** Para comprobar que las descripciones aportan de verdad, añadir a Arcadia una tabla con un **nombre opaco** (que no delate qué guarda) y una pregunta del golden set que la necesite; y medir la recuperación **con y sin descripciones**, no solo con y sin grafo. Sin un caso así, las descripciones no tienen nada que demostrar. El porqué, en [arquitectura.md §9](arquitectura.md).
+> **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §9](arquitectura.md).
 
 ---
 
@@ -316,7 +316,7 @@ cd backend && npm run test:integration   # recuperación real sobre Arcadia (opt
 
 **Próximas mejoras de la recuperación (anotadas, aún sin hacer)**
 
-- **Tablas fijadas por el usuario (must-include).** Permitir que el usuario indique una o varias tablas que deben entrar **sí o sí** en el contexto, aunque la búsqueda no las priorice. Así no dependo de que la recuperación acierte siempre, y evito que el agente improvise rodeos por otras relaciones cuando ya sé qué tabla toca. Las fijadas se fusionan con las recuperadas y se expanden igual por FK.
+- **Tablas fijadas por el usuario (must-include).** Permitir que el usuario indique una o varias tablas que deben entrar **sí o sí** en el contexto, aunque la búsqueda no las priorice. Así no dependo de que la recuperación acierte siempre, y evito que el agente improvise rodeos por otras relaciones cuando ya sé qué tabla toca. Las fijadas se fusionan con las recuperadas y se expanden igual por FK. **El motor** (un `mustInclude` en `retrieveSchemaContext`, que valida los nombres contra el esquema) es pequeño y reutilizable; **la UX vive en la Human Review (SPEC-07)**: cuando veo la SQL y noto que falta una tabla, la fijo y relanzo el flujo, de forma determinista (lo controlo yo, no el LLM).
 
 ---
 
@@ -324,7 +324,7 @@ cd backend && npm run test:integration   # recuperación real sobre Arcadia (opt
 
 **Objetivo.** Quiero que, dada una pregunta y el contexto de tablas que recupera el Schema Agent (SPEC-04), el sistema genere la consulta SQL que la responde. Es el paso que convierte "qué tablas" en "qué consulta". De momento me centro en generar la SQL a partir de la pregunta + el contexto; el bucle de reintento con los errores del Judge llega cuando existan el Judge (SPEC-06) y el supervisor (SPEC-10).
 
-**Contrato.** Dada la pregunta (texto) y el contexto de esquema (el DDL de las tablas relevantes, de SPEC-04), devuelvo una sentencia SQL de solo lectura (empieza por `SELECT` o `WITH`). Para generarla uso un LLM a través del puerto `IChatModel` —el que monté en SPEC-00B y que hasta ahora solo ejercía el smoke test—: le paso un mensaje de sistema con las reglas estrictas y un mensaje de usuario con el DDL y la pregunta, y me devuelve el texto de la SQL, que limpio (quito las vallas ```` ```sql ```` y los espacios) antes de devolverlo. El caso de uso recibe el `IChatModel` inyectado (con el real por defecto, vía `ChatModelFactory`), para poder probarlo con un doble sin llamar al modelo.
+**Contrato.** Dada la pregunta (texto) y el contexto de esquema (el DDL de las tablas relevantes, de SPEC-04), devuelvo una sentencia SQL de solo lectura **con su dialecto** (`{ text, dialect }`; empieza por `SELECT` o `WITH`). El **dialecto sale del motor de la BD objetivo** (PostgreSQL, SQL Server…) y lo **inyecto como variable en el prompt**, para que la SQL salga en la sintaxis correcta. Para generarla uso un LLM a través del puerto `IChatModel` —el que monté en SPEC-00B y que hasta ahora solo ejercía el smoke test—: le paso un mensaje de sistema con las reglas estrictas y un mensaje de usuario con el DDL y la pregunta, y me devuelve el texto de la SQL, que limpio (quito las vallas ```` ```sql ```` y los espacios) antes de devolverlo. El caso de uso recibe el `IChatModel` inyectado (con el real por defecto, vía `ChatModelFactory`), para poder probarlo con un doble sin llamar al modelo.
 
 Reglas del prompt (van en el mensaje de sistema y se comprueban por comportamiento): usar exactamente los nombres de tablas y columnas del DDL; no traducir identificadores (la pregunta va en español, el esquema en inglés); solo lectura (`SELECT`/`WITH`, nunca escritura); `GROUP BY` coherente con lo que se agrega; poner `LIMIT` cuando la pregunta pida un "top N"; y, si la pregunta no se puede responder con las tablas dadas, decirlo en vez de inventar columnas.
 
@@ -339,15 +339,98 @@ Reglas del prompt (van en el mensaje de sistema y se comprueban por comportamien
 
 **Criterios de aceptación**
 
-- [ ] Dada una pregunta y el DDL, devuelve una sentencia que empieza por `SELECT` o `WITH`
-- [ ] El prompt que recibe el LLM incluye el DDL del contexto y la pregunta (verificable doblando `IChatModel`)
-- [ ] Si el LLM devuelve la SQL entre vallas de código, la salida viene limpia (sin vallas)
-- [ ] El caso de uso recibe el `IChatModel` inyectable (real por defecto); los tests usan un doble sin red
-- [ ] (Integración, opt-in) una pregunta del golden set sobre Arcadia produce un `SELECT` plausible con los nombres reales del esquema
+- [X] El prompt que recibe el LLM incluye el DDL del contexto, la pregunta y el **dialecto** del motor (verificado doblando `IChatModel`)
+- [X] Si el LLM devuelve la SQL entre vallas de código, la salida viene limpia (sin vallas)
+- [X] El caso de uso recibe el `IChatModel` inyectable (real por defecto); los tests usan un doble sin red
+- [X] Devuelve `{ text, dialect }` con el dialecto del motor objetivo, inyectado como variable en el prompt
+- [X] (Integración) una pregunta del golden set sobre Arcadia produce un `SELECT`/`WITH` plausible con los nombres reales del esquema
 
 ```bash
 cd backend && npm test                   # unit del SQL Agent (con doble de IChatModel)
 cd backend && npm run test:integration   # generación real con el LLM (opt-in)
+```
+
+**Resultados (al implementar)**
+
+- Implementado y verificado en unitarios (typecheck + 39 tests): el SQL Agent compone el prompt con el dialecto inyectado, llama al `IChatModel` y limpia la salida; devuelve `{ text, dialect }`.
+- **El dialecto sale del motor de la BD objetivo** (`sqlDialectFor`) y se inyecta como variable en el prompt; hoy `postgresql` → "PostgreSQL", extensible a otros motores.
+- Por fin el puerto `IChatModel` tiene uso real (lo usa el SQL Agent), no solo el smoke test.
+- Lo expuse como tool `generar_sql` en el grafo, así puedo pedir la SQL desde el chat (recupera el contexto solo). Aún no se valida (SPEC-06) ni se ejecuta (SPEC-08).
+- **Validado end-to-end**: el test de integración pasa — "¿cuántos clientes por región?" genera un `SELECT` correcto (LEFT JOIN + GROUP BY + ORDER BY). Y en el chat con LM Studio, `generar_sql` produjo la SQL de la wishlist uniendo `t_042`, `customer` y `game`.
+- Con modelos locales vi que a veces el agente devuelve una respuesta **vacía** tras usar una tool (no determinista; va bien al reintentar). Reforcé el prompt para que conteste siempre tras una herramienta, y el CLI ahora avisa en vez de mostrar un "Agente:" en blanco.
+
+---
+
+### SPEC-06 — Judge Agent (validación de seguridad)
+
+**Objetivo.** Antes de ejecutar nada quiero una barrera que garantice que la SQL es **de solo lectura y segura**. Es la seguridad por diseño: pase lo que pase con el LLM, una consulta peligrosa no debe llegar nunca a la BD. La parte obligatoria es una validación sin LLM (rápida y determinista); por encima, opcionalmente, una revisión más fina.
+
+**Contrato.** Dada una sentencia SQL (y el contexto si hace falta), devuelvo un veredicto: si es válida y, si no, por qué (la lista de problemas). Lo organizo en capas, de más a menos importante:
+
+- **Capa 1 — seguridad, sin LLM (obligatoria).** Un servicio de dominio puro: la sentencia debe empezar por `SELECT` o `WITH`; rechazo palabras peligrosas (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `TRUNCATE`, `ALTER`, `GRANT`, como palabra completa y sin distinguir mayúsculas); y detecto patrones de inyección (`;` multi-sentencia, comentarios `--` y `/* */`). Si la Capa 1 dice que no, **no se ejecuta nunca**, diga lo que diga el LLM. Al ser pura, la pruebo a fondo con una tabla de casos (un caso por keyword y por patrón), sin dobles.
+- **Capa 3 — LLM-as-judge (opcional, ligera).** A través de `IChatModel`, el LLM revisa la SQL contra el contexto (¿usa nombres reales?, ¿responde la pregunta?, ¿es solo lectura?) y devuelve un veredicto. Si su respuesta no es interpretable, lo trato como error de dominio (no rompe el flujo). Inyecto el `IChatModel`.
+- *(Capa 2 — sintaxis real con EXPLAIN/dry-run contra la BD objetivo: opcional, queda para más adelante.)*
+
+El veredicto es lo que mira el supervisor (SPEC-10): si es inválido y quedan reintentos, vuelve al SQL Agent con los errores; si no, pasa a la revisión humana.
+
+**Pasos**
+
+1. Definir en el dominio el resultado de validación (válido + errores/avisos) y las excepciones propias (p. ej. `UnsafeQueryError`).
+2. Implementar la **Capa 1** como servicio de dominio puro: allowlist `SELECT`/`WITH`, keywords peligrosas (palabra completa), patrones de inyección. Constantes con nombre para las listas.
+3. Tests de la Capa 1: tabla parametrizada con un caso por keyword peligrosa y por patrón de inyección, más `SELECT`/CTE legítimos que pasan.
+4. Implementar la **Capa 3** (LLM-as-judge) como caso de uso con `IChatModel` inyectado; parsear el veredicto y, si no es interpretable, error de dominio.
+5. Combinar: primero Capa 1 (si falla, inválido y fin); luego, opcional, Capa 3.
+6. Dejarlo listo para el bucle del supervisor (reintento SQL↔Judge).
+
+**Criterios de aceptación**
+
+- [ ] Una sentencia que no empiece por `SELECT`/`WITH` se marca inválida
+- [ ] Presencia de `DROP|DELETE|INSERT|UPDATE|TRUNCATE|ALTER|GRANT` (palabra completa) → inválida, con error explícito
+- [ ] Patrones de inyección (`;` multi-sentencia, `--`, `/* */`) → inválida
+- [ ] Un `SELECT` legítimo con JOINs y CTE → válida
+- [ ] Si la Capa 1 rechaza, el resultado lo deja claro y el flujo no llega a ejecutar (invariante de seguridad)
+- [ ] (Capa 3) dado SQL + contexto, devuelve un veredicto; si el LLM responde algo no interpretable, se trata como error de dominio sin romper
+- [ ] Tests: Capa 1 con tabla parametrizada (pura, sin dobles); Capa 3 con `IChatModel` doblado
+
+```bash
+cd backend && npm test                   # Capa 1 (pura) + Capa 3 con doble de IChatModel
+```
+
+---
+
+### SPEC-07 — Human Review (aprobación humana, interrupt)
+
+**Objetivo.** Ninguna SQL se ejecuta sin mi visto bueno. Quiero que el flujo se **pare**, me enseñe la consulta generada (y qué tablas ha usado) y recoja mi decisión. Y aprovecho este punto para resolver lo de las **tablas fijadas**: si veo que falta una tabla, poder fijarla y relanzar.
+
+**Contrato.** Cuando el flujo llega a la revisión, se interrumpe y me muestra la SQL propuesta y las tablas del contexto con que se generó. Yo decido entre:
+
+- **Aprobar** → se ejecuta (SPEC-08).
+- **Rechazar** → termina, no se ejecuta.
+- **Modificar** → edito la SQL a mano y vuelve al Judge a re-validarla.
+- **Fijar tabla(s) y relanzar** → indico una o varias tablas que deben entrar sí o sí; el flujo **vuelve a la recuperación con esas tablas fijadas** (`mustInclude`, SPEC-04), regenera el contexto y la SQL, y vuelve a pararse aquí. Es la UX determinista del must-include: el flujo lo controlo yo, no el LLM.
+
+**Mecanismo.** El nodo de revisión se compila con `interrupt_before`: LangGraph pausa el grafo y **persiste el estado** (checkpointer en PostgreSQL), recuperable por `thread_id`; al reanudar con mi decisión, sigue por la rama que toque. Las tablas fijadas viven en el estado, así que se conservan entre reintentos.
+
+**Pasos**
+
+1. Añadir al estado del grafo la decisión humana y la lista de tablas fijadas.
+2. Compilar el grafo con `interrupt_before` en el nodo de revisión y mover el checkpointer a PostgreSQL (hasta ahora en memoria).
+3. En el CLI: mostrar la SQL (con resaltado) y las tablas del contexto, y ofrecer las cuatro opciones (aprobar / rechazar / modificar / fijar tablas y relanzar).
+4. Al reanudar: aprobar → execute; rechazar → fin; modificar → Judge; fijar tablas → recuperación con `mustInclude` y de nuevo SQL → Judge → revisión.
+5. Validar las tablas fijadas contra el esquema: si una no existe, avisar e ignorarla (no fijar un fantasma).
+6. Tests (integración con checkpointer): que pausa y persiste; que aprobar continúa a execute; que fijar una tabla relanza la recuperación y esa tabla aparece en el contexto nuevo.
+
+**Criterios de aceptación**
+
+- [ ] Al llegar a la revisión, el grafo se interrumpe y el estado queda persistido (recuperable por `thread_id`)
+- [ ] Aprobar → continúa a ejecutar; rechazar → termina sin ejecutar
+- [ ] Modificar → la SQL editada vuelve al Judge
+- [ ] Fijar una tabla (p. ej. `t_042`) y relanzar → la recuperación se rehace con esa tabla fijada y aparece en el contexto nuevo
+- [ ] Una tabla fijada que no existe en el esquema se avisa y se ignora
+- [ ] Tests de integración con checkpointer: pausa/persistencia, reanudar-aprobar, reanudar-fijar-tabla
+
+```bash
+cd backend && npm run test:integration   # human review con checkpointer (opt-in)
 ```
 
 

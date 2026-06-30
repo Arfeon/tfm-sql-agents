@@ -220,7 +220,13 @@ async function runConversation(provider: LlmProvider): Promise<void> {
 
     try {
       const reply = await askGraph(graph, threadId, question)
-      console.log(`\n${chalk.cyan('Agente:')} ${reply}\n`)
+      if (reply.trim() === '') {
+        console.log(
+          chalk.yellow('\n⚠ El modelo no devolvió respuesta (puede pasar con modelos locales tras usar una herramienta). Prueba de nuevo o reformula.\n'),
+        )
+      } else {
+        console.log(`\n${chalk.cyan('Agente:')} ${reply}\n`)
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       console.log(chalk.red('\n⚠ No he podido obtener respuesta del modelo.'))
