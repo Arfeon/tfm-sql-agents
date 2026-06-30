@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "start": "tsx src/cli/main.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run tests/unit",
     "test:watch": "vitest tests/unit",
     "test:diagnostic": "vitest run tests/diagnostic",
     "test:integration": "vitest run tests/integration",
-    "seed": "tsx ../setup/datasets/arcadia/seedData.ts"
+    "seed": "tsx ../setup/datasets/arcadia/seedData.ts",
+    "prepare": "cd .. && husky backend/.husky"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.5.2",
@@ -27,6 +29,7 @@
     "@types/node": "^20.14.0",
     "@types/pg": "^8.11.6",
     "@types/seedrandom": "^2.4.34",
+    "husky": "^9.1.7",
     "seedrandom": "^3.0.5",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0",
