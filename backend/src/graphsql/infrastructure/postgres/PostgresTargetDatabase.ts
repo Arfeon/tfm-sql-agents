@@ -12,10 +12,16 @@ interface ConnectionParams {
 export class PostgresTargetDatabase implements ITargetDatabase {
   private constructor(private readonly client: Client) {}
 
-  static async fromParams(params: ConnectionParams): Promise<PostgresTargetDatabase> {
+  static async fromParams(
+    params: ConnectionParams,
+    options: { statementTimeoutMs?: number } = {},
+  ): Promise<PostgresTargetDatabase> {
     const client = new Client(params)
     await client.connect()
     await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY')
+    if (options.statementTimeoutMs !== undefined) {
+      await client.query(`SET statement_timeout = ${options.statementTimeoutMs}`)
+    }
     return new PostgresTargetDatabase(client)
   }
 
