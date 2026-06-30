@@ -57,14 +57,10 @@ export async function executeQuery(
   const maxRows = options.maxRows ?? MAX_RESULT_ROWS
   const timeoutMs = options.timeoutMs ?? STATEMENT_TIMEOUT_MS
 
-  // Envuelvo la consulta y pido una fila de más: si vuelve, es que había más que el tope.
-  const boundedSql = `SELECT * FROM (${stripTrailingSemicolon(sql.text)}) AS graphsql_result LIMIT ${maxRows + 1}`
-
   const db = await deps.connectDatabase({ statementTimeoutMs: timeoutMs })
   try {
-    const fetched = await db.fetchAll(boundedSql)
-    const truncated = fetched.length > maxRows
-    const rows = truncated ? fetched.slice(0, maxRows) : fetched
+    // El adaptador limita las filas de forma eficiente y me dice si se truncó.
+    const { rows, truncated } = await db.fetchCapped(sql.text, maxRows)
     return {
       columns: rows.length > 0 ? Object.keys(rows[0]) : [],
       rows,
@@ -74,9 +70,4 @@ export async function executeQuery(
   } finally {
     await db.close()
   }
-}
-
-/** Quito un único `;` final para poder envolver la consulta como subconsulta. */
-function stripTrailingSemicolon(sql: string): string {
-  return sql.trim().replace(/;\s*$/, '')
 }

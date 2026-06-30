@@ -22,12 +22,14 @@
     "dotenv": "^16.6.1",
     "neo4j-driver": "^6.1.0",
     "pg": "^8.22.0",
+    "pg-cursor": "^2.21.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
     "@types/node": "^20.14.0",
     "@types/pg": "^8.11.6",
+    "@types/pg-cursor": "^2.7.2",
     "@types/seedrandom": "^2.4.34",
     "husky": "^9.1.7",
     "seedrandom": "^3.0.5",

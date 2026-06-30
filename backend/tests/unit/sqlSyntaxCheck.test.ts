@@ -19,6 +19,7 @@ function depsWith(fetchAll: (sql: string) => Promise<void>): SqlSyntaxCheckDepen
       await fetchAll(sql)
       return [] as never
     },
+    fetchCapped: async () => ({ rows: [], truncated: false }),
     rowCount: async () => 0,
     close: async () => {},
   }
