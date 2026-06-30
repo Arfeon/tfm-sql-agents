@@ -122,7 +122,7 @@ Uso PostgreSQL + pgvector (en la base `graphsql_memory`) para la búsqueda semá
 
 ## 8. Seguridad
 
-La seguridad es lo que no me quiero saltar. De todo esto, lo único que ya está montado y probado es la sesión de solo lectura: el adaptador de Postgres abre la conexión en modo `READ ONLY`, así que un INSERT falla aunque me equivoque. El resto llega con el Judge (SPEC-06) y la aprobación humana (SPEC-07).
+La seguridad es lo que no me quiero saltar. De todo esto ya están montadas y probadas varias cosas: la sesión de solo lectura (el adaptador de Postgres abre la conexión en modo `READ ONLY`, así que un INSERT falla aunque me equivoque) y el **Judge** (SPEC-06) con sus capas: la **Capa 1**, un validador puro que rechaza cualquier sentencia que no sea claramente de solo lectura (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección); la **Capa 2**, un `EXPLAIN` contra la BD que comprueba la sintaxis real sin ejecutar; y la **Capa 3**, un juez LLM que aporta confianza y avisos pero que no bloquea por sí solo (puede ser demasiado estricto). Quien bloquea son las capas deterministas (1 y 2). El **ejecutor** (SPEC-07) ya está: ejecuta en solo lectura, vuelve a pasar la comprobación de seguridad como última barrera (lanza `UnsafeQueryError` si algo no fuera de solo lectura) y limita filas y tiempo. Falta la **aprobación humana** (SPEC-08) que se interponga antes de ese ejecutor.
 
 Lo que quiero garantizar:
 

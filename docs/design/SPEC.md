@@ -28,6 +28,19 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | D-02 | Puerto `ITargetDatabase` para la BD objetivo | Desacopla los agentes del driver `pg`; permite sustituir el adaptador en tests sin Docker; sigue el principio de inversión de dependencias de Clean Architecture | ✅ Cerrada |
 | D-03 | Puerto `IChatModel` + factory para el proveedor LLM | Desacopla los agentes del proveedor concreto (OpenAI vs local); el factory centraliza qué adaptador instanciar según `LLM_PROVIDER`; mismo patrón puerto/adaptador que D-02 → testeable con dobles | ✅ Cerrada |
 | D-04 | Cliente `ChatOpenAI` (LangChain) para ambos proveedores | LM Studio expone una API compatible con OpenAI: el mismo cliente sirve para la nube y para local cambiando solo `baseURL`; además es el cliente que reutilizaré al orquestar con LangGraph.js, así evito migrar después | ✅ Cerrada |
+| D-05 | Todo recurso externo (BD objetivo, LLM, embeddings, store): puerto `I…` + adaptador(es) + **factory** | Generaliza el patrón de D-02/D-03 a todos los recursos. El factory es el único sitio que conoce los adaptadores concretos y elige según configuración; los casos de uso dependen solo del puerto (inyección de dependencias) → testeables con dobles, sin clientes hardcodeados ni discriminar el tipo de motor en la capa de aplicación | ✅ Cerrada |
+
+### 3.1 Patrón obligatorio: acceso a recursos externos (puerto + adaptador + factory)
+
+Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectores…) sigue **siempre** este patrón. Es la forma de respetar Clean Architecture y de no acabar con clientes hardcodeados ni `if (tipo === …)` repartidos por los casos de uso. Si tengo que añadir un recurso o un nuevo proveedor/motor, estos son los pasos:
+
+1. **Puerto** en `domain/ports/I<Recurso>.ts`: solo los métodos que necesitan los casos de uso. Si el recurso es una conexión con ciclo de vida, incluye `close()`. El dominio no conoce ningún driver.
+2. **Adaptador(es)** en `infrastructure/<recurso>/<Proveedor><Recurso>.ts` (PascalCase, uno por clase): implementa el puerto para un proveedor/motor concreto (p. ej. `PostgresTargetDatabase`).
+3. **Factory** en `infrastructure/<recurso>/<Recurso>Factory.ts`: el **único** sitio que importa adaptadores concretos. Elige cuál instanciar según la configuración (`switch` por tipo/proveedor) y devuelve el **puerto** ya listo. Ejemplos: `ChatModelFactory`, `EmbeddingsFactory`, `TargetDatabaseFactory`.
+4. **Casos de uso**: reciben el puerto por **inyección de dependencias** (objeto de `deps` con un default real que llama al factory). **Nunca** importan adaptadores concretos ni discriminan el tipo de motor; solo dependen de la abstracción.
+5. **Tests**: doblo el puerto (o la función del factory que lo devuelve) → unitarios offline, sin Docker ni red.
+
+> **Anti-patrón a evitar:** construir el cliente a mano (`new PostgresX(...)`) o decidir el motor (`if (target.type !== 'postgresql')`) dentro de un caso de uso. Si eso aparece en la capa de aplicación, va al factory. Lo aprendí rehaciendo `executeQuery`/`checkSqlSyntax`/`readTargetSchema`, que repetían ese hardcode hasta que lo centralicé en `TargetDatabaseFactory`.
 
 ## 4. Especificaciones de componentes
 
@@ -42,9 +55,9 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | SPEC-03 | Vectorización del esquema: puerto `IEmbeddings` (OpenAI/local) + almacenamiento en pgvector + vectorizar al escanear | ✅ Cerrada |
 | SPEC-04 | Schema Agent: recuperación (búsqueda semántica + expansión por FKs en el grafo) + tool de schema-linking | ✅ Cerrada |
 | SPEC-05 | SQL Agent (NL→SQL con el esquema recuperado) | ✅ Cerrada |
-| SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ⏳ Pendiente |
-| SPEC-07 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
-| SPEC-08 | Execute SQL (solo lectura) | ⏳ Pendiente |
+| SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ✅ Cerrada |
+| SPEC-07 | Execute SQL (solo lectura) | ✅ Cerrada |
+| SPEC-08 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
 | SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
@@ -316,7 +329,7 @@ cd backend && npm run test:integration   # recuperación real sobre Arcadia (opt
 
 **Próximas mejoras de la recuperación (anotadas, aún sin hacer)**
 
-- **Tablas fijadas por el usuario (must-include).** Permitir que el usuario indique una o varias tablas que deben entrar **sí o sí** en el contexto, aunque la búsqueda no las priorice. Así no dependo de que la recuperación acierte siempre, y evito que el agente improvise rodeos por otras relaciones cuando ya sé qué tabla toca. Las fijadas se fusionan con las recuperadas y se expanden igual por FK. **El motor** (un `mustInclude` en `retrieveSchemaContext`, que valida los nombres contra el esquema) es pequeño y reutilizable; **la UX vive en la Human Review (SPEC-07)**: cuando veo la SQL y noto que falta una tabla, la fijo y relanzo el flujo, de forma determinista (lo controlo yo, no el LLM).
+- **Tablas fijadas por el usuario (must-include).** Permitir que el usuario indique una o varias tablas que deben entrar **sí o sí** en el contexto, aunque la búsqueda no las priorice. Así no dependo de que la recuperación acierte siempre, y evito que el agente improvise rodeos por otras relaciones cuando ya sé qué tabla toca. Las fijadas se fusionan con las recuperadas y se expanden igual por FK. **El motor** (un `mustInclude` en `retrieveSchemaContext`, que valida los nombres contra el esquema) es pequeño y reutilizable; **la UX vive en la Human Review (SPEC-08)**: cuando veo la SQL y noto que falta una tabla, la fijo y relanzo el flujo, de forma determinista (lo controlo yo, no el LLM).
 
 ---
 
@@ -355,7 +368,7 @@ cd backend && npm run test:integration   # generación real con el LLM (opt-in)
 - Implementado y verificado en unitarios (typecheck + 39 tests): el SQL Agent compone el prompt con el dialecto inyectado, llama al `IChatModel` y limpia la salida; devuelve `{ text, dialect }`.
 - **El dialecto sale del motor de la BD objetivo** (`sqlDialectFor`) y se inyecta como variable en el prompt; hoy `postgresql` → "PostgreSQL", extensible a otros motores.
 - Por fin el puerto `IChatModel` tiene uso real (lo usa el SQL Agent), no solo el smoke test.
-- Lo expuse como tool `generar_sql` en el grafo, así puedo pedir la SQL desde el chat (recupera el contexto solo). Aún no se valida (SPEC-06) ni se ejecuta (SPEC-08).
+- Lo expuse como tool `generar_sql` en el grafo, así puedo pedir la SQL desde el chat (recupera el contexto solo). Aún no se valida (SPEC-06) ni se ejecuta (SPEC-07).
 - **Validado end-to-end**: el test de integración pasa — "¿cuántos clientes por región?" genera un `SELECT` correcto (LEFT JOIN + GROUP BY + ORDER BY). Y en el chat con LM Studio, `generar_sql` produjo la SQL de la wishlist uniendo `t_042`, `customer` y `game`.
 - Con modelos locales vi que a veces el agente devuelve una respuesta **vacía** tras usar una tool (no determinista; va bien al reintentar). Reforcé el prompt para que conteste siempre tras una herramienta, y el CLI ahora avisa en vez de mostrar un "Agente:" en blanco.
 
@@ -368,10 +381,10 @@ cd backend && npm run test:integration   # generación real con el LLM (opt-in)
 **Contrato.** Dada una sentencia SQL (y el contexto si hace falta), devuelvo un veredicto: si es válida y, si no, por qué (la lista de problemas). Lo organizo en capas, de más a menos importante:
 
 - **Capa 1 — seguridad, sin LLM (obligatoria).** Un servicio de dominio puro: la sentencia debe empezar por `SELECT` o `WITH`; rechazo palabras peligrosas (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `TRUNCATE`, `ALTER`, `GRANT`, como palabra completa y sin distinguir mayúsculas); y detecto patrones de inyección (`;` multi-sentencia, comentarios `--` y `/* */`). Si la Capa 1 dice que no, **no se ejecuta nunca**, diga lo que diga el LLM. Al ser pura, la pruebo a fondo con una tabla de casos (un caso por keyword y por patrón), sin dobles.
-- **Capa 3 — LLM-as-judge (opcional, ligera).** A través de `IChatModel`, el LLM revisa la SQL contra el contexto (¿usa nombres reales?, ¿responde la pregunta?, ¿es solo lectura?) y devuelve un veredicto. Si su respuesta no es interpretable, lo trato como error de dominio (no rompe el flujo). Inyecto el `IChatModel`.
-- *(Capa 2 — sintaxis real con EXPLAIN/dry-run contra la BD objetivo: opcional, queda para más adelante.)*
+- **Capa 2 — sintaxis real contra la BD (opcional).** Un `EXPLAIN <sql>` contra la BD objetivo: planifica la consulta (comprueba sintaxis y que tablas/columnas existan) **sin ejecutarla**. Si la BD la acepta, la sintaxis es correcta; si la rechaza, devuelvo su error. Es la autoridad **objetiva** sobre si la consulta es válida. La recuperé del juez del proyecto Python (que hacía lo mismo) porque vi un falso positivo del juez LLM. Inyecto la ejecución del EXPLAIN para probarla con un doble.
+- **Capa 3 — LLM-as-judge (opcional).** A través de `IChatModel`, el LLM revisa la SQL contra el contexto por varios criterios (sintaxis, semántica con nombres reales y JOINs por FK, completitud respecto a la pregunta, seguridad y optimización) y devuelve un veredicto rico: válido o no, **confianza (0..1)**, errores, avisos, sugerencias, tablas verificadas y una explicación. Tomé como referencia el juez del proyecto Python anterior. **El juez LLM no bloquea por sí solo**: sus "errores" los muestro como avisos, porque puede ser demasiado estricto y dar falsos positivos. Quien bloquea es la Capa 1 (seguridad) y la Capa 2 (sintaxis real). Puedo exigir una confianza mínima (`minConfidence`) como palanca del operador. Si su respuesta no es interpretable, lo trato como error de dominio (no rompe el flujo). Inyecto el `IChatModel`.
 
-El veredicto es lo que mira el supervisor (SPEC-10): si es inválido y quedan reintentos, vuelve al SQL Agent con los errores; si no, pasa a la revisión humana.
+El veredicto es lo que mira el supervisor (SPEC-10): si no supera el Judge (inválido o por debajo del umbral de confianza) y quedan reintentos, vuelve al SQL Agent con los errores; si se agotan los reintentos, la consulta pasa a la revisión humana marcada como fracasada (no ejecutable); si lo supera, sigue el circuito normal. La política completa, en SPEC-10.
 
 **Pasos**
 
@@ -384,30 +397,87 @@ El veredicto es lo que mira el supervisor (SPEC-10): si es inválido y quedan re
 
 **Criterios de aceptación**
 
-- [ ] Una sentencia que no empiece por `SELECT`/`WITH` se marca inválida
-- [ ] Presencia de `DROP|DELETE|INSERT|UPDATE|TRUNCATE|ALTER|GRANT` (palabra completa) → inválida, con error explícito
-- [ ] Patrones de inyección (`;` multi-sentencia, `--`, `/* */`) → inválida
-- [ ] Un `SELECT` legítimo con JOINs y CTE → válida
-- [ ] Si la Capa 1 rechaza, el resultado lo deja claro y el flujo no llega a ejecutar (invariante de seguridad)
-- [ ] (Capa 3) dado SQL + contexto, devuelve un veredicto; si el LLM responde algo no interpretable, se trata como error de dominio sin romper
-- [ ] Tests: Capa 1 con tabla parametrizada (pura, sin dobles); Capa 3 con `IChatModel` doblado
+- [X] Una sentencia que no empiece por `SELECT`/`WITH` se marca inválida
+- [X] Presencia de `DROP|DELETE|INSERT|UPDATE|TRUNCATE|ALTER|GRANT` (palabra completa) → inválida, con error explícito
+- [X] Patrones de inyección (`;` multi-sentencia, `--`, `/* */`) → inválida
+- [X] Un `SELECT` legítimo con JOINs y CTE → válida
+- [X] Si la Capa 1 rechaza, el resultado lo deja claro y el flujo no llega a ejecutar (invariante de seguridad)
+- [X] (Capa 2) `EXPLAIN` contra la BD: si la BD acepta la consulta es válida; si la rechaza, inválida con el error de la BD
+- [X] (Capa 3) dado SQL + contexto, devuelve un veredicto; **el juez LLM no bloquea por sí solo** (sus errores pasan a avisos); si responde algo no interpretable, se trata como error de dominio sin romper
+- [X] Tests: Capa 1 con tabla parametrizada (pura, sin dobles); Capa 2 con doble del EXPLAIN; Capa 3 con `IChatModel` doblado
 
 ```bash
-cd backend && npm test                   # Capa 1 (pura) + Capa 3 con doble de IChatModel
+cd backend && npm test                   # Capa 1 (pura) + Capa 2 y Capa 3 con dobles
 ```
+
+**Resultados (hallazgos al implementar)**
+
+- La **Capa 1** quedó como servicio de dominio puro (`checkSqlSafety`, en `SqlSafetyPolicy.ts`), que devuelve un `QueryVerdict` (`valid` + lista de `errors`). La probé con una tabla de casos: uno por palabra peligrosa, uno por patrón de inyección, y consultas legítimas (incluido un CTE con JOINs). 24 casos, todos en verde, sin red.
+- **Las palabras peligrosas se comprueban como palabra completa** (`\bKEYWORD\b`, sin distinguir mayúsculas). Así no salto en falso con identificadores como `last_update` o `created_at`, que contienen "update"/"create" como subcadena pero no como palabra. Añadí un caso de test justo para esto.
+- **Permito un único `;` final** (es habitual y legítimo); cualquier `;` que no sea el del final lo trato como varias sentencias y lo rechazo.
+- La **Capa 3** (juez LLM) es opcional y solo se consulta si la Capa 1 ya pasó. Devuelve un `JudgeVerdict` rico (válido, **confianza 0..1**, errores, avisos, sugerencias, tablas verificadas, explicación), inspirado en el juez del proyecto Python anterior. El prompt evalúa cinco criterios (sintaxis, semántica, completitud, seguridad, optimización). Si su respuesta no es un JSON interpretable, lanzo `JudgeResponseError`; el combinador `judgeSql` lo captura y se queda con el visto bueno de la Capa 1 (la seguridad ya está garantizada), dejándolo como aviso, así un fallo del LLM no rompe el flujo.
+- **Recuperé la Capa 2 (que estaba en los recortes) a raíz de un falso positivo real.** Pedí "¿qué juego tiene más gente en la wishlist?", la SQL generada era correcta (la ejecuté y funcionaba), pero el juez LLM la marcó inválida inventándose una regla de PostgreSQL (decía que no se puede referenciar `game.game_id` con prefijo tras un `JOIN ... USING`, cuando sí se puede). El propio juez se contradecía al sugerir agrupar por la PK. Es el problema clásico del LLM-as-judge demasiado estricto. La Capa 2 (`EXPLAIN`) es la respuesta: la BD es la autoridad objetiva.
+- **Cambié la política de bloqueo.** Ahora bloquean solo la Capa 1 (seguridad) y la Capa 2 (sintaxis real); **el juez LLM no bloquea por sí solo** y sus "errores" pasan a avisos. Es justo lo que hacía el juez Python (si la BD valida, los errores del LLM son advertencias). Así un falso positivo del LLM no tumba una consulta válida. El umbral `minConfidence` queda como palanca opcional del operador, separada de la opinión del LLM.
+- **El `UnsafeQueryError` (rechazar en ejecución) lo dejo para SPEC-07**, no aquí: hoy no hay ejecutor que lo lance, y meterlo ahora sería código sin uso. La invariante "si la Capa 1 rechaza, no se ejecuta" la hará cumplir el ejecutor llamando a `checkSqlSafety` como última barrera.
+- **El Judge se ve en el chat, separado de la consulta.** La tool `generar_sql` genera la consulta, la pasa por el Judge (seguridad + sintaxis contra la BD + juez LLM) y devuelve el resultado en **dos secciones**: la consulta SQL y, aparte, la "Evaluación del Judge" (veredicto, confianza, el porqué, qué le resta confianza y sugerencias). Así el usuario distingue lo que propone el SQL Agent de lo que opina el Judge. El bucle determinista de reintento sigue siendo cosa del supervisor (SPEC-10); aquí solo lo mostramos. Nota: como el chat pasa por el agente conversacional (ReAct), la presentación 100% fiable llegará con el CLI integrado del pipeline (SPEC-11). La validación pura de este SPEC sigue siendo la batería de tests.
 
 ---
 
-### SPEC-07 — Human Review (aprobación humana, interrupt)
+### SPEC-07 — Execute (ejecución segura de solo lectura)
+
+**Objetivo.** Una vez tengo una consulta validada (SPEC-06), quiero ejecutarla de verdad contra la BD objetivo y traer los resultados. Es el paso que convierte la SQL en datos. Lo importante aquí no es solo ejecutar, sino hacerlo **sin poder hacer daño**: solo lectura, con la Capa 1 del Judge como última barrera justo antes de lanzar la consulta, y con topes que eviten que una consulta enorme o lenta tumbe el terminal.
+
+**Contrato.** Dada una sentencia SQL ya validada, la ejecuto en una sesión de solo lectura contra la BD objetivo y devuelvo el resultado: los nombres de las columnas, las filas, cuántas filas devuelve y si se ha truncado por el tope. Antes de ejecutar nada, vuelvo a pasar la Capa 1 (`checkSqlSafety`); si dijera que no es de solo lectura, lanzo `UnsafeQueryError` y **no toco la BD**. Es defensa en profundidad: aunque algo se saltara las capas anteriores, la consulta no llega a ejecutarse. Recibo la BD objetivo inyectada (real por defecto), para probar el caso de uso con un doble sin Docker.
+
+**Mecanismo.** La sesión ya se abre en `READ ONLY` (`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`), así que un INSERT/UPDATE falla en la propia BD aunque se colara. Añado dos protecciones más: un **tope de filas** (envuelvo la consulta como subconsulta con un `LIMIT` por encima del tope para detectar si hay más y marcar el resultado como truncado, sin traerme toda la tabla a memoria) y un **`statement_timeout`** en la sesión, para cortar una consulta que se pasa de tiempo en vez de quedarme colgado. La conexión se abre y se cierra por ejecución, como en los demás casos de uso.
+
+**Pasos**
+
+1. Definir en el dominio el resultado de una ejecución (`QueryResult`: columnas, filas, número de filas, si está truncado) y la excepción `UnsafeQueryError`.
+2. Implementar el caso de uso `executeQuery`: re-validar con la Capa 1 (si falla → `UnsafeQueryError`, sin tocar la BD), ejecutar contra `ITargetDatabase` y mapear el resultado. Tope de filas y `statement_timeout` con constantes con nombre.
+3. Dependencias inyectadas: por defecto abre `PostgresTargetDatabase` y la cierra al terminar; en tests, un doble de `ITargetDatabase`.
+4. Tests unit con doble: mapeo de filas y columnas, el tope marca truncado, y que una SQL no de solo lectura corta con `UnsafeQueryError` **sin** llamar a la BD.
+5. Tests de integración opt-in: ejecutar una `SELECT` real sobre Arcadia y comprobar las filas; comprobar que un intento de escritura falla por la sesión de solo lectura.
+6. Dejarlo listo para que la Human Review (SPEC-08) lo invoque tras la aprobación.
+
+**Criterios de aceptación**
+
+- [X] Una `SELECT`/CTE válida se ejecuta y devuelve columnas y filas
+- [X] Antes de ejecutar se vuelve a pasar la comprobación de seguridad; una sentencia que no sea de solo lectura lanza `UnsafeQueryError` y **no se ejecuta** (última barrera)
+- [X] La sesión es de solo lectura: un intento de escritura falla en la BD
+- [X] Si la consulta devuelve más filas que el tope, el resultado se marca como truncado
+- [X] Una consulta que supera el `statement_timeout` se corta con un error claro
+- [X] La conexión se abre y se cierra por ejecución (sin fugas)
+- [X] Tests: unit con doble (mapeo, truncado, `UnsafeQueryError` antes de tocar la BD); integración opt-in sobre Arcadia real
+
+```bash
+cd backend && npm test                   # unit de la ejecución (con doble)
+cd backend && npm run test:integration   # ejecución real sobre Arcadia (opt-in)
+```
+
+**Resultados (hallazgos al implementar)**
+
+- `executeQuery` re-pasa la comprobación de seguridad antes de tocar la BD y, si la consulta no es de solo lectura, lanza `UnsafeQueryError` sin ejecutar. Aquí es donde por fin vive `UnsafeQueryError`, como adelanté en SPEC-06.
+- **El tope de filas lo hago envolviendo la consulta** (`SELECT * FROM (<sql>) AS graphsql_result LIMIT tope+1`) y pidiendo una fila de más: si vuelve, es que había más y marco `truncated`. Así no me traigo la tabla entera a memoria. Tope por defecto 1000.
+- **El `statement_timeout` lo fija el adaptador al conectar** (15 s por defecto). Confío en el comportamiento de PostgreSQL para cortar la consulta; no lo ejercito con un test de consulta lenta (sería frágil de montar), pero se aplica en la sesión y las consultas corren tras él.
+- **El caso de uso no conoce el motor.** Saqué la construcción del cliente y la discriminación por tipo de los casos de uso a un `TargetDatabaseFactory` (infraestructura), igual que `ChatModelFactory`/`EmbeddingsFactory`. El puerto `ITargetDatabase` pasó a ser una conexión (con `close()`); `executeQuery` y la comprobación de sintaxis solo dependen de esa abstracción. De paso quité el mismo `if (type !== 'postgresql')` duplicado que arrastraba también `readTargetSchema`.
+- **Limitación conocida:** las columnas las saco de las claves de la primera fila; si la consulta no devuelve filas, el resultado va con `columns: []` (el puerto `ITargetDatabase` solo devuelve filas, no metadatos de columnas). Suficiente para la demo.
+- Verificado de extremo a extremo sobre Arcadia: una `SELECT ... GROUP BY` devuelve 6 regiones con sus columnas; con `maxRows` bajo marca truncado; y un `INSERT` directo falla por la sesión de solo lectura.
+
+---
+
+### SPEC-08 — Human Review (aprobación humana, interrupt)
 
 **Objetivo.** Ninguna SQL se ejecuta sin mi visto bueno. Quiero que el flujo se **pare**, me enseñe la consulta generada (y qué tablas ha usado) y recoja mi decisión. Y aprovecho este punto para resolver lo de las **tablas fijadas**: si veo que falta una tabla, poder fijarla y relanzar.
 
 **Contrato.** Cuando el flujo llega a la revisión, se interrumpe y me muestra la SQL propuesta y las tablas del contexto con que se generó. Yo decido entre:
 
-- **Aprobar** → se ejecuta (SPEC-08).
+- **Aprobar** → se ejecuta (SPEC-07).
 - **Rechazar** → termina, no se ejecuta.
 - **Modificar** → edito la SQL a mano y vuelve al Judge a re-validarla.
 - **Fijar tabla(s) y relanzar** → indico una o varias tablas que deben entrar sí o sí; el flujo **vuelve a la recuperación con esas tablas fijadas** (`mustInclude`, SPEC-04), regenera el contexto y la SQL, y vuelve a pararse aquí. Es la UX determinista del must-include: el flujo lo controlo yo, no el LLM.
+
+Hay un caso especial: una consulta que **no logró pasar el Judge** tras agotar los reintentos (ver SPEC-10) también llega aquí, pero marcada como **fracasada**. La veo y la puedo evaluar (con el veredicto del Judge a la vista), pero **no se puede aprobar para ejecutar**: las opciones útiles son rechazar, modificarla a mano o fijar tablas y relanzar. Así el humano siempre tiene la última palabra sobre la consulta, sin que se ejecute algo que el Judge no avaló.
 
 **Mecanismo.** El nodo de revisión se compila con `interrupt_before`: LangGraph pausa el grafo y **persiste el estado** (checkpointer en PostgreSQL), recuperable por `thread_id`; al reanudar con mi decisión, sigue por la rama que toque. Las tablas fijadas viven en el estado, así que se conservan entre reintentos.
 
@@ -415,7 +485,7 @@ cd backend && npm test                   # Capa 1 (pura) + Capa 3 con doble de I
 
 1. Añadir al estado del grafo la decisión humana y la lista de tablas fijadas.
 2. Compilar el grafo con `interrupt_before` en el nodo de revisión y mover el checkpointer a PostgreSQL (hasta ahora en memoria).
-3. En el CLI: mostrar la SQL (con resaltado) y las tablas del contexto, y ofrecer las cuatro opciones (aprobar / rechazar / modificar / fijar tablas y relanzar).
+3. En el CLI: presentar el resultado en dos cajas (`boxen`) bien diferenciadas — una con la **consulta SQL** (resaltada) y sus tablas, y otra con la **evaluación del Judge** (color según el veredicto con `chalk`: verde si es válida, rojo si no; la confianza, el porqué, qué le resta confianza y las sugerencias). Aquí la presentación la pinto yo, sin LLM de por medio, así que sí puedo usar color y cajas (a diferencia del chat, donde la salida pasa por el agente y no admite ANSI). Luego ofrecer las cuatro opciones (aprobar / rechazar / modificar / fijar tablas y relanzar).
 4. Al reanudar: aprobar → execute; rechazar → fin; modificar → Judge; fijar tablas → recuperación con `mustInclude` y de nuevo SQL → Judge → revisión.
 5. Validar las tablas fijadas contra el esquema: si una no existe, avisar e ignorarla (no fijar un fantasma).
 6. Tests (integración con checkpointer): que pausa y persiste; que aprobar continúa a execute; que fijar una tabla relanza la recuperación y esa tabla aparece en el contexto nuevo.
@@ -427,10 +497,29 @@ cd backend && npm test                   # Capa 1 (pura) + Capa 3 con doble de I
 - [ ] Modificar → la SQL editada vuelve al Judge
 - [ ] Fijar una tabla (p. ej. `t_042`) y relanzar → la recuperación se rehace con esa tabla fijada y aparece en el contexto nuevo
 - [ ] Una tabla fijada que no existe en el esquema se avisa y se ignora
+- [ ] La consulta y la evaluación del Judge se muestran en cajas (`boxen`) separadas y con color (`chalk`) según el veredicto
 - [ ] Tests de integración con checkpointer: pausa/persistencia, reanudar-aprobar, reanudar-fijar-tabla
 
 ```bash
 cd backend && npm run test:integration   # human review con checkpointer (opt-in)
 ```
+
+---
+
+### SPEC-10 — Supervisor (enrutador determinista)
+
+**Objetivo.** Unir todas las piezas en un único flujo, enrutado con reglas sobre el estado compartido (no con un LLM): Schema → SQL → Judge → (decisión) → Human Review → Execute. Llega al final, cuando las piezas ya existen.
+
+**Política del bucle Judge ↔ SQL Agent (anotado, se detallará al implementar).** Es el corazón del supervisor:
+
+- **Umbral de aprobación configurable.** El Judge da por buena la consulta solo si es válida y su confianza supera el umbral (`minConfidence`, SPEC-06). Por debajo, cuenta como no superada.
+- **Si no supera el Judge → vuelve al SQL Agent.** Se le devuelve la consulta con los errores/avisos del Judge para que la rehaga. Es el reintento SQL↔Judge.
+- **Número de intentos configurable.** El estado lleva la cuenta de intentos; cada vuelta al SQL Agent suma uno, hasta un máximo configurable.
+- **Si se agotan los intentos sin superarlo → consulta fracasada.** No se da por perdida en silencio: igualmente pasa a la **Human Review (SPEC-08)** marcada como fracasada, para que el humano la vea y la evalúe, pero **no se podrá ejecutar** (solo rechazar, modificar a mano o fijar tablas y relanzar).
+- **Si lo supera (dentro de los intentos) → sigue el circuito normal:** Human Review y, tras la aprobación, Execute (SPEC-07).
+
+El umbral y el máximo de intentos son palancas de configuración: suben o bajan lo estricto que es el sistema antes de pedir ayuda al humano.
+
+*(Contrato completo, pasos y criterios de aceptación: se detallarán al abordar el SPEC-10.)*
 
 

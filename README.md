@@ -82,9 +82,12 @@ Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medi
 - ✅ **Ingesta del esquema en Neo4j** — escaneo de la BD objetivo (tablas, columnas, claves) y volcado a un grafo de conocimiento (nodos `Table`/`Column`, relaciones `HAS_COLUMN`/`REFERENCES`), disparable desde el CLI o como *tool* del agente.
 - ✅ **Vectorización del esquema en pgvector** — cada tabla se embebe (con OpenAI o un modelo local de LM Studio, a elegir) y se guarda para la búsqueda semántica; descripciones opcionales sincronizadas en Neo4j y pgvector.
 - ✅ **Recuperación GraphRAG (Schema Agent)** — dada una pregunta, encuentra las tablas relevantes combinando la búsqueda semántica en pgvector con la expansión por claves foráneas en Neo4j; expuesta como *tool* de schema-linking. Encuentra incluso tablas de nombre opaco por su descripción.
-- ✅ **SQL Agent (NL→SQL)** — a partir de la pregunta y el contexto recuperado, genera la consulta SQL en el dialecto de la BD objetivo (inyectado en el prompt); expuesto como *tool* `generar_sql`. Todavía sin validar ni ejecutar.
+- ✅ **SQL Agent (NL→SQL)** — a partir de la pregunta y el contexto recuperado, genera la consulta SQL en el dialecto de la BD objetivo (inyectado en el prompt); expuesto como *tool* `generar_sql`.
+- ✅ **Judge (validación de seguridad y corrección)** — antes de ejecutar nada, una barrera por capas comprueba la SQL: una **Capa 1** pura y determinista (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección), una **Capa 2** que valida la sintaxis real contra la BD con `EXPLAIN` (sin ejecutar), y un **juez LLM** opcional que aporta confianza, avisos y sugerencias. Bloquean solo las capas deterministas (1 y 2); el juez LLM no bloquea por sí solo, para que un falso positivo no tumbe una consulta válida. El veredicto se muestra junto a la SQL en el chat.
 
-Lo siguiente es el **Judge** (validar que la SQL es segura y de solo lectura) y la aprobación humana antes de ejecutar. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
+- ✅ **Ejecución segura (solo lectura)** — ejecuta una consulta ya validada contra la BD objetivo y devuelve las filas. Antes de tocar la BD vuelve a comprobar la seguridad (última barrera, lanza error si no es de solo lectura); la sesión es de solo lectura; aplica un tope de filas (marcando si se trunca) y un `statement_timeout`.
+
+Lo siguiente es la **aprobación humana** (parar el flujo para revisar la SQL antes de ejecutarla, mostrando consulta y veredicto en la CLI) y el **supervisor** que une todo el pipeline. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
 
 ## Documentación del proyecto
 
