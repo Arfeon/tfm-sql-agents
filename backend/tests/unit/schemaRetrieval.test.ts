@@ -68,4 +68,50 @@ describe('retrieveSchemaContext', () => {
 
     expect(context.tableNames).toEqual(['customer', 'region'])
   })
+
+  it('fija una tabla que el ranking no traería y la conserva pese al recorte', async () => {
+    let expandedFrom: string[] = []
+    const deps: SchemaRetrievalDependencies = {
+      rankTablesBySimilarity: async () => [
+        { tableName: 'customer', score: 0.9 },
+        { tableName: 'region', score: 0.7 },
+        { tableName: 'game', score: 0.6 },
+        { tableName: 't_042', score: 0.1 }, // existe en el esquema, pero con score bajísimo
+      ],
+      expandByForeignKeys: async (names) => {
+        expandedFrom = names
+        return names.map(table)
+      },
+    }
+
+    // Sin fijar, con topK=1 y maxTables=1, t_042 no aparecería.
+    const context = await retrieveSchemaContext('wishlist', deps, {
+      topK: 1,
+      maxTables: 1,
+      mustInclude: ['t_042'],
+    })
+
+    // La fijada entra como candidata (para expandir) y sobrevive al recorte.
+    expect(expandedFrom).toContain('t_042')
+    expect(context.tableNames).toContain('t_042')
+  })
+
+  it('ignora una tabla fijada que no existe en el esquema (no fija un fantasma)', async () => {
+    let expandedFrom: string[] = []
+    const deps: SchemaRetrievalDependencies = {
+      rankTablesBySimilarity: async () => [
+        { tableName: 'customer', score: 0.9 },
+        { tableName: 'region', score: 0.7 },
+      ],
+      expandByForeignKeys: async (names) => {
+        expandedFrom = names
+        return names.map(table)
+      },
+    }
+
+    const context = await retrieveSchemaContext('clientes', deps, { mustInclude: ['tabla_inexistente'] })
+
+    expect(expandedFrom).not.toContain('tabla_inexistente')
+    expect(context.tableNames).not.toContain('tabla_inexistente')
+  })
 })

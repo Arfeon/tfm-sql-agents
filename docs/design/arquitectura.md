@@ -41,7 +41,7 @@ flowchart LR
 
 El pipeline de una consulta lo monto como una máquina de estados en LangGraph: cada paso es un agente y, según cómo queda el estado compartido (la pregunta, las tablas recuperadas, la SQL, lo que diga el Judge…), se decide el siguiente. El enrutado lo llevo con reglas, no con un LLM: el flujo es siempre el mismo, así que no necesito que un modelo decida por dónde seguir.
 
-De momento tengo el esqueleto del grafo (SPEC-01) y la ingesta/vectorización del esquema (SPEC-02/03); los agentes los voy montando a partir de SPEC-04 (el estado de cada uno está en [SPEC.md](SPEC.md)).
+Este pipeline determinista lo monto como un **grafo propio**, distinto del grafo conversacional con *tools* de SPEC-01: aquí el flujo es fijo (recuperar → SQL → Judge → revisión → ejecutar) y lo enruto con reglas sobre el estado, no con el modelo. El conversacional sigue existiendo para el chat; el pipeline es el que formalizará el supervisor (SPEC-10). Ya tengo el esqueleto del grafo (SPEC-01), la ingesta/vectorización del esquema (SPEC-02/03), los agentes de recuperación, SQL y Judge (SPEC-04/05/06), la ejecución (SPEC-07) y la revisión humana con su pausa (SPEC-08); el estado de cada componente está en [SPEC.md](SPEC.md).
 
 ```mermaid
 flowchart TD
@@ -59,7 +59,7 @@ flowchart TD
     FR --> END1([Fin])
 ```
 
-Lo importante del flujo es la pausa para aprobar la SQL antes de ejecutarla: el nodo de revisión humana detiene el grafo (`interrupt_before`), guarda el estado y espera mi decisión; cuando respondo, sigue donde estaba. Hoy el estado se guarda en memoria; cuando lo necesite lo paso a PostgreSQL.
+Lo importante del flujo es la pausa para aprobar la SQL antes de ejecutarla, y ya está montada (SPEC-08): el nodo de revisión humana detiene el grafo (`interrupt_before`), **persiste el estado en PostgreSQL** (`graphsql_memory`, vía el `PostgresSaver` de LangGraph) y espera mi decisión; como el estado queda guardado y es recuperable por `thread_id`, la pausa sobrevive al proceso. Al reanudar con mi decisión, el grafo enruta: aprobar → ejecutar, rechazar → fin, modificar → vuelve al Judge con la SQL editada, y fijar tablas → rehace la recuperación con esas tablas fijadas (`mustInclude`). Las tablas fijadas viven en el estado, así que se conservan entre reintentos, y el must-include es una **UX determinista**: el humano controla el bucle, no el LLM. El reintento automático Judge↔SQL (con su cuenta de intentos) lo añadirá el supervisor (SPEC-10); una consulta que no supere el Judge también llegará a la revisión, pero marcada como fracasada y sin opción de aprobar.
 
 ## 4. Los agentes
 
@@ -70,7 +70,7 @@ De estos, el **Schema Agent** (la recuperación GraphRAG) ya está hecho (SPEC-0
 - **Schema** (el GraphRAG). Encuentra las tablas que hacen falta combinando la búsqueda por significado en pgvector (da con `customer` cuando escribo "clientes") y la expansión por claves foráneas en Neo4j para arrastrar las tablas relacionadas que necesitan los JOIN.
 - **SQL.** Escribe la consulta a partir de la pregunta y de las tablas que le pasa el Schema Agent (y de los ejemplos del Memory Agent, si los hay).
 - **Judge.** Revisa que la SQL sea segura. Lo primero y obligatorio es comprobar que solo lee (empieza por `SELECT`/`WITH`, sin palabras peligrosas ni inyección); si eso falla, no se ejecuta diga lo que diga el resto. Por encima puede ir una comprobación de sintaxis y una revisión con el propio LLM.
-- **Human Review.** Me enseña la SQL y espera a que la apruebe, la rechace o la corrija.
+- **Human Review** (hecho, SPEC-08). Para el grafo antes de ejecutar y me enseña, en cajas con color, la SQL propuesta y el veredicto del Judge; espera a que la apruebe, la rechace, la modifique a mano o fije tablas y relance. La pausa persiste en PostgreSQL, recuperable por `thread_id`.
 - **Execute.** Ejecuta la consulta aprobada en solo lectura y devuelve los resultados.
 - **Store Feedback.** Guarda la consulta aprobada para reutilizarla como ejemplo. Si falla, no rompe nada (no es crítico).
 - **Format.** Pinta la SQL y los resultados en el CLI; los agentes devuelven datos y la presentación es cosa aparte.
@@ -100,6 +100,8 @@ Uso PostgreSQL + pgvector (en la base `graphsql_memory`) para la búsqueda semá
 
 **Vectorización del esquema (lo ya implementado).** Al escanear, por cada tabla compongo un texto (`Tabla: <nombre>. Columnas: <...>`, más la descripción si la hay), lo embebo y lo guardo en `table_embeddings`: el texto de búsqueda, el `embedding vector(N)`, el proveedor, el modelo y la dimensión usados, y la descripción cruda en su propia columna. Guardar el proveedor/modelo/dimensión deja el índice autodescrito, para que el retriever consulte con el mismo modelo. La tabla se reconstruye entera en cada vectorización.
 
+**El escaneo es atómico (Neo4j + pgvector juntos).** Un escaneo reconstruye los dos almacenes con la **misma** decisión de descripciones, para que nunca se desincronicen: la ingesta a Neo4j (estructura + `Table.description`) y la vectorización a pgvector (el vector, con la descripción **embebida** en el texto de búsqueda) van en el mismo paso. La descripción tiene que estar en pgvector porque la búsqueda semántica solo mira el vector; en Neo4j sirve para la estructura y para mostrarla. La confirmación con el aviso de coste gatea el escaneo completo: si la declino, no se toca nada. Un fallo de la vectorización *después* de actualizar Neo4j se avisa como desincronización (a reparar reescaneando); no monto un commit en dos fases entre Neo4j y Postgres, que se sale del alcance.
+
 **Proveedor de embeddings configurable.** Detrás del puerto `IEmbeddings` hay un adaptador OpenAI-compatible que sirve para OpenAI (`text-embedding-3-small`, 1536) y para un modelo local en LM Studio (`bge-m3`); el proveedor se elige al escanear, igual que el del chat.
 
 **Principio innegociable.** Indexo y consulto con el **mismo modelo**: la similitud solo tiene sentido dentro del mismo espacio vectorial. Por eso guardo el modelo y la dimensión con cada vector, la dimensión de la columna es configurable, y cambiar de modelo obliga a una re-vectorización explícita (con aviso). Detalle en [`docs/investigacion/embeddings.md`](../investigacion/embeddings.md).
@@ -122,7 +124,7 @@ Uso PostgreSQL + pgvector (en la base `graphsql_memory`) para la búsqueda semá
 
 ## 8. Seguridad
 
-La seguridad es lo que no me quiero saltar. De todo esto ya están montadas y probadas varias cosas: la sesión de solo lectura (el adaptador de Postgres abre la conexión en modo `READ ONLY`, así que un INSERT falla aunque me equivoque) y el **Judge** (SPEC-06) con sus capas: la **Capa 1**, un validador puro que rechaza cualquier sentencia que no sea claramente de solo lectura (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección); la **Capa 2**, un `EXPLAIN` contra la BD que comprueba la sintaxis real sin ejecutar; y la **Capa 3**, un juez LLM que aporta confianza y avisos pero que no bloquea por sí solo (puede ser demasiado estricto). Quien bloquea son las capas deterministas (1 y 2). El **ejecutor** (SPEC-07) ya está: ejecuta en solo lectura, vuelve a pasar la comprobación de seguridad como última barrera (lanza `UnsafeQueryError` si algo no fuera de solo lectura) y limita filas y tiempo. Falta la **aprobación humana** (SPEC-08) que se interponga antes de ese ejecutor.
+La seguridad es lo que no me quiero saltar. De todo esto ya están montadas y probadas varias cosas: la sesión de solo lectura (el adaptador de Postgres abre la conexión en modo `READ ONLY`, así que un INSERT falla aunque me equivoque) y el **Judge** (SPEC-06) con sus capas: la **Capa 1**, un validador puro que rechaza cualquier sentencia que no sea claramente de solo lectura (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección); la **Capa 2**, un `EXPLAIN` contra la BD que comprueba la sintaxis real sin ejecutar; y la **Capa 3**, un juez LLM que aporta confianza y avisos pero que no bloquea por sí solo (puede ser demasiado estricto). Quien bloquea son las capas deterministas (1 y 2). El **ejecutor** (SPEC-07) ya está: ejecuta en solo lectura, vuelve a pasar la comprobación de seguridad como última barrera (lanza `UnsafeQueryError` si algo no fuera de solo lectura) y limita filas y tiempo. Y la **aprobación humana** (SPEC-08) ya se interpone antes de ese ejecutor: el grafo se para en la revisión (`interrupt_before`) y nada se ejecuta sin mi visto bueno; una consulta que no supere el Judge llega igualmente a la revisión, pero marcada como fracasada y sin opción de aprobar.
 
 Lo que quiero garantizar:
 

@@ -86,8 +86,9 @@ Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medi
 - ✅ **Judge (validación de seguridad y corrección)** — antes de ejecutar nada, una barrera por capas comprueba la SQL: una **Capa 1** pura y determinista (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección), una **Capa 2** que valida la sintaxis real contra la BD con `EXPLAIN` (sin ejecutar), y un **juez LLM** opcional que aporta confianza, avisos y sugerencias. Bloquean solo las capas deterministas (1 y 2); el juez LLM no bloquea por sí solo, para que un falso positivo no tumbe una consulta válida. El veredicto se muestra junto a la SQL en el chat.
 
 - ✅ **Ejecución segura (solo lectura)** — ejecuta una consulta ya validada contra la BD objetivo y devuelve las filas. Antes de tocar la BD vuelve a comprobar la seguridad (última barrera, lanza error si no es de solo lectura); la sesión es de solo lectura; aplica un tope de filas (marcando si se trunca) y un `statement_timeout`.
+- ✅ **Revisión humana (aprobación con *interrupt*)** — un pipeline propio (recuperación → SQL → Judge → **revisión** → ejecución) que se **para** antes de ejecutar: LangGraph pausa con `interrupt_before` y persiste el estado en PostgreSQL (recuperable por `thread_id`). Desde el CLI veo la consulta y el veredicto del Judge en cajas con color y decido: **aprobar** (ejecuta), **rechazar** (termina), **modificar** la SQL a mano (vuelve al Judge) o **fijar tablas y relanzar** (rehace la recuperación con esas tablas fijadas). Ninguna SQL se ejecuta sin mi visto bueno.
 
-Lo siguiente es la **aprobación humana** (parar el flujo para revisar la SQL antes de ejecutarla, mostrando consulta y veredicto en la CLI) y el **supervisor** que une todo el pipeline. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
+Lo siguiente es el **supervisor** (SPEC-10), que une todo el pipeline y añade el reintento automático Judge↔SQL. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
 
 ## Documentación del proyecto
 

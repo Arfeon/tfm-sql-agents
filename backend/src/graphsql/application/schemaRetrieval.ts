@@ -28,6 +28,12 @@ export const MAX_CONTEXT_TABLES = 8
 export interface SchemaRetrievalOptions {
   topK?: number
   maxTables?: number
+  /**
+   * Tablas que el humano fija a mano (SPEC-08): entran en el contexto sí o sí,
+   * aunque el ranking no las traiga, siempre que existan en el esquema. Las que
+   * no existen se ignoran (no fijo un fantasma).
+   */
+  mustInclude?: string[]
 }
 
 /** Lo que necesita la recuperación del mundo exterior. */
@@ -81,14 +87,19 @@ export async function retrieveSchemaContext(
   const ranked = await deps.rankTablesBySimilarity(question)
   const scoreByName = new Map(ranked.map((match) => [match.tableName, match.score]))
 
-  // 2. Las candidatas son las top-K por significado; expando por FK para los JOIN.
-  const candidateNames = ranked.slice(0, topK).map((match) => match.tableName)
+  // Tablas fijadas por el humano que existen de verdad (las demás se ignoran).
+  const pinned = (options.mustInclude ?? []).filter((name) => scoreByName.has(name))
+
+  // 2. Las candidatas son las top-K por significado más las fijadas; expando por FK.
+  const candidateNames = [...new Set([...pinned, ...ranked.slice(0, topK).map((match) => match.tableName)])]
   const expanded = await deps.expandByForeignKeys(candidateNames)
 
-  // 3. Acoto: ordeno el conjunto expandido por similitud y me quedo con las mejores.
-  const limited = [...expanded]
-    .sort((a, b) => (scoreByName.get(b.name) ?? 0) - (scoreByName.get(a.name) ?? 0))
-    .slice(0, maxTables)
+  // 3. Acoto por similitud, pero las fijadas nunca se caen del contexto.
+  const pinnedSet = new Set(pinned)
+  const byScore = (a: TableSchema, b: TableSchema) => (scoreByName.get(b.name) ?? 0) - (scoreByName.get(a.name) ?? 0)
+  const pinnedTables = expanded.filter((table) => pinnedSet.has(table.name))
+  const rest = expanded.filter((table) => !pinnedSet.has(table.name)).sort(byScore)
+  const limited = [...pinnedTables, ...rest].slice(0, Math.max(maxTables, pinnedTables.length))
 
   return buildSchemaContext(limited)
 }

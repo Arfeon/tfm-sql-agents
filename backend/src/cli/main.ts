@@ -16,7 +16,12 @@ import chalk from 'chalk'
 import { select, input, confirm } from '@inquirer/prompts'
 import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
 import { createConversationGraph, askGraph } from '../graphsql/graph/agentGraph'
-import { loadTargetDatabases, targetDatabaseLabel, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
+import { loadTargetDatabases, targetDatabaseLabel, sqlDialectFor, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
+import { createSqlPipelineGraph, HUMAN_REVIEW_NODE, type PipelineStateType } from '../graphsql/graph/pipelineGraph'
+import { CheckpointerFactory } from '../graphsql/infrastructure/checkpoint/CheckpointerFactory'
+import type { JudgeVerdict } from '../graphsql/domain/sql/JudgeVerdict'
+import type { HumanDecision } from '../graphsql/domain/sql/HumanDecision'
+import type { QueryResult } from '../graphsql/domain/sql/QueryResult'
 import { ingestSchema } from '../graphsql/application/schemaIngestion'
 import { vectorizeSchema } from '../graphsql/application/schemaVectorization'
 import { EmbeddingsFactory } from '../graphsql/infrastructure/embeddings/EmbeddingsFactory'
@@ -62,10 +67,11 @@ async function warnIfLocalModelMissing(kind: 'chat' | 'embeddings', modelId: str
 }
 
 /** Menú principal: elijo qué hacer. */
-function askMainAction(): Promise<'chat' | 'scan' | 'exit'> {
+function askMainAction(): Promise<'chat' | 'query' | 'scan' | 'exit'> {
   return select({
     message: '¿Qué quieres hacer?',
     choices: [
+      { name: 'Consultar en lenguaje natural (con revisión humana)', value: 'query' },
       { name: 'Iniciar una conversación', value: 'chat' },
       { name: 'Escanear el esquema de la BD objetivo', value: 'scan' },
       { name: 'Salir', value: 'exit' },
@@ -81,7 +87,7 @@ function askMainAction(): Promise<'chat' | 'scan' | 'exit'> {
 async function runSchemaScan(): Promise<void> {
   const targets = loadTargetDatabases()
 
-  // --- Fase 1: detectar y preguntar ---
+  // --- Fase 1: preguntar todo ---
   const target = await select({
     message: 'Elige la base de datos objetivo a escanear',
     choices: targets.map((t) => ({ name: targetDatabaseLabel(t), value: t })),
@@ -89,29 +95,41 @@ async function runSchemaScan(): Promise<void> {
   const descriptions = await askDescriptions()
   const embeddingProvider = await askEmbeddingProvider()
   const embeddings = EmbeddingsFactory.create(embeddingProvider)
-  const doVectorize = await askVectorize(embeddingProvider, embeddings)
 
-  // --- Fase 2: el circuito ---
+  // Un escaneo reconstruye Neo4j Y pgvector JUNTOS, con la misma decisión de
+  // descripciones: así los dos almacenes nunca quedan desincronizados. La
+  // confirmación (con su aviso de coste) gatea el escaneo completo; si no la doy,
+  // no se toca nada.
+  const confirmed = await confirmScan(embeddingProvider, embeddings)
+  if (!confirmed) {
+    console.log(chalk.dim('\nEscaneo cancelado: no se ha tocado ni Neo4j ni el índice vectorial.\n'))
+    return
+  }
+
+  // --- Fase 2: reconstruir ambos almacenes con la misma decisión de descripciones ---
   console.log(chalk.dim(`\nEscaneando "${targetDatabaseLabel(target)}" e ingiriendo en Neo4j...\n`))
   try {
     const summary = await ingestSchema(target, descriptions)
     console.log(
-      chalk.green('✔ Esquema ingerido:') +
+      chalk.green('✔ Esquema en Neo4j:') +
         ` ${summary.tables} tablas, ${summary.columns} columnas, ${summary.relationships} relaciones.\n`,
     )
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
-    console.log(chalk.red('\n⚠ No he podido ingerir el esquema.'))
+    console.log(chalk.red('\n⚠ No he podido ingerir el esquema en Neo4j.'))
     console.log(chalk.dim('¿Están disponibles la BD objetivo y Neo4j? (docker compose up -d)'))
     console.log(chalk.dim(`Detalle: ${detail}\n`))
     return
   }
 
-  if (!doVectorize) {
-    console.log(chalk.dim('Vectorización omitida.\n'))
-    return
+  const vectorized = await executeVectorization(target, embeddingProvider, embeddings, descriptions)
+  if (!vectorized) {
+    console.log(
+      chalk.red(
+        '⚠ Neo4j se actualizó pero la vectorización falló: el índice vectorial ha quedado DESINCRONIZADO respecto a Neo4j. Vuelve a escanear cuando el proveedor de embeddings esté disponible para realinearlos.\n',
+      ),
+    )
   }
-  await executeVectorization(target, embeddingProvider, embeddings, descriptions)
 }
 
 /** Si hay un fichero de descripciones (no el de ejemplo), pregunto si incluirlas. */
@@ -137,8 +155,12 @@ function askEmbeddingProvider(): Promise<EmbeddingProvider> {
   })
 }
 
-/** Aviso de mismatch + coste/tiempo y confirmación. Devuelve si hay que vectorizar. */
-async function askVectorize(provider: EmbeddingProvider, embeddings: IEmbeddings): Promise<boolean> {
+/**
+ * Aviso de mismatch de modelo + coste/tiempo y confirmación del escaneo COMPLETO.
+ * Como el escaneo reconstruye Neo4j y pgvector a la vez, esta confirmación gatea todo
+ * el proceso (no solo la vectorización), para que ambos almacenes vayan siempre juntos.
+ */
+async function confirmScan(provider: EmbeddingProvider, embeddings: IEmbeddings): Promise<boolean> {
   if (provider === EmbeddingProvider.Local) {
     await warnIfLocalModelMissing('embeddings', embeddings.model)
   }
@@ -165,29 +187,172 @@ async function askVectorize(provider: EmbeddingProvider, embeddings: IEmbeddings
   }
   console.log(chalk.dim('Tiempo estimado: unos segundos (más en bases de datos grandes).'))
 
-  return confirm({ message: '¿Vectorizar el esquema?', default: true })
+  return confirm({ message: '¿Escanear ahora? (reconstruye Neo4j y el índice vectorial a la vez)', default: true })
 }
 
-/** Ejecuta la vectorización ya confirmada y muestra el resultado. */
+/** Ejecuta la vectorización ya confirmada y muestra el resultado. Devuelve si tuvo éxito. */
 async function executeVectorization(
   target: TargetDatabaseConfig,
   provider: EmbeddingProvider,
   embeddings: IEmbeddings,
   descriptions?: Map<string, string>,
-): Promise<void> {
-  console.log(chalk.dim('Vectorizando el esquema...\n'))
+): Promise<boolean> {
+  console.log(chalk.dim('Vectorizando el esquema en pgvector...\n'))
   try {
     const summary = await vectorizeSchema(target, provider, embeddings, descriptions)
     console.log(
       chalk.green('✔ Esquema vectorizado:') +
         ` ${summary.count} tablas (${summary.provider}, modelo ${summary.model}, ${summary.dimensions} dims).\n`,
     )
+    return true
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.log(chalk.red('\n⚠ No he podido vectorizar el esquema.'))
     console.log(chalk.dim('Revisa el proveedor de embeddings (OPENAI_API_KEY o LM Studio) y que pgvector esté disponible.'))
     console.log(chalk.dim(`Detalle: ${detail}\n`))
+    return false
   }
+}
+
+/**
+ * Consulta NL→SQL con revisión humana (SPEC-08).
+ *
+ * Lanzo el pipeline (recuperación → SQL → Judge), que se PARA en la revisión antes
+ * de ejecutar nada. Presento la consulta y el veredicto en cajas, recojo mi decisión
+ * y reanudo el grafo por su `thread_id` hasta que apruebo (y se ejecuta), rechazo, o
+ * el bucle de fijar/modificar me devuelve a la revisión.
+ */
+async function runSqlPipeline(): Promise<void> {
+  const target = loadTargetDatabases()[0]
+  const dialect = sqlDialectFor(target)
+  const question = await input({ message: chalk.green('Tu pregunta:') })
+  if (question.trim() === '') {
+    return
+  }
+
+  let checkpointer
+  try {
+    checkpointer = await CheckpointerFactory.fromEnv()
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.log(chalk.red('\n⚠ No pude preparar el checkpointer (PostgreSQL / graphsql_memory).'))
+    console.log(chalk.dim('¿Está Postgres levantado? (docker compose up -d)'))
+    console.log(chalk.dim(`Detalle: ${detail}\n`))
+    return
+  }
+
+  const graph = createSqlPipelineGraph(checkpointer)
+  const config = { configurable: { thread_id: randomUUID() } }
+
+  try {
+    console.log(chalk.dim('\nRecuperando tablas, generando la SQL y validándola con el Judge...\n'))
+    await graph.invoke({ question, dialect, mustInclude: [] }, config)
+
+    // Bucle de revisión: mientras el grafo siga parado antes de la revisión.
+    while (true) {
+      const snapshot = await graph.getState(config)
+      if (!snapshot.next.includes(HUMAN_REVIEW_NODE)) {
+        break
+      }
+      presentReview(snapshot.values)
+      const decision = await askHumanDecision(snapshot.values)
+      await graph.updateState(config, { decision })
+      await graph.invoke(null, config)
+    }
+
+    const finalState = (await graph.getState(config)).values
+    if (finalState.result) {
+      presentResult(finalState.result)
+    } else {
+      console.log(chalk.dim('\nNo se ejecutó ninguna consulta.\n'))
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.log(chalk.red('\n⚠ El pipeline no pudo completarse.'))
+    console.log(chalk.dim('¿Está el esquema vectorizado y disponibles la BD objetivo y el LLM?'))
+    console.log(chalk.dim(`Detalle: ${detail}\n`))
+  } finally {
+    await checkpointer.end()
+  }
+}
+
+/** Presento la consulta y la evaluación del Judge en dos cajas separadas. */
+function presentReview(state: PipelineStateType): void {
+  const tables = state.schemaContext?.tableNames ?? []
+  const sqlBody = `${chalk.cyan(state.sql?.text ?? '(sin consulta)')}\n\n${chalk.dim(`Tablas usadas: ${tables.join(', ') || '(ninguna)'}`)}`
+  console.log(
+    boxen(sqlBody, {
+      title: state.failed ? '❌ Consulta SQL (no superó el Judge)' : '📝 Consulta SQL propuesta',
+      padding: 1,
+      margin: { top: 1, bottom: 0, left: 0, right: 0 },
+      borderStyle: 'round',
+      borderColor: state.failed ? 'red' : 'cyan',
+    }),
+  )
+  if (state.verdict) {
+    console.log(renderJudgeBox(state.verdict))
+  }
+  if (state.ignoredPinned.length > 0) {
+    console.log(chalk.yellow(`⚠ Ignoré tablas fijadas que no existen en el esquema: ${state.ignoredPinned.join(', ')}`))
+  }
+}
+
+/** La evaluación del Judge en su propia caja, con color según el veredicto. */
+function renderJudgeBox(verdict: JudgeVerdict): string {
+  const color = verdict.valid ? 'green' : 'red'
+  const confidence = verdict.confidence !== undefined ? ` · confianza ${Math.round(verdict.confidence * 100)}%` : ''
+  const lines = [chalk[color].bold(`${verdict.valid ? '✅ Válida' : '❌ No válida'}${confidence}`)]
+  if (verdict.explanation) {
+    lines.push('', chalk.dim(verdict.explanation))
+  }
+  if (verdict.errors.length > 0) {
+    lines.push('', chalk.red.bold('Problemas (impiden ejecutarla):'), ...verdict.errors.map((error) => chalk.red(`  • ${error}`)))
+  }
+  if (verdict.warnings.length > 0) {
+    lines.push('', chalk.yellow('Qué le resta confianza / cautelas:'), ...verdict.warnings.map((warning) => chalk.dim(`  • ${warning}`)))
+  }
+  if (verdict.suggestions.length > 0) {
+    lines.push('', chalk.cyan('Sugerencias (opcionales):'), ...verdict.suggestions.map((suggestion) => chalk.dim(`  • ${suggestion}`)))
+  }
+  return boxen(lines.join('\n'), {
+    title: 'Evaluación del Judge',
+    padding: 1,
+    margin: { top: 0, bottom: 1, left: 0, right: 0 },
+    borderStyle: 'round',
+    borderColor: color,
+  })
+}
+
+/** Pido la decisión. Una consulta fracasada (no superó el Judge) no se puede aprobar. */
+async function askHumanDecision(state: PipelineStateType): Promise<HumanDecision> {
+  const choices = [
+    ...(state.failed ? [] : [{ name: 'Aprobar y ejecutar', value: 'approve' as const }]),
+    { name: 'Modificar la SQL a mano', value: 'modify' as const },
+    { name: 'Fijar tabla(s) y relanzar', value: 'pin' as const },
+    { name: 'Rechazar (no ejecutar)', value: 'reject' as const },
+  ]
+  const action = await select({ message: '¿Qué hago con esta consulta?', choices })
+
+  if (action === 'modify') {
+    const sql = await input({ message: 'Edita la SQL:', default: state.sql?.text ?? '' })
+    return { action: 'modify', sql }
+  }
+  if (action === 'pin') {
+    const raw = await input({ message: 'Tablas a fijar (separadas por comas):' })
+    const tables = raw.split(',').map((name) => name.trim()).filter(Boolean)
+    return { action: 'pin', tables }
+  }
+  return { action } // approve | reject
+}
+
+/** Muestro el resultado de la ejecución (columnas y una vista de las filas). */
+function presentResult(result: QueryResult): void {
+  const suffix = result.truncated ? chalk.yellow(' (truncado al tope de filas)') : ''
+  console.log(chalk.green(`\n✔ ${result.rowCount} fila(s) devueltas${suffix}.`))
+  if (result.rows.length > 0) {
+    console.table(result.rows.slice(0, 50))
+  }
+  console.log('')
 }
 
 /** Submenú de proveedor: OpenAI (nube) o LM Studio (local). */
@@ -250,6 +415,11 @@ async function main(): Promise<void> {
 
     if (action === 'scan') {
       await runSchemaScan()
+      continue
+    }
+
+    if (action === 'query') {
+      await runSqlPipeline()
       continue
     }
 

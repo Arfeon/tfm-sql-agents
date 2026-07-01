@@ -31,6 +31,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | D-05 | Todo recurso externo (BD objetivo, LLM, embeddings, store): puerto `I…` + adaptador(es) + **factory** | Generaliza el patrón de D-02/D-03 a todos los recursos. El factory es el único sitio que conoce los adaptadores concretos y elige según configuración; los casos de uso dependen solo del puerto (inyección de dependencias) → testeables con dobles, sin clientes hardcodeados ni discriminar el tipo de motor en la capa de aplicación | ✅ Cerrada |
 | D-06 | Recuperación GraphRAG: búsqueda exacta por coseno (sin índice ANN), consultar con el **mismo modelo/dimensión** con que se indexó, y rechazar vectores degenerados | A escala de un esquema (cientos de tablas) el seqscan por coseno es exacto e instantáneo; un índice ANN (ivfflat) con pocas filas devolvía listas vacías. Comparar vectores de espacios distintos no tiene sentido → se reconstruye el modelo del índice, no el del `.env`. El guard (rechazar ceros o dimensión incorrecta) evita indexar/consultar con embeddings rotos sin enterarse | ✅ Cerrada |
 | D-07 | Judge por capas: solo las comprobaciones **deterministas** (seguridad sin LLM + sintaxis real vía dry-run contra la BD) invalidan una consulta; el juez LLM es **asesor** (aporta confianza/avisos, no bloquea por sí solo) | El LLM-as-judge da falsos positivos (demasiado estricto); si bloqueara, tumbaría consultas válidas. La BD (dry-run) es la autoridad objetiva de la sintaxis y la seguridad es determinista. El umbral de confianza queda como palanca opcional del operador, separada de la opinión del LLM | ✅ Cerrada |
+| D-08 | Pipeline NL→SQL como grafo propio (distinto del conversacional), con la revisión humana como `interrupt_before` y checkpointer en PostgreSQL; el bucle de fijar/modificar lo controla el humano, no el LLM | El flujo determinista (recuperar→SQL→Judge→revisión→ejecutar) no encaja en el grafo de chat con tools de SPEC-01: quiero enrutado por reglas sobre el estado, no decidido por el modelo. `interrupt_before` + checkpointer Postgres dan la pausa recuperable por `thread_id` (una consulta no se ejecuta sin visto bueno). El *must-include* es UX determinista: el humano fija tablas y el grafo rehace la recuperación, sin depender de que el LLM acierte. El reintento automático Judge↔SQL con cuenta de intentos se deja para el supervisor (SPEC-10); aquí el pipeline es el esqueleto que ese supervisor formalizará | ✅ Cerrada |
 
 ### 3.1 Patrón obligatorio: acceso a recursos externos (puerto + adaptador + factory)
 
@@ -59,10 +60,12 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-05 | SQL Agent (NL→SQL con el esquema recuperado) | ✅ Cerrada |
 | SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ✅ Cerrada |
 | SPEC-07 | Execute SQL (solo lectura) | ✅ Cerrada |
-| SPEC-08 | Human Review (interrupt) integrado en el pipeline | ⏳ Pendiente |
+| SPEC-08 | Human Review (interrupt) integrado en el pipeline | ✅ Cerrada |
 | SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
+| SPEC-12 | Gestión de conversaciones: nombrar, listar y reanudar hilos | ⏳ Pendiente |
+| SPEC-13 | Explicabilidad de la recuperación (traza del GraphRAG) + modo depuración en el CLI | ⏳ Pendiente |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §9](arquitectura.md).
 
@@ -444,13 +447,13 @@ Hay un caso especial: una consulta que **no logró pasar el Judge** tras agotar 
 
 **Criterios de aceptación**
 
-- [ ] Al llegar a la revisión, el grafo se interrumpe y el estado queda persistido (recuperable por `thread_id`)
-- [ ] Aprobar → continúa a ejecutar; rechazar → termina sin ejecutar
-- [ ] Modificar → la SQL editada vuelve al Judge
-- [ ] Fijar una tabla (p. ej. `t_042`) y relanzar → la recuperación se rehace con esa tabla fijada y aparece en el contexto nuevo
-- [ ] Una tabla fijada que no existe en el esquema se avisa y se ignora
-- [ ] La consulta y la evaluación del Judge se muestran en cajas (`boxen`) separadas y con color (`chalk`) según el veredicto
-- [ ] Tests de integración con checkpointer: pausa/persistencia, reanudar-aprobar, reanudar-fijar-tabla
+- [X] Al llegar a la revisión, el grafo se interrumpe y el estado queda persistido (recuperable por `thread_id`)
+- [X] Aprobar → continúa a ejecutar; rechazar → termina sin ejecutar
+- [X] Modificar → la SQL editada vuelve al Judge
+- [X] Fijar una tabla (p. ej. `t_042`) y relanzar → la recuperación se rehace con esa tabla fijada y aparece en el contexto nuevo
+- [X] Una tabla fijada que no existe en el esquema se avisa y se ignora
+- [X] La consulta y la evaluación del Judge se muestran en cajas (`boxen`) separadas y con color (`chalk`) según el veredicto
+- [X] Tests de integración con checkpointer: pausa/persistencia, reanudar-aprobar, reanudar-fijar-tabla
 
 ```bash
 cd backend && npm run test:integration   # human review con checkpointer (opt-in)
@@ -473,5 +476,85 @@ cd backend && npm run test:integration   # human review con checkpointer (opt-in
 El umbral y el máximo de intentos son palancas de configuración: suben o bajan lo estricto que es el sistema antes de pedir ayuda al humano.
 
 *(Contrato completo, pasos y criterios de aceptación: se detallarán al abordar el SPEC-10.)*
+
+---
+
+### SPEC-12 — Gestión de conversaciones: nombrar, listar y reanudar hilos
+
+**Objetivo.** Quiero poder ponerle un nombre a la conversación (chat o consulta) que voy a empezar, ver más tarde un listado de las conversaciones guardadas (con su identificador y una descripción) y **retomar** cualquiera donde la dejé. Es gestión de sesiones, no memoria semántica: se apoya en el checkpointer que ya persiste el estado por `thread_id` (SPEC-08), y es cosa distinta del Memory Agent (SPEC-09), que reutiliza consultas pasadas como ejemplos *few-shot*. La descripción puede escribirla el usuario o generarla el modelo (un resumen breve del hilo).
+
+**Contrato.**
+
+- *Nombrar al empezar*: al iniciar una conversación o una consulta, doy (o se autogenera) un **título**; el hilo queda registrado con su `thread_id`, el título, una descripción opcional, el tipo (chat o consulta) y las marcas de tiempo.
+- *Registro de conversaciones*: un almacén propio en `graphsql_memory` (tabla aparte de los checkpoints de LangGraph) guarda esos metadatos. El estado del grafo lo sigue guardando el checkpointer; este registro solo añade la capa legible (id + título + descripción + fecha) que el checkpointer no da por sí solo.
+- *Listar y reanudar*: el CLI ofrece "reanudar conversación", muestra el listado ordenado por fecha y, al elegir uno, retoma ese `thread_id` con su estado intacto (el historial del chat, o el punto del pipeline en que se pausó).
+- *Descripción automática (opcional)*: si no doy título/descripción a mano, un resumen breve vía `IChatModel` describe de qué iba la conversación. Es la única parte con LLM; si falla o no se quiere, el título a mano basta.
+- *Mantenimiento*: puedo **renombrar** y **borrar** hilos desde el CLI; borrar un hilo elimina su registro y su checkpoint.
+- *Requisito*: para poder reanudar el **chat**, su grafo tiene que usar el checkpointer de PostgreSQL (hoy el conversacional usa `MemorySaver`, efímero); el pipeline (SPEC-08) ya lo usa.
+
+**Pasos**
+
+1. Mover el grafo conversacional (SPEC-01) al checkpointer de PostgreSQL (SPEC-08), para que su estado sobreviva al proceso y sea reanudable.
+2. Definir el puerto del registro de conversaciones (crear, listar, obtener, renombrar, borrar) + adaptador Postgres en `graphsql_memory` + factory, siguiendo el patrón puerto/adaptador/factory (D-05). Metadatos: `thread_id`, `title`, `description`, `kind` (chat/consulta), `created_at`, `updated_at`.
+3. Al iniciar una conversación o consulta: pedir el título (o dejarlo autogenerar) y registrar el hilo antes de arrancar el grafo.
+4. Descripción automática opcional: un caso de uso que resume el hilo con `IChatModel` y actualiza el registro; con `IChatModel` inyectado para probarlo con un doble.
+5. CLI: opción "Reanudar conversación" que lista los hilos (id + título + descripción + fecha) y retoma el elegido por su `thread_id`; y acciones de renombrar/borrar.
+6. Tests: unit del registro con doble/en memoria (crear, listar, renombrar, borrar) y del resumen con `IChatModel` doblado; integración opt-in que persiste un hilo, lo lista y lo reanuda recuperando el estado.
+
+**Criterios de aceptación**
+
+- [ ] Al empezar, puedo dar un título a la conversación; el hilo queda registrado con su `thread_id`
+- [ ] El CLI muestra un listado de conversaciones guardadas (id + título + descripción + fecha)
+- [ ] Puedo elegir una del listado y **reanudarla** con su estado intacto (historial del chat o punto del pipeline)
+- [ ] La descripción puede escribirla el usuario o autogenerarse con el LLM (resumen breve); si el LLM falla, el título a mano basta
+- [ ] Puedo renombrar y borrar hilos; borrar elimina el registro y su checkpoint
+- [ ] El grafo conversacional usa el checkpointer de PostgreSQL (reanudable, no efímero)
+- [ ] Tests: unit del registro (con doble) y del resumen (con `IChatModel` doblado); integración opt-in que persiste, lista y reanuda un hilo
+
+```bash
+cd backend && npm test                   # unit del registro de conversaciones y del resumen
+cd backend && npm run test:integration   # persistir/listar/reanudar con checkpointer real (opt-in)
+```
+
+---
+
+### SPEC-13 — Explicabilidad de la recuperación (traza del GraphRAG)
+
+**Objetivo.** Quiero ver por dentro cómo decide la recuperación qué tablas entran en el contexto, para no dar por buena "a ciegas" una recuperación que parece semántica pero no lo es. En concreto: qué tablas puntúan alto por significado (con su score coseno), cuáles se eligen como candidatas, cuáles se añaden por expansión de claves foráneas (y con qué score quedan, aunque sea bajo), y cuáles sobreviven al recorte final y por qué. Es transparencia del circuito GraphRAG y, de paso, la base cualitativa del ablation (SPEC-11): sin los scores a la vista, uno cree que una tabla se recuperó por significado cuando en realidad la arrastró el grafo.
+
+**Contrato.** Un caso de uso de "explicar la recuperación" que, dada una pregunta, además del contexto final devuelve una **traza** con:
+
+- *Ranking semántico*: todas las tablas con su score de similitud (coseno), ordenadas.
+- *Candidatas*: las top-K por significado (`SEMANTIC_TOP_K`), marcadas sobre el ranking.
+- *Expansión por FK*: las tablas que se añaden como vecinas de las candidatas (las que no eran candidatas), cada una con su score semántico —normalmente bajo, que es justo lo que explica que entraran por el grafo y no por el vector—.
+- *Contexto final*: las tablas tras acotar a `MAX_CONTEXT_TABLES`, cada una con su score y el **motivo** de inclusión (semántica / expansión / fijada por el humano).
+- *Palancas*: los valores de `SEMANTIC_TOP_K` y `MAX_CONTEXT_TABLES` usados.
+
+La traza no cambia la recuperación: es la misma que usa el pipeline, solo que además expone los pasos intermedios. Reutiliza los colaboradores ya inyectables de SPEC-04 (el ranking por similitud y la expansión por FK), así que se prueba con dobles sin tocar pgvector ni Neo4j.
+
+**CLI.** Una opción de menú "Depurar recuperación (ver el circuito)" que pide una pregunta y pinta la traza en tablas legibles (con `chalk`/`boxen`): el ranking semántico resaltando el corte top-K, la lista de expansión con sus scores, y el contexto final con la columna "motivo". Opcional: un modo depuración que muestre esta misma traza durante el pipeline normal (SPEC-08), antes de la revisión, para ver de dónde salió cada tabla de la consulta.
+
+**Pasos**
+
+1. En el dominio, definir la traza de recuperación (ranking con scores, candidatas, expansión con scores, contexto final con score y motivo, y las palancas).
+2. Caso de uso `explainSchemaRetrieval(question, deps)` que reaprovecha el ranking y la expansión de SPEC-04 y compone la traza sin alterar el resultado. Dependencias inyectadas (reales por defecto).
+3. CLI: opción de menú que pide la pregunta y renderiza la traza (ranking con el corte top-K resaltado, expansión, contexto final con motivo).
+4. *(Opcional)* Un flag/modo depuración que imprima la traza también en el pipeline (SPEC-08) antes de la revisión.
+5. Tests: unit con dobles (que el motivo distingue semántica de expansión de fijada; que el score de una tabla que entra por FK es más bajo que el de las candidatas; que el corte top-K y el recorte final se reflejan en la traza).
+
+**Criterios de aceptación**
+
+- [ ] Dada una pregunta, obtengo el ranking semántico completo con el score de cada tabla
+- [ ] La traza distingue las **candidatas** (top-K) de las tablas añadidas por **expansión de FK**, y muestra el score de ambas
+- [ ] El contexto final indica, por tabla, el **motivo** de inclusión (semántica / expansión / fijada)
+- [ ] Se ve el efecto de las palancas (`SEMANTIC_TOP_K`, `MAX_CONTEXT_TABLES`) sobre lo que entra y lo que se recorta
+- [ ] Desde el CLI, una opción de depuración muestra todo esto en tablas legibles para una pregunta dada
+- [ ] La traza no altera la recuperación (mismo contexto que usa el pipeline)
+- [ ] Tests unit con dobles: motivo semántica vs expansión vs fijada; score bajo de las expandidas; reflejo del corte top-K y del recorte final
+
+```bash
+cd backend && npm test    # unit de la traza de recuperación (con dobles)
+cd backend && npm start   # menú → "Depurar recuperación (ver el circuito)"
+```
 
 
