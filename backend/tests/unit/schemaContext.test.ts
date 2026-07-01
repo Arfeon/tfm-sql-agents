@@ -31,6 +31,16 @@ describe('renderSchemaDdl', () => {
     expect(ddl).toContain('FOREIGN KEY (region_id) REFERENCES region(region_id)')
   })
 
+  it('incluye la descripción como comentario cuando la hay', () => {
+    const ddl = renderSchemaDdl([{ ...CUSTOMER, description: 'Clientes de la plataforma' }])
+    expect(ddl).toContain('-- customer: Clientes de la plataforma')
+  })
+
+  it('marca la ausencia de descripción como comentario', () => {
+    const ddl = renderSchemaDdl([{ ...CUSTOMER, name: 't_042', description: null }])
+    expect(ddl).toContain('-- t_042: (sin descripción; propósito inferido del nombre y las columnas)')
+  })
+
   it('cadena vacía cuando no hay tablas', () => {
     expect(renderSchemaDdl([])).toBe('')
   })

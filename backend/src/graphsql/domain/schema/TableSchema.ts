@@ -23,6 +23,12 @@ export interface TableSchema {
   columns: ColumnSchema[]
   primaryKeys: string[]
   foreignKeys: ForeignKeySchema[]
+  /**
+   * Descripción de la tabla, si la hay (SPEC-03: sincronizada en Neo4j y pgvector).
+   * La lleva el contexto para que el SQL Agent y el Judge sepan qué contiene una
+   * tabla de nombre opaco; ausente cuando no está documentada.
+   */
+  description?: string | null
 }
 
 /** Nombre cualificado de la tabla (`esquema.tabla`), o solo el nombre si no tiene esquema. */

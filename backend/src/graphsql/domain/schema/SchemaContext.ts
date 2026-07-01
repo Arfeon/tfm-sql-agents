@@ -40,5 +40,10 @@ function renderTableDdl(table: TableSchema): string {
       `  FOREIGN KEY (${foreignKey.column}) REFERENCES ${foreignKey.referencesTable}(${foreignKey.referencesColumn})`,
     )
   }
-  return `CREATE TABLE ${table.name} (\n${lines.join(',\n')}\n);`
+  // Marco la descripción (o su ausencia) como comentario, para que el SQL Agent y el
+  // Judge sepan qué contiene la tabla y distingan lo documentado de lo supuesto (SPEC-14).
+  const comment = table.description
+    ? `-- ${table.name}: ${table.description}`
+    : `-- ${table.name}: (sin descripción; propósito inferido del nombre y las columnas)`
+  return `${comment}\nCREATE TABLE ${table.name} (\n${lines.join(',\n')}\n);`
 }

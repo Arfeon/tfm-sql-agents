@@ -18,6 +18,7 @@ import { SchemaGraphManager } from '../infrastructure/neo4j/SchemaGraphManager'
 import { buildSchemaContext, type SchemaContext } from '../domain/schema/SchemaContext'
 import type { TableSchema } from '../domain/schema/TableSchema'
 import type { TableMatch } from '../domain/ports/IEmbeddingsStore'
+import type { RetrievalTrace, RankedTable, ExpandedTable, ContextTable, InclusionReason } from '../domain/schema/RetrievalTrace'
 
 /** Cuántas tablas candidatas por significado tomo antes de expandir por FK. */
 export const SEMANTIC_TOP_K = 5
@@ -74,12 +75,29 @@ export const defaultSchemaRetrievalDependencies: SchemaRetrievalDependencies = {
   },
 }
 
-/** Recupero el contexto de esquema relevante para una pregunta. */
-export async function retrieveSchemaContext(
+/** Lo que produce el circuito de recuperación, con los pasos intermedios a la vista. */
+interface RetrievalInternals {
+  topK: number
+  maxTables: number
+  ranked: TableMatch[]
+  scoreByName: Map<string, number>
+  pinned: string[]
+  topKNames: string[]
+  candidateNames: string[]
+  expanded: TableSchema[]
+  limited: TableSchema[]
+}
+
+/**
+ * El circuito de recuperación en un único sitio (lo comparten `retrieveSchemaContext`
+ * y `explainSchemaRetrieval`, para que la explicación sea exactamente la misma
+ * recuperación que usa el pipeline, no una réplica que se pueda desviar).
+ */
+async function runRetrieval(
   question: string,
-  deps: SchemaRetrievalDependencies = defaultSchemaRetrievalDependencies,
-  options: SchemaRetrievalOptions = {},
-): Promise<SchemaContext> {
+  deps: SchemaRetrievalDependencies,
+  options: SchemaRetrievalOptions,
+): Promise<RetrievalInternals> {
   const topK = options.topK ?? SEMANTIC_TOP_K
   const maxTables = options.maxTables ?? MAX_CONTEXT_TABLES
 
@@ -91,7 +109,8 @@ export async function retrieveSchemaContext(
   const pinned = (options.mustInclude ?? []).filter((name) => scoreByName.has(name))
 
   // 2. Las candidatas son las top-K por significado más las fijadas; expando por FK.
-  const candidateNames = [...new Set([...pinned, ...ranked.slice(0, topK).map((match) => match.tableName)])]
+  const topKNames = ranked.slice(0, topK).map((match) => match.tableName)
+  const candidateNames = [...new Set([...pinned, ...topKNames])]
   const expanded = await deps.expandByForeignKeys(candidateNames)
 
   // 3. Acoto por similitud, pero las fijadas nunca se caen del contexto.
@@ -101,5 +120,65 @@ export async function retrieveSchemaContext(
   const rest = expanded.filter((table) => !pinnedSet.has(table.name)).sort(byScore)
   const limited = [...pinnedTables, ...rest].slice(0, Math.max(maxTables, pinnedTables.length))
 
+  return { topK, maxTables, ranked, scoreByName, pinned, topKNames, candidateNames, expanded, limited }
+}
+
+/** Recupero el contexto de esquema relevante para una pregunta. */
+export async function retrieveSchemaContext(
+  question: string,
+  deps: SchemaRetrievalDependencies = defaultSchemaRetrievalDependencies,
+  options: SchemaRetrievalOptions = {},
+): Promise<SchemaContext> {
+  const { limited } = await runRetrieval(question, deps, options)
   return buildSchemaContext(limited)
+}
+
+/**
+ * Igual que `retrieveSchemaContext`, pero además devuelvo la traza del circuito
+ * (SPEC-13): el ranking semántico con scores, las candidatas (top-K), las tablas que
+ * entraron por expansión de FK con su score, y el contexto final con el motivo de
+ * cada tabla. No altera la recuperación: compone la traza sobre los mismos pasos.
+ */
+export async function explainSchemaRetrieval(
+  question: string,
+  deps: SchemaRetrievalDependencies = defaultSchemaRetrievalDependencies,
+  options: SchemaRetrievalOptions = {},
+): Promise<RetrievalTrace> {
+  const internals = await runRetrieval(question, deps, options)
+  const { ranked, scoreByName, pinned, topKNames, candidateNames, expanded, limited } = internals
+
+  const topKSet = new Set(topKNames)
+  const pinnedSet = new Set(pinned)
+  const candidateSet = new Set(candidateNames)
+
+  const ranking: RankedTable[] = ranked.map((match) => ({
+    tableName: match.tableName,
+    score: match.score,
+    isCandidate: topKSet.has(match.tableName),
+  }))
+
+  // Las que entraron como vecinas por FK (no eran candidatas), con su score semántico.
+  const expansionAdded: ExpandedTable[] = expanded
+    .filter((table) => !candidateSet.has(table.name))
+    .map((table) => ({ tableName: table.name, score: scoreByName.get(table.name) ?? 0 }))
+    .sort((a, b) => b.score - a.score)
+
+  const reasonFor = (name: string): InclusionReason =>
+    pinnedSet.has(name) ? 'pinned' : topKSet.has(name) ? 'semantic' : 'expansion'
+
+  const finalContext: ContextTable[] = limited.map((table) => ({
+    tableName: table.name,
+    score: scoreByName.get(table.name) ?? 0,
+    reason: reasonFor(table.name),
+  }))
+
+  return {
+    question,
+    ranking,
+    candidates: topKNames,
+    expansionAdded,
+    finalContext,
+    context: buildSchemaContext(limited),
+    levers: { semanticTopK: internals.topK, maxContextTables: internals.maxTables },
+  }
 }

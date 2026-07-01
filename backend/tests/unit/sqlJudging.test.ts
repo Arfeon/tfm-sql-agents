@@ -182,4 +182,48 @@ describe('judgeSql (combinación de capas)', () => {
     expect(verdict.valid).toBe(true)
     expect(verdict.warnings.length).toBeGreaterThan(0)
   })
+
+  it('lleva el propósito de las tablas del veredicto del juez hasta el resultado (SPEC-14)', async () => {
+    const verdict = await judgeSql(
+      SAFE_SQL,
+      CONTEXT,
+      'pregunta',
+      { useLlmJudge: true },
+      fakeDeps({ reply: '{"valid": true, "table_purposes": [{"table": "t_042", "purpose": "wishlist", "source": "assumed"}]}' }),
+    )
+    expect(verdict.tablePurposes?.[0]).toEqual({ table: 't_042', purpose: 'wishlist', source: 'assumed' })
+    expect(verdict.warnings.some((warning) => warning.includes('t_042') && warning.includes('SUPOSICIÓN'))).toBe(true)
+  })
+})
+
+describe('parseJudgeVerdict — propósito de las tablas (SPEC-14)', () => {
+  it('una tabla documentada da su propósito sin generar aviso de suposición', () => {
+    const verdict = parseJudgeVerdict(
+      '{"valid": true, "table_purposes": [{"table": "t_042", "purpose": "lista de deseos", "source": "description"}]}',
+    )
+    expect(verdict.tablePurposes).toEqual([{ table: 't_042', purpose: 'lista de deseos', source: 'description' }])
+    expect(verdict.warnings.some((warning) => warning.includes('SUPOSICIÓN'))).toBe(false)
+  })
+
+  it('una tabla de nombre opaco sin descripción (assumed) genera un aviso de suposición', () => {
+    const verdict = parseJudgeVerdict(
+      '{"valid": true, "table_purposes": [{"table": "t_042", "purpose": "wishlist", "source": "assumed"}]}',
+    )
+    expect(verdict.tablePurposes?.[0].source).toBe('assumed')
+    expect(verdict.warnings.some((warning) => warning.includes('t_042') && warning.includes('SUPOSICIÓN'))).toBe(true)
+  })
+
+  it('una tabla de nombre/columnas evidentes no genera aviso', () => {
+    const verdict = parseJudgeVerdict(
+      '{"valid": true, "table_purposes": [{"table": "customer", "purpose": "clientes", "source": "name"}]}',
+    )
+    expect(verdict.warnings.some((warning) => warning.includes('SUPOSICIÓN'))).toBe(false)
+  })
+
+  it('una fuente desconocida se trata como suposición (conservador)', () => {
+    const verdict = parseJudgeVerdict(
+      '{"valid": true, "table_purposes": [{"table": "x", "purpose": "y", "source": "inventada"}]}',
+    )
+    expect(verdict.tablePurposes?.[0].source).toBe('assumed')
+  })
 })

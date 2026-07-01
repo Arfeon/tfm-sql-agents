@@ -21,6 +21,8 @@ import type { SchemaContext } from '../domain/schema/SchemaContext'
 import type { SqlStatement } from '../domain/sql/SqlStatement'
 import {
   type JudgeVerdict,
+  type TablePurpose,
+  type PurposeSource,
   securityFailureVerdict,
   syntaxFailureVerdict,
   checksPassedVerdict,
@@ -66,9 +68,17 @@ export function buildJudgeSystemPrompt(dialect: string): string {
     '5. Optimización: ¿podría ser más eficiente? ¿falta un LIMIT cuando la pregunta lo pide?',
     '',
     'Cuando algo esté mal, di EXACTAMENTE qué y cómo corregirlo (p. ej. "la columna c.name no puede ir en GROUP BY; usa una subconsulta").',
+    '',
+    'Además, por CADA tabla que use la consulta, evalúa si SABES qué contiene, con la evidencia del esquema (su comentario/descripción, su nombre y sus columnas):',
+    '- Si la tabla tiene descripción en el esquema, su propósito está DOCUMENTADO ("source": "description").',
+    '- Si no tiene descripción pero el nombre lo deja claro (p. ej. customer), "source": "name"; si lo dejan claro las columnas, "source": "columns".',
+    '- Si el nombre es OPACO (p. ej. t_042) y NO tiene descripción, su propósito es una SUPOSICIÓN tuya a partir de las columnas: "source": "assumed". Es importante marcarlo, porque esa tabla podría contener algo distinto de lo que asumes.',
+    'En "purpose" resume en pocas palabras qué crees que contiene o representa la tabla.',
+    '',
     'Responde EXCLUSIVAMENTE con un JSON con esta forma, sin texto alrededor:',
-    '{"valid": true|false, "confidence": 0.0-1.0, "errors": ["..."], "warnings": ["..."], "suggestions": ["..."], "tables_verified": ["..."], "explanation": "..."}',
+    '{"valid": true|false, "confidence": 0.0-1.0, "errors": ["..."], "warnings": ["..."], "suggestions": ["..."], "tables_verified": ["..."], "table_purposes": [{"table": "...", "purpose": "...", "source": "description|name|columns|assumed"}], "explanation": "..."}',
     'En "errors" van solo los problemas que hacen la consulta incorrecta o insegura; el estilo o las mejoras van en "warnings"/"suggestions". Si es válida, "errors" va vacío.',
+    'NO metas en "warnings" el aviso de las tablas "assumed": eso se genera aparte a partir de "table_purposes". En "warnings" van otras cautelas.',
     'En "explanation" justifica brevemente la confianza: por qué das esa nota y qué la baja (en una o dos frases).',
   ].join('\n')
 }
@@ -97,15 +107,51 @@ export function parseJudgeVerdict(raw: string): JudgeVerdict {
 
   const fields = parsed as Record<string, unknown>
   const errors = toStringArray(fields.errors)
+  const tablePurposes = toTablePurposes(fields.table_purposes)
+  // El aviso de las tablas usadas "por suposición" lo genero yo a partir de
+  // table_purposes, para que sea consistente aunque el LLM no lo redacte (SPEC-14).
+  const assumedWarnings = tablePurposes
+    .filter((purpose) => purpose.source === 'assumed')
+    .map(
+      (purpose) =>
+        `Se usa la tabla ${purpose.table} por SUPOSICIÓN (nombre opaco y sin descripción); se asume que contiene "${purpose.purpose}". Verifícalo antes de fiarte del resultado.`,
+    )
   return {
     valid: fields.valid as boolean,
     confidence: toConfidence(fields.confidence),
     errors: (fields.valid as boolean) || errors.length > 0 ? errors : ['El juez LLM marcó la consulta como no válida sin detallar el motivo.'],
-    warnings: toStringArray(fields.warnings),
+    warnings: [...toStringArray(fields.warnings), ...assumedWarnings],
     suggestions: toStringArray(fields.suggestions),
     tablesVerified: toStringArray(fields.tables_verified),
     explanation: typeof fields.explanation === 'string' ? fields.explanation : '',
+    tablePurposes,
   }
+}
+
+const PURPOSE_SOURCES: readonly PurposeSource[] = ['description', 'name', 'columns', 'assumed']
+
+/** Interpreto `table_purposes`; una fuente desconocida la trato como "assumed" (conservador). */
+function toTablePurposes(value: unknown): TablePurpose[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const purposes: TablePurpose[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) {
+      continue
+    }
+    const fields = item as Record<string, unknown>
+    if (typeof fields.table !== 'string') {
+      continue
+    }
+    const source = PURPOSE_SOURCES.includes(fields.source as PurposeSource) ? (fields.source as PurposeSource) : 'assumed'
+    purposes.push({
+      table: fields.table,
+      purpose: typeof fields.purpose === 'string' ? fields.purpose : '',
+      source,
+    })
+  }
+  return purposes
 }
 
 /** Me quedo con las cadenas de un array; cualquier otra cosa se ignora. */
@@ -206,6 +252,7 @@ function asAdvisory(llm: JudgeVerdict): JudgeVerdict {
     suggestions: llm.suggestions,
     tablesVerified: llm.tablesVerified,
     explanation: llm.explanation,
+    tablePurposes: llm.tablePurposes,
   }
 }
 

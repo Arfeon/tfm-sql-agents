@@ -79,6 +79,7 @@ export class SchemaGraphManager {
     const rows = await this.neo4j.run<{
       name: string
       schema: string | null
+      description: string | null
       primaryKeys: string[]
       columns: ColumnSchema[]
       foreignKeys: ForeignKeySchema[]
@@ -86,6 +87,7 @@ export class SchemaGraphManager {
       `MATCH (t:Table) WHERE t.name IN $names
        RETURN t.name AS name,
               t.schema AS schema,
+              t.description AS description,
               t.primary_keys AS primaryKeys,
               [(t)-[:HAS_COLUMN]->(c:Column) | {name: c.name, type: c.type, nullable: c.nullable}] AS columns,
               [(t)-[fk:REFERENCES]->(ref:Table) | {column: fk.from_column, referencesTable: ref.name, referencesColumn: fk.to_column}] AS foreignKeys
@@ -96,6 +98,7 @@ export class SchemaGraphManager {
     return rows.map((row) => ({
       name: row.name,
       schema: row.schema ?? null,
+      description: row.description ?? null,
       columns: row.columns,
       primaryKeys: row.primaryKeys ?? [],
       foreignKeys: row.foreignKeys,

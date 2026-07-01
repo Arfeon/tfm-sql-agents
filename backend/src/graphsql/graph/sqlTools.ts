@@ -32,6 +32,12 @@ export function renderJudgeVerdict(verdict: JudgeVerdict): string {
   if (verdict.explanation) {
     lines.push('', `**Por qué:** ${verdict.explanation}`)
   }
+  // Propósito de las tablas cuyo significado el Judge conoce (documentado/evidente);
+  // las "supuestas" ya salen como aviso en la sección de cautelas (SPEC-14).
+  const knownPurposes = (verdict.tablePurposes ?? []).filter((purpose) => purpose.source !== 'assumed')
+  if (knownPurposes.length > 0) {
+    lines.push('', '**Propósito de las tablas usadas:**', ...knownPurposes.map((purpose) => `- ${purpose.table} → “${purpose.purpose}”`))
+  }
   if (verdict.errors.length > 0) {
     lines.push('', '**Problemas (impiden ejecutarla):**', ...verdict.errors.map((error) => `- ${error}`))
   }

@@ -65,7 +65,8 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
 | SPEC-12 | Gestión de conversaciones: nombrar, listar y reanudar hilos | ⏳ Pendiente |
-| SPEC-13 | Explicabilidad de la recuperación (traza del GraphRAG) + modo depuración en el CLI | ⏳ Pendiente |
+| SPEC-13 | Explicabilidad de la recuperación (traza del GraphRAG) + modo depuración en el CLI | ✅ Cerrada |
+| SPEC-14 | El Judge evalúa la certeza del propósito de las tablas usadas (documentada / evidente / supuesta) | ✅ Cerrada |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §9](arquitectura.md).
 
@@ -544,17 +545,54 @@ La traza no cambia la recuperación: es la misma que usa el pipeline, solo que a
 
 **Criterios de aceptación**
 
-- [ ] Dada una pregunta, obtengo el ranking semántico completo con el score de cada tabla
-- [ ] La traza distingue las **candidatas** (top-K) de las tablas añadidas por **expansión de FK**, y muestra el score de ambas
-- [ ] El contexto final indica, por tabla, el **motivo** de inclusión (semántica / expansión / fijada)
-- [ ] Se ve el efecto de las palancas (`SEMANTIC_TOP_K`, `MAX_CONTEXT_TABLES`) sobre lo que entra y lo que se recorta
-- [ ] Desde el CLI, una opción de depuración muestra todo esto en tablas legibles para una pregunta dada
-- [ ] La traza no altera la recuperación (mismo contexto que usa el pipeline)
-- [ ] Tests unit con dobles: motivo semántica vs expansión vs fijada; score bajo de las expandidas; reflejo del corte top-K y del recorte final
+- [X] Dada una pregunta, obtengo el ranking semántico completo con el score de cada tabla
+- [X] La traza distingue las **candidatas** (top-K) de las tablas añadidas por **expansión de FK**, y muestra el score de ambas
+- [X] El contexto final indica, por tabla, el **motivo** de inclusión (semántica / expansión / fijada)
+- [X] Se ve el efecto de las palancas (`SEMANTIC_TOP_K`, `MAX_CONTEXT_TABLES`) sobre lo que entra y lo que se recorta
+- [X] Desde el CLI, una opción de depuración muestra todo esto en tablas legibles para una pregunta dada
+- [X] La traza no altera la recuperación (mismo contexto que usa el pipeline)
+- [X] Tests unit con dobles: motivo semántica vs expansión vs fijada; score bajo de las expandidas; reflejo del corte top-K y del recorte final
 
 ```bash
 cd backend && npm test    # unit de la traza de recuperación (con dobles)
 cd backend && npm start   # menú → "Depurar recuperación (ver el circuito)"
+```
+
+---
+
+### SPEC-14 — El Judge evalúa la certeza del propósito de las tablas usadas
+
+**Objetivo.** Quiero que el Judge no solo valide que la SQL es segura y correcta (SPEC-06), sino que juzgue **si sabe de verdad qué contiene cada tabla que usa**. Una tabla de nombre opaco y sin descripción (como `t_042`) se usa por **suposición**: sus columnas sugieren un vínculo cliente↔juego, pero igual podría ser una wishlist, una lista de bloqueados o "los juegos más odiados". En ese caso el Judge debe **avisar** de que el uso es una conjetura, para que no se dé por sabido algo que en realidad se adivina. Si la tabla tiene descripción (o su nombre/columnas dejan claro el propósito), no hace falta aviso: como mucho, informa del mapeo ("t_042 → 'lista de deseos', según su descripción"). Es hacer del Judge un juez también del **sentido** de la consulta, no solo de su forma. Sigue D-07: son avisos, no bloqueos.
+
+**Contrato.**
+
+- *Prerrequisito — la descripción viaja en el contexto.* Hoy el contexto de esquema (SPEC-04) lleva columnas y claves, pero no la descripción de cada tabla. Para que el Judge (y el SQL Agent) puedan valorar el propósito, incluyo la descripción de cada tabla en su `TableSchema` y la renderizo en el DDL del contexto como comentario (`-- <descripción>`, o marca de "sin descripción" cuando no la haya).
+- *Evaluación por tabla usada.* Para cada tabla que aparece en la SQL, el Judge clasifica cómo conoce su propósito:
+  - **documentada**: tiene descripción → informa del mapeo (tabla → significado, "según descripción"); sin aviso.
+  - **evidente**: sin descripción, pero el nombre y/o las columnas lo dejan claro (p. ej. `customer`, o `game_rating(customer_id, game_id, score)`); sin aviso.
+  - **supuesta**: nombre opaco + sin descripción + propósito solo inferible de las columnas → **aviso** de que la tabla se usa por suposición y hay que verificarla.
+- *Dónde va.* Los avisos de "supuesta" entran en los `warnings` del veredicto (no bloquean; el juez LLM es asesor) y opcionalmente restan confianza. El mapeo de las documentadas/evidentes va en un campo del veredicto para mostrarlo en la revisión (SPEC-08).
+- *Reparto determinista / LLM.* Lo determinista (¿la tabla tiene descripción?) sale de los datos y es lo único que **alimento** al juez; el juicio (¿el nombre/columnas hacen evidente el propósito?, redactar el mapeo o el aviso) es del juez LLM (Capa 3), guiado por el prompt.
+
+**Pasos**
+
+1. Añadir la descripción a `TableSchema` y traerla en la lectura del grafo (`getTablesWithForeignKeyNeighbors`, Neo4j); renderizarla en el DDL del contexto como comentario, marcando también su ausencia.
+2. Ampliar `JudgeVerdict` con la evaluación por tabla usada: su propósito y la fuente (descripción / nombre / columnas / supuesto).
+3. Ampliar el prompt del juez LLM (Capa 3) para identificar las tablas usadas, clasificar la certeza de su propósito con la evidencia disponible, informar del mapeo de las claras y **avisar** de las supuestas; dejar explícito que el aviso no bloquea.
+4. En el CLI (revisión, SPEC-08): mostrar los mapeos y, destacados, los avisos de tablas usadas por suposición.
+5. Tests: unit con `IChatModel` doblado — tabla documentada → mapeo sin aviso; tabla de nombre opaco sin descripción → aviso de "suposición"; tabla de nombre/columnas evidentes → sin aviso; y unit de que el DDL del contexto incluye la descripción (o su ausencia).
+
+**Criterios de aceptación**
+
+- [X] El contexto de esquema incluye la descripción de cada tabla (o marca su ausencia) y el Judge la recibe
+- [X] Si la SQL usa una tabla **documentada**, el Judge informa del mapeo (tabla → significado, según descripción) sin avisar
+- [X] Si usa una tabla de **nombre opaco sin descripción** cuyo propósito solo se infiere, el Judge **avisa** de que se usa por suposición (en `warnings`, sin bloquear)
+- [X] Si usa una tabla de **nombre/columnas evidentes** (aunque no tenga descripción), no avisa
+- [X] Los avisos y mapeos se ven en la revisión humana (SPEC-08)
+- [X] Tests unit con `IChatModel` doblado para los tres casos, y que el DDL del contexto lleva la descripción (o su ausencia)
+
+```bash
+cd backend && npm test    # unit del Judge (evaluación de propósito, con doble de IChatModel)
 ```
 
 

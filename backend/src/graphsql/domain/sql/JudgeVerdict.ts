@@ -8,6 +8,22 @@
  * esquema y una explicación breve. Distingo "errores" (bloquean) de
  * "avisos/sugerencias" (no).
  */
+/**
+ * Cómo sabe el Judge qué contiene una tabla usada en la consulta (SPEC-14):
+ * - `description`: la tabla tiene descripción → propósito documentado.
+ * - `name`: el nombre lo deja claro (p. ej. `customer`).
+ * - `columns`: las columnas lo dejan claro (p. ej. `game_rating(customer_id, game_id, score)`).
+ * - `assumed`: nombre opaco y sin descripción → el propósito es una SUPOSICIÓN.
+ */
+export type PurposeSource = 'description' | 'name' | 'columns' | 'assumed'
+
+/** El propósito que el Judge atribuye a una tabla usada, y de dónde lo deduce. */
+export interface TablePurpose {
+  table: string
+  purpose: string
+  source: PurposeSource
+}
+
 export interface JudgeVerdict {
   valid: boolean
   /** Confianza del juez LLM, de 0 a 1. Ausente si no se llegó a consultar al LLM. */
@@ -22,6 +38,12 @@ export interface JudgeVerdict {
   tablesVerified: string[]
   /** Explicación breve del veredicto. */
   explanation: string
+  /**
+   * Propósito atribuido a cada tabla usada y su fuente (SPEC-14). Las de propósito
+   * documentado/evidente son informativas; las `assumed` generan además un aviso.
+   * Ausente si no se consultó al juez LLM.
+   */
+  tablePurposes?: TablePurpose[]
 }
 
 /** Veredicto cuando la comprobación de seguridad rechaza: no es de solo lectura. */

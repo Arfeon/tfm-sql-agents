@@ -18,8 +18,10 @@ import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
 import { createConversationGraph, askGraph } from '../graphsql/graph/agentGraph'
 import { loadTargetDatabases, targetDatabaseLabel, sqlDialectFor, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
 import { createSqlPipelineGraph, HUMAN_REVIEW_NODE, type PipelineStateType } from '../graphsql/graph/pipelineGraph'
+import { explainSchemaRetrieval } from '../graphsql/application/schemaRetrieval'
+import type { RetrievalTrace } from '../graphsql/domain/schema/RetrievalTrace'
 import { CheckpointerFactory } from '../graphsql/infrastructure/checkpoint/CheckpointerFactory'
-import type { JudgeVerdict } from '../graphsql/domain/sql/JudgeVerdict'
+import type { JudgeVerdict, PurposeSource } from '../graphsql/domain/sql/JudgeVerdict'
 import type { HumanDecision } from '../graphsql/domain/sql/HumanDecision'
 import type { QueryResult } from '../graphsql/domain/sql/QueryResult'
 import { ingestSchema } from '../graphsql/application/schemaIngestion'
@@ -67,13 +69,14 @@ async function warnIfLocalModelMissing(kind: 'chat' | 'embeddings', modelId: str
 }
 
 /** Menú principal: elijo qué hacer. */
-function askMainAction(): Promise<'chat' | 'query' | 'scan' | 'exit'> {
+function askMainAction(): Promise<'chat' | 'query' | 'scan' | 'debug' | 'exit'> {
   return select({
     message: '¿Qué quieres hacer?',
     choices: [
       { name: 'Consultar en lenguaje natural (con revisión humana)', value: 'query' },
       { name: 'Iniciar una conversación', value: 'chat' },
       { name: 'Escanear el esquema de la BD objetivo', value: 'scan' },
+      { name: 'Depurar recuperación (ver el circuito)', value: 'debug' },
       { name: 'Salir', value: 'exit' },
     ],
   })
@@ -297,6 +300,20 @@ function presentReview(state: PipelineStateType): void {
   }
 }
 
+/** Etiqueta legible de la fuente del propósito de una tabla (SPEC-14). */
+function purposeSourceLabel(source: PurposeSource): string {
+  switch (source) {
+    case 'description':
+      return 'según descripción'
+    case 'name':
+      return 'por el nombre'
+    case 'columns':
+      return 'por las columnas'
+    case 'assumed':
+      return 'supuesto'
+  }
+}
+
 /** La evaluación del Judge en su propia caja, con color según el veredicto. */
 function renderJudgeBox(verdict: JudgeVerdict): string {
   const color = verdict.valid ? 'green' : 'red'
@@ -304,6 +321,16 @@ function renderJudgeBox(verdict: JudgeVerdict): string {
   const lines = [chalk[color].bold(`${verdict.valid ? '✅ Válida' : '❌ No válida'}${confidence}`)]
   if (verdict.explanation) {
     lines.push('', chalk.dim(verdict.explanation))
+  }
+  // Propósito de las tablas cuyo significado el Judge conoce (documentado/evidente);
+  // las "supuestas" no van aquí: aparecen como aviso en la sección de cautelas (SPEC-14).
+  const knownPurposes = (verdict.tablePurposes ?? []).filter((purpose) => purpose.source !== 'assumed')
+  if (knownPurposes.length > 0) {
+    lines.push(
+      '',
+      chalk.cyan('Propósito de las tablas usadas:'),
+      ...knownPurposes.map((purpose) => chalk.dim(`  • ${purpose.table} → "${purpose.purpose}" (${purposeSourceLabel(purpose.source)})`)),
+    )
   }
   if (verdict.errors.length > 0) {
     lines.push('', chalk.red.bold('Problemas (impiden ejecutarla):'), ...verdict.errors.map((error) => chalk.red(`  • ${error}`)))
@@ -352,6 +379,81 @@ function presentResult(result: QueryResult): void {
   if (result.rows.length > 0) {
     console.table(result.rows.slice(0, 50))
   }
+  console.log('')
+}
+
+/**
+ * Depuración de la recuperación (SPEC-13). Pido una pregunta y pinto el circuito:
+ * el ranking semántico con scores (marcando el corte top-K), las tablas que entran
+ * por expansión de FK con su score, y el contexto final con el motivo de cada tabla.
+ * Así se ve si una tabla se recupera por significado o la arrastra el grafo.
+ */
+async function runRetrievalDebug(): Promise<void> {
+  const question = await input({ message: chalk.green('Pregunta a depurar:') })
+  if (question.trim() === '') {
+    return
+  }
+  console.log(chalk.dim('\nRecuperando (ranking semántico + expansión por FK)...\n'))
+  try {
+    presentTrace(await explainSchemaRetrieval(question))
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.log(chalk.red('\n⚠ No pude ejecutar la recuperación.'))
+    console.log(chalk.dim('¿Está el esquema vectorizado y disponible el modelo de embeddings? (CLI → "Escanear el esquema")'))
+    console.log(chalk.dim(`Detalle: ${detail}\n`))
+  }
+}
+
+/** Traduzco el motivo de inclusión a una etiqueta legible. */
+function reasonLabel(reason: RetrievalTrace['finalContext'][number]['reason']): string {
+  switch (reason) {
+    case 'semantic':
+      return 'semántica'
+    case 'expansion':
+      return 'expansión FK'
+    case 'pinned':
+      return 'fijada'
+  }
+}
+
+/** Pinto la traza del circuito en tres tablas: ranking, expansión y contexto final. */
+function presentTrace(trace: RetrievalTrace): void {
+  console.log(
+    boxen(
+      `${chalk.bold(trace.question)}\n\n${chalk.dim(
+        `top-K semántico = ${trace.levers.semanticTopK} · máx. contexto = ${trace.levers.maxContextTables}`,
+      )}`,
+      {
+        title: '🔍 Depuración de la recuperación',
+        padding: 1,
+        margin: { top: 1, bottom: 0, left: 0, right: 0 },
+        borderStyle: 'round',
+        borderColor: 'magenta',
+      },
+    ),
+  )
+
+  console.log(chalk.bold('\n1) Ranking semántico (coseno) — ✓ = candidata (top-K)'))
+  console.table(
+    trace.ranking.map((row, index) => ({
+      '#': index + 1,
+      tabla: row.tableName,
+      score: row.score.toFixed(3),
+      candidata: row.isCandidate ? '✓' : '',
+    })),
+  )
+
+  console.log(chalk.bold('\n2) Añadidas por expansión de FK (score semántico, normalmente bajo)'))
+  if (trace.expansionAdded.length > 0) {
+    console.table(trace.expansionAdded.map((row) => ({ tabla: row.tableName, score: row.score.toFixed(3) })))
+  } else {
+    console.log(chalk.dim('   (ninguna: el contexto sale solo de las candidatas)'))
+  }
+
+  console.log(chalk.bold('\n3) Contexto final (tras el recorte) — motivo de cada tabla'))
+  console.table(
+    trace.finalContext.map((row) => ({ tabla: row.tableName, score: row.score.toFixed(3), motivo: reasonLabel(row.reason) })),
+  )
   console.log('')
 }
 
@@ -420,6 +522,11 @@ async function main(): Promise<void> {
 
     if (action === 'query') {
       await runSqlPipeline()
+      continue
+    }
+
+    if (action === 'debug') {
+      await runRetrievalDebug()
       continue
     }
 
