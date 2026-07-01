@@ -12,7 +12,7 @@ import type { SchemaContext } from './SchemaContext'
 export type InclusionReason =
   | 'semantic' // entró por significado (estaba en el top-K semántico)
   | 'expansion' // entró por expansión de clave foránea desde una candidata
-  | 'pinned' // la fijó el humano (must-include, SPEC-08)
+  | 'pinned' // la fijó el usuario (must-include, SPEC-08)
 
 /** Una tabla del ranking semántico, con su score y si es candidata (top-K). */
 export interface RankedTable {
