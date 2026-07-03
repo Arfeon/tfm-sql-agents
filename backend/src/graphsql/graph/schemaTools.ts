@@ -38,11 +38,15 @@ const schemaSummaryTool = tool(
   },
 )
 
+/** Aviso compartido con `sqlTools.ts`: ninguna herramienta encontró tablas relevantes. */
+export const NO_RELEVANT_TABLES_MESSAGE =
+  'No encontré tablas relevantes. ¿Está vectorizado el esquema? (CLI → "Escanear el esquema").'
+
 const schemaLinkingTool = tool(
   async ({ pregunta }) => {
     const context = await retrieveSchemaContext(pregunta)
     if (context.tableNames.length === 0) {
-      return 'No encontré tablas relevantes. ¿Está vectorizado el esquema? (CLI → "Escanear el esquema").'
+      return NO_RELEVANT_TABLES_MESSAGE
     }
     return `Para "${pregunta}" usaría estas tablas: ${context.tableNames.join(', ')}.`
   },

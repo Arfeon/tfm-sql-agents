@@ -59,7 +59,7 @@ describe('PostgresConnection', () => {
 
   it('arcadia connection is readonly', async () => {
     await expect(
-      db.getClient().query("INSERT INTO genre (name) VALUES ('Test')")
+      db.fetchAll("INSERT INTO genre (name) VALUES ('Test')")
     ).rejects.toMatchObject({ code: '25006' })
   })
 })

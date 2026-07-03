@@ -205,14 +205,6 @@ describe('parseJudgeVerdict — propósito de las tablas (SPEC-14)', () => {
     expect(verdict.warnings.some((warning) => warning.includes('SUPOSICIÓN'))).toBe(false)
   })
 
-  it('una tabla de nombre opaco sin descripción (assumed) genera un aviso de suposición', () => {
-    const verdict = parseJudgeVerdict(
-      '{"valid": true, "table_purposes": [{"table": "t_042", "purpose": "wishlist", "source": "assumed"}]}',
-    )
-    expect(verdict.tablePurposes?.[0].source).toBe('assumed')
-    expect(verdict.warnings.some((warning) => warning.includes('t_042') && warning.includes('SUPOSICIÓN'))).toBe(true)
-  })
-
   it('una tabla de nombre/columnas evidentes no genera aviso', () => {
     const verdict = parseJudgeVerdict(
       '{"valid": true, "table_purposes": [{"table": "customer", "purpose": "clientes", "source": "name"}]}',

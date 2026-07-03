@@ -17,6 +17,11 @@ export interface IndexedModel {
   dimensions: number
 }
 
+/** Representación textual de un vector para pgvector: `[v1,v2,…]`. */
+function toVectorLiteral(embedding: number[]): string {
+  return `[${embedding.join(',')}]`
+}
+
 export class TableEmbeddingsStore implements IEmbeddingsStore {
   private constructor(private readonly client: Client) {}
 
@@ -90,7 +95,7 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
          model = EXCLUDED.model,
          dimensions = EXCLUDED.dimensions,
          updated_at = now()`,
-      [tableName, fullName, provider, description, searchText, `[${embedding.join(',')}]`, model, dimensions],
+      [tableName, fullName, provider, description, searchText, toVectorLiteral(embedding), model, dimensions],
     )
   }
 
@@ -101,7 +106,7 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
        FROM table_embeddings
        ORDER BY embedding <=> $1::vector
        LIMIT $2`,
-      [`[${embedding.join(',')}]`, limit],
+      [toVectorLiteral(embedding), limit],
     )
     return result.rows.map((row) => ({ tableName: row.table_name, score: Number(row.score) }))
   }

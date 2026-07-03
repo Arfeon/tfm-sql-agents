@@ -62,11 +62,13 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-07 | Execute SQL (solo lectura) | ✅ Cerrada |
 | SPEC-08 | Human Review (interrupt) integrado en el pipeline | ✅ Cerrada |
 | SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
-| SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ⏳ Pendiente |
+| SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ✅ Cerrada |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
 | SPEC-12 | Gestión de conversaciones: nombrar, listar y reanudar hilos | ⏳ Pendiente |
 | SPEC-13 | Explicabilidad de la recuperación (traza del GraphRAG) + modo depuración en el CLI | ✅ Cerrada |
 | SPEC-14 | El Judge evalúa la certeza del propósito de las tablas usadas (documentada / evidente / supuesta) | ✅ Cerrada |
+| SPEC-15 | Afinar la consulta en la revisión con indicaciones en lenguaje natural (fusiona la acción "fijar tablas") | ✅ Cerrada |
+| SPEC-16 | Seguimiento conversacional de una consulta (pregunta de seguimiento tras ejecutar) | ⏳ Pendiente |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §9](arquitectura.md).
 
@@ -365,11 +367,11 @@ El veredicto es lo que mira el supervisor (SPEC-10): si no supera el Judge (inv�
 **Pasos**
 
 1. Definir en el dominio el veredicto de validación (válido + errores/avisos; el rico, con confianza/sugerencias, para el juez LLM).
-2. Implementar la **Capa 1** como servicio de dominio puro: allowlist `SELECT`/`WITH`, keywords peligrosas (palabra completa), patrones de inyección. Constantes con nombre para las listas.
-3. Tests de la Capa 1: tabla parametrizada con un caso por keyword peligrosa y por patrón de inyección, más `SELECT`/CTE legítimos que pasan.
-4. Implementar la **Capa 2** (sintaxis): pedir el dry-run a la conexión (`ITargetDatabase.dryRun`); si lanza, inválida con el error de la BD.
-5. Implementar la **Capa 3** (LLM-as-judge) como caso de uso con `IChatModel` inyectado; parsear el veredicto y, si no es interpretable, error de dominio que no rompe el flujo.
-6. Combinar: bloquean la Capa 1 y la Capa 2; el juez LLM solo aconseja (sus errores pasan a avisos). Dejarlo listo para el bucle del supervisor (reintento SQL↔Judge).
+2. Implementar la **Capa 1 (seguridad)** como servicio de dominio puro: allowlist `SELECT`/`WITH`, keywords peligrosas (palabra completa), patrones de inyección. Constantes con nombre para las listas.
+3. Tests de la Capa 1 (seguridad): tabla parametrizada con un caso por keyword peligrosa y por patrón de inyección, más `SELECT`/CTE legítimos que pasan.
+4. Implementar la **Capa 2 (sintaxis real)**: pedir el dry-run a la conexión (`ITargetDatabase.dryRun`); si lanza, inválida con el error de la BD.
+5. Implementar la **Capa 3 (juez LLM)** como caso de uso con `IChatModel` inyectado; parsear el veredicto y, si no es interpretable, error de dominio que no rompe el flujo.
+6. Combinar: bloquean la Capa 1 (seguridad) y la Capa 2 (sintaxis real); el juez LLM (Capa 3) solo aconseja (sus errores pasan a avisos). Dejarlo listo para el bucle del supervisor (reintento SQL↔Judge).
 
 **Criterios de aceptación**
 
@@ -377,20 +379,20 @@ El veredicto es lo que mira el supervisor (SPEC-10): si no supera el Judge (inv�
 - [X] Presencia de `DROP|DELETE|INSERT|UPDATE|TRUNCATE|ALTER|GRANT` (palabra completa) → inválida, con error explícito
 - [X] Patrones de inyección (`;` multi-sentencia, `--`, `/* */`) → inválida
 - [X] Un `SELECT` legítimo con JOINs y CTE → válida
-- [X] Si la Capa 1 rechaza, el resultado lo deja claro y el flujo no llega a ejecutar (invariante de seguridad)
-- [X] (Capa 2) `EXPLAIN` contra la BD: si la BD acepta la consulta es válida; si la rechaza, inválida con el error de la BD
-- [X] (Capa 3) dado SQL + contexto, devuelve un veredicto; **el juez LLM no bloquea por sí solo** (sus errores pasan a avisos); si responde algo no interpretable, se trata como error de dominio sin romper
-- [X] Tests: Capa 1 con tabla parametrizada (pura, sin dobles); Capa 2 con doble de la conexión (`dryRun`); Capa 3 con `IChatModel` doblado
+- [X] Si la Capa 1 (seguridad) rechaza, el resultado lo deja claro y el flujo no llega a ejecutar (invariante de seguridad)
+- [X] (Capa 2, sintaxis real) `EXPLAIN` contra la BD: si la BD acepta la consulta es válida; si la rechaza, inválida con el error de la BD
+- [X] (Capa 3, juez LLM) dado SQL + contexto, devuelve un veredicto; **el juez LLM no bloquea por sí solo** (sus errores pasan a avisos); si responde algo no interpretable, se trata como error de dominio sin romper
+- [X] Tests: Capa 1 (seguridad) con tabla parametrizada (pura, sin dobles); Capa 2 (sintaxis real) con doble de la conexión (`dryRun`); Capa 3 (juez LLM) con `IChatModel` doblado
 
 ```bash
-cd backend && npm test                   # Capa 1 (pura) + Capa 2 y Capa 3 con dobles
+cd backend && npm test                   # Capa 1 (seguridad, pura) + Capa 2 (sintaxis real) y Capa 3 (juez LLM) con dobles
 ```
 
 ---
 
 ### SPEC-07 — Execute (ejecución segura de solo lectura)
 
-**Objetivo.** Una vez tengo una consulta validada (SPEC-06), quiero ejecutarla de verdad contra la BD objetivo y traer los resultados. Es el paso que convierte la SQL en datos. Lo importante aquí no es solo ejecutar, sino hacerlo **sin poder hacer daño**: solo lectura, con la Capa 1 del Judge como última barrera justo antes de lanzar la consulta, y con topes que eviten que una consulta enorme o lenta tumbe el terminal.
+**Objetivo.** Una vez tengo una consulta validada (SPEC-06), quiero ejecutarla de verdad contra la BD objetivo y traer los resultados. Es el paso que convierte la SQL en datos. Lo importante aquí no es solo ejecutar, sino hacerlo **sin poder hacer daño**: solo lectura, con la Capa 1 (seguridad) del Judge como última barrera justo antes de lanzar la consulta, y con topes que eviten que una consulta enorme o lenta tumbe el terminal.
 
 **Contrato.** Dada una sentencia SQL ya validada, la ejecuto en una sesión de solo lectura contra la BD objetivo y devuelvo el resultado: los nombres de las columnas, las filas, cuántas filas devuelve y si se ha truncado por el tope (las columnas salen de las propias filas; si la consulta no devuelve filas, la lista de columnas va vacía). Antes de ejecutar nada, vuelvo a pasar la comprobación de seguridad (`checkSqlSafety`); si dijera que no es de solo lectura, lanzo `UnsafeQueryError` y **no toco la BD**. Es defensa en profundidad: aunque algo se saltara las comprobaciones anteriores, la consulta no llega a ejecutarse. Recibo la conexión a la BD inyectada (real por defecto, vía `TargetDatabaseFactory`), para probar el caso de uso con un doble sin Docker.
 
@@ -433,6 +435,8 @@ cd backend && npm run test:integration   # ejecución real sobre Arcadia (opt-in
 - **Modificar** → edito la SQL a mano y vuelve al Judge a re-validarla.
 - **Fijar tabla(s) y relanzar** → indico una o varias tablas que deben entrar sí o sí; el flujo **vuelve a la recuperación con esas tablas fijadas** (`mustInclude`, SPEC-04), regenera el contexto y la SQL, y vuelve a pararse aquí. Es la UX determinista del must-include: el flujo lo controlo yo, no el LLM.
 
+> **Actualizado en SPEC-15.** La acción "fijar tablas" ya no es una opción propia: quedó subsumida en la acción **"Afinar"** (SPEC-15), que combina una indicación en lenguaje natural con las tablas a forzar. El comportamiento determinista de las tablas (`mustInclude`) se conserva íntegro; forzar tablas es ahora el caso de afinar sin indicación de texto.
+
 Hay un caso especial: una consulta que **no logró pasar el Judge** tras agotar los reintentos (ver SPEC-10) también llega aquí, pero marcada como **fracasada**. La veo y la puedo evaluar (con el veredicto del Judge a la vista), pero **no se puede aprobar para ejecutar**: las opciones útiles son rechazar, modificarla a mano o fijar tablas y relanzar. Así el humano siempre tiene la última palabra sobre la consulta, sin que se ejecute algo que el Judge no avaló.
 
 **Mecanismo.** El nodo de revisión se compila con `interrupt_before`: LangGraph pausa el grafo y **persiste el estado** (checkpointer en PostgreSQL), recuperable por `thread_id`; al reanudar con mi decisión, sigue por la rama que toque. Las tablas fijadas viven en el estado, así que se conservan entre reintentos.
@@ -454,7 +458,7 @@ Hay un caso especial: una consulta que **no logró pasar el Judge** tras agotar 
 - [X] Fijar una tabla (p. ej. `t_042`) y relanzar → la recuperación se rehace con esa tabla fijada y aparece en el contexto nuevo
 - [X] Una tabla fijada que no existe en el esquema se avisa y se ignora
 - [X] La consulta y la evaluación del Judge se muestran en cajas (`boxen`) separadas y con color (`chalk`) según el veredicto
-- [X] Tests de integración con checkpointer: pausa/persistencia, reanudar-aprobar, reanudar-fijar-tabla
+- [X] Tests de integración con checkpointer: pausa/persistencia (recuperable por `thread_id`). Las ramas aprobar/fijar-tabla las cubren los tests unitarios con `MemorySaver` (mismo comportamiento, sin Docker); el test de integración se centra en lo que un doble no puede demostrar: la persistencia real en PostgreSQL
 
 ```bash
 cd backend && npm run test:integration   # human review con checkpointer (opt-in)
@@ -464,19 +468,42 @@ cd backend && npm run test:integration   # human review con checkpointer (opt-in
 
 ### SPEC-10 — Supervisor (enrutador determinista)
 
-**Objetivo.** Unir todas las piezas en un único flujo, enrutado con reglas sobre el estado compartido (no con un LLM): Schema → SQL → Judge → (decisión) → Human Review → Execute. Llega al final, cuando las piezas ya existen.
+**Objetivo.** Unir todas las piezas en un único flujo, enrutado con reglas sobre el estado compartido (no con un LLM): Schema → SQL → Judge → (decisión) → Human Review → Execute. Formalizo sobre el esqueleto del pipeline (SPEC-08) el bucle automático de reintento que hasta ahora faltaba: si el Judge no da la consulta por buena, vuelve al SQL Agent con sus errores antes de subirla a que la revise el humano.
 
-**Política del bucle Judge ↔ SQL Agent (anotado, se detallará al implementar).** Es el corazón del supervisor:
+**Contrato.**
 
-- **Umbral de aprobación configurable.** El Judge da por buena la consulta solo si es válida y su confianza supera el umbral (`minConfidence`, SPEC-06). Por debajo, cuenta como no superada.
-- **Si no supera el Judge → vuelve al SQL Agent.** Se le devuelve la consulta con los errores/avisos del Judge para que la rehaga. Es el reintento SQL↔Judge.
-- **Número de intentos configurable.** El estado lleva la cuenta de intentos; cada vuelta al SQL Agent suma uno, hasta un máximo configurable.
-- **Si se agotan los intentos sin superarlo → consulta fracasada.** No se da por perdida en silencio: igualmente pasa a la **Human Review (SPEC-08)** marcada como fracasada, para que el humano la vea y la evalúe, pero **no se podrá ejecutar** (solo rechazar, modificar a mano o fijar tablas y relanzar).
-- **Si lo supera (dentro de los intentos) → sigue el circuito normal:** Human Review y, tras la aprobación, Execute (SPEC-07).
+- *El bucle Judge↔SQL vive dentro del propio grafo del pipeline (SPEC-08), no es un módulo aparte.* Tras el Judge, si el veredicto no es válido (falla la Capa 1 de seguridad o la Capa 2 de sintaxis real, o su confianza queda por debajo de `MIN_CONFIDENCE`) y quedan intentos, el pipeline vuelve automáticamente al SQL Agent — sin pasar por Human Review ni rehacer la recuperación (las tablas no cambian, solo la SQL).
+- *Umbral y tope de intentos, configurables.* `MIN_CONFIDENCE` (confianza mínima del juez LLM para dar la consulta por buena) y `MAX_JUDGE_ATTEMPTS` (número total de intentos de generación, contando el primero) son constantes con nombre, igual que `SEMANTIC_TOP_K`/`MAX_CONTEXT_TABLES` en la recuperación: son las palancas del *ablation* (SPEC-11).
+- *El SQL Agent corrige, no repite a ciegas.* En un reintento, `generateSql` recibe también la SQL del intento anterior y los errores/avisos del Judge, para que el LLM corrija el problema concreto en vez de generar de cero (y, previsiblemente, repetir el mismo fallo).
+- *El reintento automático no se aplica a una SQL editada a mano.* Si el humano modificó la consulta (`modify`, SPEC-08), el veredicto del Judge sobre esa edición siempre vuelve a Human Review, gane o pierda: el reintento automático descartaría en silencio lo que el humano acaba de escribir, y eso no es aceptable.
+- *Si se agotan los intentos sin superar el Judge* → la consulta llega a Human Review marcada como **fracasada** (ya montado en SPEC-08): se ve, se puede rechazar, modificar a mano o fijar tablas y relanzar, pero no aprobar.
+- *Si lo supera dentro de los intentos* → sigue el circuito normal: Human Review y, tras la aprobación, Execute.
+- *El contador de intentos se reinicia al entrar en la recuperación (`retrieve`)*: tanto al empezar como al fijar tablas y relanzar, porque es un ciclo nuevo.
 
-El umbral y el máximo de intentos son palancas de configuración: suben o bajan lo estricto que es el sistema antes de pedir ayuda al humano.
+**Pasos**
 
-*(Contrato completo, pasos y criterios de aceptación: se detallarán al abordar el SPEC-10.)*
+1. Ampliar el contrato de `generateSql` (SPEC-05) para aceptar, opcionalmente, el intento anterior (la SQL y los errores/avisos del Judge) y ajustar el prompt para pedir explícitamente la corrección del problema señalado, no una generación desde cero.
+2. Añadir al estado del pipeline (`PipelineState`, SPEC-08) el contador `attempts`, inicializado y reiniciado en el nodo `retrieve`.
+3. Pasar `minConfidence: MIN_CONFIDENCE` a `judgeSql` desde las dependencias por defecto del pipeline (hoy no se pasaba, así que la opinión del juez LLM nunca invalidaba la consulta).
+4. Nueva función de enrutado tras el Judge (`routeAfterJudge`): válido → Human Review; inválido y la SQL viene de una modificación manual → Human Review (sin reintento); inválido, no es una modificación manual y quedan intentos → sumar uno y volver al SQL Agent con el error; inválido y agotados los intentos → Human Review (fracasada).
+5. En el CLI (revisión humana): mostrar cuántos intentos ha hecho el SQL Agent antes de llegar a la revisión (transparencia, en línea con SPEC-13).
+6. Tests: unit con dobles — reintenta hasta `MAX_JUDGE_ATTEMPTS` pasando el error al SQL Agent en cada vuelta; si supera el Judge antes de agotarlos, sigue a Human Review; si los agota, llega a Human Review fracasada; una SQL modificada a mano no entra en el bucle automático aunque el Judge la invalide; fijar tablas reinicia el contador.
+
+**Criterios de aceptación**
+
+- [X] Si el Judge invalida la consulta (o su confianza queda por debajo de `MIN_CONFIDENCE`) y quedan intentos, el pipeline vuelve automáticamente al SQL Agent con los errores del Judge, sin pasar por Human Review
+- [X] El SQL Agent recibe el intento anterior y los errores, y la nueva consulta intenta corregir el problema señalado
+- [X] `MIN_CONFIDENCE` y `MAX_JUDGE_ATTEMPTS` son constantes con nombre, configurables para el *ablation* (SPEC-11)
+- [X] Una SQL modificada a mano por el humano nunca entra en el reintento automático: su veredicto del Judge vuelve siempre a Human Review
+- [X] Si se agotan los intentos sin superar el Judge, la consulta llega a Human Review marcada como fracasada (no se puede aprobar)
+- [X] Si el Judge la da por buena dentro de los intentos, sigue el circuito normal (Human Review → Execute)
+- [X] Fijar tablas y relanzar reinicia el contador de intentos (es un ciclo nuevo)
+- [X] En la revisión humana se ve cuántos intentos ha hecho el SQL Agent
+- [X] Tests unit con dobles: reintento hasta el tope con el error propagado, éxito antes de agotarlos, agotamiento → fracasada, modificación a mano exenta del reintento, reinicio del contador al fijar tablas
+
+```bash
+cd backend && npm test    # unit del bucle de reintento Judge↔SQL (con dobles)
+```
 
 ---
 
@@ -595,4 +622,61 @@ cd backend && npm start   # menú → "Depurar recuperación (ver el circuito)"
 cd backend && npm test    # unit del Judge (evaluación de propósito, con doble de IChatModel)
 ```
 
+---
 
+### SPEC-15 — Afinar la consulta en la revisión (indicaciones en lenguaje natural)
+
+**Objetivo.** En la revisión (SPEC-08), cuando la consulta propuesta casi encaja pero no del todo, quiero poder decir en lenguaje natural qué ajustar ("añade también la popularidad por wishlist") y que el sistema rehaga la consulta con esa indicación, sin tener que rechazarla y reescribir la pregunta de cero. Es la vía **guiada por el humano** del bucle: veo lo que ha propuesto y le doy más contexto para que lo valore y lo haga mejor. Aprovecho para **fusionar aquí la acción de "fijar tablas" de SPEC-08**: fijar tablas ya era un caso de afinar (una indicación estructurada), así que en vez de dos opciones separadas queda una sola, para no recargar el punto de revisión. Es la acción para el usuario técnico que ve que algo no está del todo bien; el seguimiento conversacional sobre los resultados ya ejecutados es otra cosa (SPEC-16).
+
+**Contrato.**
+
+- *Nueva acción de revisión "Afinar", que sustituye a "fijar tablas".* En la revisión, además de aprobar/rechazar/modificar-a-mano, puedo **Afinar**: doy (a) una **indicación en lenguaje natural** (opcional) y/o (b) una o varias **tablas a forzar** (opcional); exijo al menos una de las dos. El grafo rehace el ciclo (recuperación → SQL → Judge) y vuelve a pararse en la revisión.
+- *Las tablas forzadas siguen siendo deterministas.* Como el "must-include" de SPEC-08, las tablas que indico entran seguro en el contexto (`mustInclude`), estén o no en el ranking; una que no existe en el esquema se avisa y se ignora (D-08, sin cambios).
+- *La indicación guía tanto la recuperación como la generación.* La indicación se suma a la pregunta al **recuperar** (así "añade wishlist" puede hacer aparecer esa tabla por significado, sin obligarme a fijarla), y se le pasa al **SQL Agent** junto a la consulta anterior como punto de partida, para que la corrija/amplíe en vez de generar de cero. Es el mismo mecanismo del reintento del supervisor (SPEC-10), pero la "instrucción de qué mejorar" la escribe el humano en lugar de venir de los errores del Judge. Forzar una tabla es la garantía dura cuando no me quiero fiar de que la recuperación la traiga.
+- *Afinar reinicia el ciclo del Judge.* Rehacer la recuperación reinicia el contador de intentos (SPEC-10): la consulta afinada dispone de sus `MAX_JUDGE_ATTEMPTS` de reintento automático como cualquier ciclo nuevo. Si la afinada tampoco pasa el Judge, se comporta igual (reintento automático y, si se agota, revisión marcada fracasada).
+- *Iterativo.* Puedo afinar varias veces seguidas; cada afinado parte de la consulta actual (que ya incorpora los afinados anteriores) más mi nueva indicación. Las indicaciones se acumulan para la recuperación y las tablas forzadas también.
+- *Separación de responsabilidades.* La indicación cambia **cómo** se escribe la SQL (y ayuda a encontrar tablas); forzar tablas garantiza **qué** tablas están disponibles.
+
+**Pasos**
+
+1. Cambiar `HumanDecision`: sustituir la acción `pin` (tablas) por `refine` con `{ guidance?: string, tables?: string[] }` (al menos uno no vacío).
+2. Estado del pipeline (`PipelineState`): añadir `refinements: string[]` (acumula las indicaciones; persiste entre ciclos, no se reinicia en `retrieve`). `mustInclude` sigue existiendo para las tablas forzadas.
+3. Generalizar el "punto de mejora" de `generateSql` (SPEC-05/10) de `{ sql, verdict }` a `{ previousSql, instructions: string }`, y mover el formateo del feedback del Judge (`describeJudgeFeedback`) fuera de `generateSql` al nodo `generate` del pipeline. Así `generateSql` deja de conocer `JudgeVerdict`: solo recibe "aquí tienes tu intento anterior y esto es lo que hay que ajustar", venga del Judge o del humano.
+4. Nodo `humanReview` (acción `refine`): acumular las tablas en `mustInclude`, añadir la indicación a `refinements`; enrutar a `retrieve`.
+5. Nodo `retrieve`: la búsqueda semántica usa la pregunta **más las indicaciones acumuladas**; `mustInclude` fuerza las tablas indicadas; reinicia `attempts` (no toca `refinements`).
+6. Nodo `generate`: si es el primer intento tras un afinado (hay indicaciones, `attempts === 0` y existe SQL previa) → guío con las indicaciones + la SQL anterior; si es un reintento automático del supervisor (`attempts > 0`, veredicto inválido) → con los problemas del Judge (SPEC-10).
+7. CLI (revisión): sustituir la opción "fijar tablas" por **"Afinar"**, recogida con **dos sub-preguntas guiadas** (no una plantilla por rellenar, que en un terminal de una línea es frágil y obliga a parsear): primero la **indicación en lenguaje natural** (texto libre, con un ejemplo en el propio mensaje — es la principal), y después **forzar tablas** (nombres separados por comas, opcional, se salta con Enter). Exijo al menos una de las dos no vacía; si las dos van vacías, vuelvo a las opciones de la revisión sin relanzar. Seguir mostrando el aviso de tablas forzadas inexistentes (`ignoredPinned`).
+8. Actualizar SPEC-08: la acción independiente "fijar tablas y relanzar" queda **subsumida** en la acción "Afinar" de SPEC-15 (mismo comportamiento determinista para las tablas, ahora con indicación opcional).
+9. Tests unit con dobles: afinar solo con indicación reescribe la SQL guiando al agente (recibe la indicación + la SQL anterior); afinar solo con tablas se comporta como el antiguo "fijar" (recuperación con esa tabla); una indicación puede traer una tabla nueva por la recuperación; afinar reinicia el contador de intentos; afinar iterativo parte de la SQL anterior.
+
+**Criterios de aceptación**
+
+- [X] En la revisión, "Afinar" acepta una indicación en lenguaje natural y/o tablas a forzar (al menos una), y relanza el ciclo hasta volver a la revisión
+- [X] La indicación llega al SQL Agent junto a la consulta anterior, y la nueva consulta intenta incorporar lo pedido en vez de generar de cero
+- [X] La indicación se suma a la pregunta en la recuperación: una tabla nueva mencionada puede entrar por significado sin fijarla
+- [X] Las tablas forzadas entran de forma determinista (`mustInclude`); una que no existe se avisa y se ignora
+- [X] Afinar reinicia el contador de intentos del Judge; la consulta afinada tiene su propio ciclo de reintento automático (SPEC-10)
+- [X] Puedo afinar varias veces seguidas, partiendo cada vez de la consulta actual
+- [X] La acción "fijar tablas" de SPEC-08 queda sustituida por "Afinar" (sin perder el comportamiento determinista de las tablas)
+- [X] `generateSql` ya no depende de `JudgeVerdict`: recibe `{ previousSql, instructions }`, y el pipeline decide las instrucciones (del Judge o del humano)
+- [X] Tests unit con dobles: solo indicación, solo tablas, indicación que trae tabla nueva, reinicio del contador, afinado iterativo
+
+```bash
+cd backend && npm test    # unit del afinado guiado (con dobles)
+```
+
+---
+
+### SPEC-16 — Seguimiento conversacional de una consulta (pregunta de seguimiento)
+
+**Objetivo.** Tras ejecutar una consulta y ver los resultados, quiero poder hacer una **pregunta de seguimiento** ligada a esa consulta ("¿y si además…?", "ahora agrúpalo por mes") sin empezar de cero, como una conversación sobre la propia consulta. Es el primer paso hacia el **análisis conversacional** (visión BI, README §12.3). Es distinto de "Afinar" (SPEC-15): afinar ocurre **antes** de ejecutar, sobre la consulta propuesta y para el usuario técnico que ve que algo falla; el seguimiento ocurre **después** de ejecutar, sobre los resultados que ya he visto.
+
+**Contrato (esbozo, se detallará al implementar).**
+
+- Tras ejecutar y mostrar los resultados, el CLI pregunta "¿quieres algo más de esta consulta?". Si no, termina y vuelve al menú. Si sí, pido la pregunta de seguimiento.
+- El seguimiento arranca un nuevo ciclo del pipeline llevando como contexto la pregunta y la SQL anteriores (y, si ayuda, la forma del resultado), para que el SQL Agent construya sobre lo ya hecho en vez de partir de cero.
+- Se apoya en el checkpointer que ya persiste el estado por `thread_id` (SPEC-08) y encaja con la gestión de conversaciones (SPEC-12), que da el hilo con nombre e historial.
+
+*(Contrato completo, pasos y criterios de aceptación: se detallarán al abordar el SPEC-16.)*
+
+---

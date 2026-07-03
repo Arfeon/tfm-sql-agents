@@ -66,10 +66,6 @@ export class PostgresTargetDatabase implements ITargetDatabase {
   async close(): Promise<void> {
     await this.client.end()
   }
-
-  getClient(): Client {
-    return this.client
-  }
 }
 
 /** Leo hasta `count` filas del cursor (envuelvo la API de callback en una promesa). */

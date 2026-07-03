@@ -1,17 +1,17 @@
 /**
- * Flujo de CLI: consulta NL→SQL con revisión humana (SPEC-08).
+ * Flujo de CLI: consulta NL→SQL con revisión humana (SPEC-08) y supervisor (SPEC-10).
  *
- * Lanza el pipeline (recuperación → SQL → Judge), que se PARA en la revisión antes
- * de ejecutar nada. Presento la consulta y el veredicto del Judge en cajas, recojo
- * mi decisión y reanudo el grafo por su `thread_id` hasta que apruebo (y se ejecuta),
- * rechazo, o el bucle de fijar/modificar me devuelve a la revisión.
+ * Lanza el pipeline (recuperación → SQL ↔ Judge, con reintento automático → revisión),
+ * que se PARA en la revisión antes de ejecutar nada. Presento la consulta y el veredicto
+ * del Judge en cajas, recojo mi decisión y reanudo el grafo por su `thread_id` hasta que
+ * apruebo (y se ejecuta), rechazo, o el bucle de afinar/modificar me devuelve a la revisión.
  */
 import { randomUUID } from 'node:crypto'
 import boxen from 'boxen'
 import chalk from 'chalk'
 import { select, input } from '@inquirer/prompts'
 import { loadTargetDatabases, sqlDialectFor } from '../graphsql/infrastructure/config/targetDatabases'
-import { createSqlPipelineGraph, HUMAN_REVIEW_NODE, type PipelineStateType } from '../graphsql/graph/pipelineGraph'
+import { createSqlPipelineGraph, HUMAN_REVIEW_NODE, MAX_JUDGE_ATTEMPTS, type PipelineStateType } from '../graphsql/graph/pipelineGraph'
 import { CheckpointerFactory } from '../graphsql/infrastructure/checkpoint/CheckpointerFactory'
 import type { JudgeVerdict, PurposeSource } from '../graphsql/domain/sql/JudgeVerdict'
 import type { HumanDecision } from '../graphsql/domain/sql/HumanDecision'
@@ -74,7 +74,14 @@ export async function runSqlPipeline(): Promise<void> {
 /** Presento la consulta y la evaluación del Judge en dos cajas separadas. */
 function presentReview(state: PipelineStateType): void {
   const tables = state.schemaContext?.tableNames ?? []
-  const sqlBody = `${chalk.cyan(state.sql?.text ?? '(sin consulta)')}\n\n${chalk.dim(`Tablas usadas: ${tables.join(', ') || '(ninguna)'}`)}`
+  const queryText = chalk.cyan(state.sql?.text ?? '(sin consulta)')
+  const tablesLine = chalk.dim(`Tablas usadas: ${tables.join(', ') || '(ninguna)'}`)
+  const bodyLines = [queryText, '', tablesLine]
+  // Solo muestro los intentos si hubo reintento automático (SPEC-10): con 1 no aporta nada.
+  if (state.attempts > 1) {
+    bodyLines.push('', chalk.dim(`Intentos del SQL Agent: ${state.attempts}/${MAX_JUDGE_ATTEMPTS} (el Judge no dio por buenos los anteriores)`))
+  }
+  const sqlBody = bodyLines.join('\n')
   console.log(
     boxen(sqlBody, {
       title: state.failed ? '❌ Consulta SQL (no superó el Judge)' : '📝 Consulta SQL propuesta',
@@ -146,8 +153,8 @@ function renderJudgeBox(verdict: JudgeVerdict): string {
 async function askHumanDecision(state: PipelineStateType): Promise<HumanDecision> {
   const choices = [
     ...(state.failed ? [] : [{ name: 'Aprobar y ejecutar', value: 'approve' as const }]),
+    { name: 'Afinar (dar indicaciones y/o forzar tablas)', value: 'refine' as const },
     { name: 'Modificar la SQL a mano', value: 'modify' as const },
-    { name: 'Fijar tabla(s) y relanzar', value: 'pin' as const },
     { name: 'Rechazar (no ejecutar)', value: 'reject' as const },
   ]
   const action = await select({ message: '¿Qué hago con esta consulta?', choices })
@@ -156,12 +163,33 @@ async function askHumanDecision(state: PipelineStateType): Promise<HumanDecision
     const sql = await input({ message: 'Edita la SQL:', default: state.sql?.text ?? '' })
     return { action: 'modify', sql }
   }
-  if (action === 'pin') {
-    const raw = await input({ message: 'Tablas a fijar (separadas por comas):' })
-    const tables = raw.split(',').map((name) => name.trim()).filter(Boolean)
-    return { action: 'pin', tables }
+  if (action === 'refine') {
+    return askRefine(state)
   }
   return { action } // approve | reject
+}
+
+/**
+ * Recojo el afinado (SPEC-15) con dos sub-preguntas guiadas: la indicación en
+ * lenguaje natural (la principal) y, opcional, tablas a forzar. Exijo al menos una;
+ * si las dos van vacías, vuelvo a las opciones de la revisión sin relanzar.
+ */
+async function askRefine(state: PipelineStateType): Promise<HumanDecision> {
+  const guidance = (
+    await input({ message: '¿Qué quieres ajustar? (p. ej. «añade la popularidad por wishlist» · Enter para omitir)' })
+  ).trim()
+  const rawTables = await input({ message: '¿Forzar alguna tabla? (separadas por comas · Enter para omitir)' })
+  const tables = rawTables.split(',').map((name) => name.trim()).filter(Boolean)
+
+  if (guidance === '' && tables.length === 0) {
+    console.log(chalk.dim('Afinar necesita una indicación o al menos una tabla; vuelvo a las opciones.'))
+    return askHumanDecision(state)
+  }
+  return {
+    action: 'refine',
+    guidance: guidance === '' ? undefined : guidance,
+    tables: tables.length === 0 ? undefined : tables,
+  }
 }
 
 /** Muestro el resultado de la ejecución (columnas y una vista de las filas). */

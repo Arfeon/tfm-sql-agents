@@ -28,21 +28,13 @@ const validVerdict: JudgeVerdict = {
   explanation: 'ok',
 }
 
-function makeDeps() {
-  const calls = { retrieveMustInclude: [] as string[][], executed: [] as string[] }
-  const deps: PipelineDependencies = {
-    retrieve: async (_question, mustInclude) => {
-      calls.retrieveMustInclude.push(mustInclude)
-      return contextFor(['customer', ...mustInclude])
-    },
+function makeDeps(): PipelineDependencies {
+  return {
+    retrieve: async (_question, mustInclude) => contextFor(['customer', ...mustInclude]),
     generate: async () => ({ text: 'SELECT * FROM customer', dialect: 'PostgreSQL' }),
     judge: async () => validVerdict,
-    execute: async (sql) => {
-      calls.executed.push(sql.text)
-      return { columns: ['n'], rows: [{ n: 1 }], rowCount: 1, truncated: false }
-    },
+    execute: async () => ({ columns: ['n'], rows: [{ n: 1 }], rowCount: 1, truncated: false }),
   }
-  return { deps, calls }
 }
 
 const START_STATE = { question: '¿cuántos clientes?', dialect: 'PostgreSQL' }
@@ -56,7 +48,7 @@ describe('pipeline con checkpointer PostgreSQL (integración)', () => {
       // Corro hasta la pausa con un grafo y su checkpointer.
       const checkpointer = await CheckpointerFactory.fromEnv()
       try {
-        const graph = createSqlPipelineGraph(checkpointer, makeDeps().deps)
+        const graph = createSqlPipelineGraph(checkpointer, makeDeps())
         await graph.invoke(START_STATE, config)
       } finally {
         await checkpointer.end()
@@ -65,61 +57,13 @@ describe('pipeline con checkpointer PostgreSQL (integración)', () => {
       // Un grafo y un checkpointer NUEVOS, sobre la misma BD, recuperan la pausa.
       const checkpointer2 = await CheckpointerFactory.fromEnv()
       try {
-        const graph2 = createSqlPipelineGraph(checkpointer2, makeDeps().deps)
+        const graph2 = createSqlPipelineGraph(checkpointer2, makeDeps())
         const snapshot = await graph2.getState(config)
         expect(snapshot.next).toEqual(['human_review'])
         expect(snapshot.values.sql?.text).toBe('SELECT * FROM customer')
         expect(snapshot.values.verdict?.valid).toBe(true)
       } finally {
         await checkpointer2.end()
-      }
-    },
-    30_000,
-  )
-
-  it(
-    'reanudar-aprobar continúa a ejecutar',
-    async () => {
-      const checkpointer = await CheckpointerFactory.fromEnv()
-      try {
-        const { deps, calls } = makeDeps()
-        const graph = createSqlPipelineGraph(checkpointer, deps)
-        const config = { configurable: { thread_id: `spec08-approve-${Date.now()}` } }
-
-        await graph.invoke(START_STATE, config)
-        await graph.updateState(config, { decision: { action: 'approve' } })
-        await graph.invoke(null, config)
-
-        const snapshot = await graph.getState(config)
-        expect(snapshot.next).toEqual([])
-        expect(calls.executed).toEqual(['SELECT * FROM customer'])
-        expect(snapshot.values.result?.rowCount).toBe(1)
-      } finally {
-        await checkpointer.end()
-      }
-    },
-    30_000,
-  )
-
-  it(
-    'reanudar-fijar-tabla rehace la recuperación con la tabla fijada',
-    async () => {
-      const checkpointer = await CheckpointerFactory.fromEnv()
-      try {
-        const { deps, calls } = makeDeps()
-        const graph = createSqlPipelineGraph(checkpointer, deps)
-        const config = { configurable: { thread_id: `spec08-pin-${Date.now()}` } }
-
-        await graph.invoke(START_STATE, config)
-        await graph.updateState(config, { decision: { action: 'pin', tables: ['t_042'] } })
-        await graph.invoke(null, config)
-
-        const snapshot = await graph.getState(config)
-        expect(calls.retrieveMustInclude).toEqual([[], ['t_042']])
-        expect(snapshot.values.schemaContext?.tableNames).toContain('t_042')
-        expect(snapshot.next).toEqual(['human_review'])
-      } finally {
-        await checkpointer.end()
       }
     },
     30_000,

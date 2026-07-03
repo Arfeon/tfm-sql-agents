@@ -101,11 +101,15 @@ export function parseJudgeVerdict(raw: string): JudgeVerdict {
     throw new JudgeResponseError(raw)
   }
 
-  if (typeof parsed !== 'object' || parsed === null || typeof (parsed as { valid?: unknown }).valid !== 'boolean') {
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new JudgeResponseError(raw)
+  }
+  if (typeof (parsed as { valid?: unknown }).valid !== 'boolean') {
     throw new JudgeResponseError(raw)
   }
 
   const fields = parsed as Record<string, unknown>
+  const isValid = fields.valid as boolean
   const errors = toStringArray(fields.errors)
   const tablePurposes = toTablePurposes(fields.table_purposes)
   // El aviso de las tablas usadas "por suposición" lo genero yo a partir de
@@ -116,10 +120,13 @@ export function parseJudgeVerdict(raw: string): JudgeVerdict {
       (purpose) =>
         `Se usa la tabla ${purpose.table} por SUPOSICIÓN (nombre opaco y sin descripción); se asume que contiene "${purpose.purpose}". Verifícalo antes de fiarte del resultado.`,
     )
+  // Si el LLM la marca inválida pero no da errores, pongo un motivo por defecto.
+  const reportedErrors =
+    isValid || errors.length > 0 ? errors : ['El juez LLM marcó la consulta como no válida sin detallar el motivo.']
   return {
-    valid: fields.valid as boolean,
+    valid: isValid,
     confidence: toConfidence(fields.confidence),
-    errors: (fields.valid as boolean) || errors.length > 0 ? errors : ['El juez LLM marcó la consulta como no válida sin detallar el motivo.'],
+    errors: reportedErrors,
     warnings: [...toStringArray(fields.warnings), ...assumedWarnings],
     suggestions: toStringArray(fields.suggestions),
     tablesVerified: toStringArray(fields.tables_verified),
@@ -144,7 +151,9 @@ function toTablePurposes(value: unknown): TablePurpose[] {
     if (typeof fields.table !== 'string') {
       continue
     }
-    const source = PURPOSE_SOURCES.includes(fields.source as PurposeSource) ? (fields.source as PurposeSource) : 'assumed'
+    // Una fuente que no reconozco la trato como "assumed" (conservador).
+    const isKnownSource = PURPOSE_SOURCES.includes(fields.source as PurposeSource)
+    const source: PurposeSource = isKnownSource ? (fields.source as PurposeSource) : 'assumed'
     purposes.push({
       table: fields.table,
       purpose: typeof fields.purpose === 'string' ? fields.purpose : '',

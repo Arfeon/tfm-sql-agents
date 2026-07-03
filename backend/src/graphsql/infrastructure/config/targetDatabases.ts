@@ -42,10 +42,15 @@ export function loadTargetDatabases(env: NodeJS.ProcessEnv = process.env): Targe
   return [readTarget(env, '')]
 }
 
+/** ¿Hay una BD objetivo declarada en el índice dado? (existe su clave `_NAME`). */
+function hasTargetAt(env: NodeJS.ProcessEnv, index: number): boolean {
+  return env[`TARGET_DB_${index}_NAME`] !== undefined
+}
+
 /** Recorre TARGET_DB_1_*, TARGET_DB_2_*, … hasta el primer índice sin `NAME`. */
 function loadNumberedTargets(env: NodeJS.ProcessEnv): TargetDatabaseConfig[] {
   const targets: TargetDatabaseConfig[] = []
-  for (let index = 1; env[`TARGET_DB_${index}_NAME`]; index++) {
+  for (let index = 1; hasTargetAt(env, index); index++) {
     targets.push(readTarget(env, `${index}_`))
   }
   return targets

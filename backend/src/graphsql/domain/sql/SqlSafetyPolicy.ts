@@ -54,9 +54,19 @@ export function checkSqlSafety(sql: string): QueryVerdict {
   return errors.length === 0 ? validVerdict() : invalidVerdict(errors)
 }
 
+/** ¿La sentencia empieza por esta palabra? (como palabra completa, sin distinguir mayúsculas). */
+function startsWithWord(word: string, statement: string): boolean {
+  return new RegExp(`^${word}\\b`, 'i').test(statement)
+}
+
+/** ¿Aparece esta palabra completa en cualquier punto de la sentencia? (sin distinguir mayúsculas). */
+function containsWord(word: string, statement: string): boolean {
+  return new RegExp(`\\b${word}\\b`, 'i').test(statement)
+}
+
 /** La sentencia tiene que empezar por SELECT o WITH. */
 function collectPrefixError(statement: string, errors: string[]): void {
-  const startsReadOnly = READ_ONLY_PREFIXES.some((prefix) => new RegExp(`^${prefix}\\b`, 'i').test(statement))
+  const startsReadOnly = READ_ONLY_PREFIXES.some((prefix) => startsWithWord(prefix, statement))
   if (!startsReadOnly) {
     errors.push(`La sentencia debe empezar por ${READ_ONLY_PREFIXES.join(' o ')} (solo se permiten consultas de lectura).`)
   }
@@ -65,7 +75,7 @@ function collectPrefixError(statement: string, errors: string[]): void {
 /** Ninguna palabra peligrosa puede aparecer como palabra completa. */
 function collectDangerousKeywordErrors(statement: string, errors: string[]): void {
   for (const keyword of DANGEROUS_KEYWORDS) {
-    if (new RegExp(`\\b${keyword}\\b`, 'i').test(statement)) {
+    if (containsWord(keyword, statement)) {
       errors.push(`Palabra no permitida: "${keyword}". Solo se admiten consultas de solo lectura.`)
     }
   }

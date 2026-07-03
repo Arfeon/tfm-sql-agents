@@ -88,6 +88,11 @@ interface RetrievalInternals {
   limited: TableSchema[]
 }
 
+/** Concateno dos listas de nombres y quito duplicados, conservando el orden. */
+function uniqueNames(first: string[], second: string[]): string[] {
+  return Array.from(new Set(first.concat(second)))
+}
+
 /**
  * El circuito de recuperación en un único sitio (lo comparten `retrieveSchemaContext`
  * y `explainSchemaRetrieval`, para que la explicación sea exactamente la misma
@@ -110,14 +115,15 @@ async function runRetrieval(
 
   // 2. Las candidatas son las top-K por significado más las fijadas; expando por FK.
   const topKNames = ranked.slice(0, topK).map((match) => match.tableName)
-  const candidateNames = [...new Set([...pinned, ...topKNames])]
+  const candidateNames = uniqueNames(pinned, topKNames)
   const expanded = await deps.expandByForeignKeys(candidateNames)
 
   // 3. Acoto por similitud, pero las fijadas nunca se caen del contexto.
   const pinnedSet = new Set(pinned)
-  const byScore = (a: TableSchema, b: TableSchema) => (scoreByName.get(b.name) ?? 0) - (scoreByName.get(a.name) ?? 0)
+  const scoreOf = (table: TableSchema) => scoreByName.get(table.name) ?? 0
+  const byScoreDescending = (a: TableSchema, b: TableSchema) => scoreOf(b) - scoreOf(a)
   const pinnedTables = expanded.filter((table) => pinnedSet.has(table.name))
-  const rest = expanded.filter((table) => !pinnedSet.has(table.name)).sort(byScore)
+  const rest = expanded.filter((table) => !pinnedSet.has(table.name)).sort(byScoreDescending)
   const limited = [...pinnedTables, ...rest].slice(0, Math.max(maxTables, pinnedTables.length))
 
   return { topK, maxTables, ranked, scoreByName, pinned, topKNames, candidateNames, expanded, limited }
@@ -163,8 +169,11 @@ export async function explainSchemaRetrieval(
     .map((table) => ({ tableName: table.name, score: scoreByName.get(table.name) ?? 0 }))
     .sort((a, b) => b.score - a.score)
 
-  const reasonFor = (name: string): InclusionReason =>
-    pinnedSet.has(name) ? 'pinned' : topKSet.has(name) ? 'semantic' : 'expansion'
+  const reasonFor = (name: string): InclusionReason => {
+    if (pinnedSet.has(name)) return 'pinned'
+    if (topKSet.has(name)) return 'semantic'
+    return 'expansion'
+  }
 
   const finalContext: ContextTable[] = limited.map((table) => ({
     tableName: table.name,

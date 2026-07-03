@@ -14,16 +14,7 @@ import { LocalChatModel } from './LocalChatModel'
 export class ChatModelFactory {
   /** Creo el adaptador del proveedor indicado. */
   static create(provider: LlmProvider): IChatModel {
-    switch (provider) {
-      case LlmProvider.OpenAI:
-        return OpenAIChatModel.fromEnv()
-      case LlmProvider.Local:
-        return LocalChatModel.fromEnv()
-      default:
-        throw new Error(
-          `Proveedor LLM no soportado: "${provider}". Valores válidos: ${Object.values(LlmProvider).join(', ')}.`,
-        )
-    }
+    return ChatModelFactory.buildAdapter(provider)
   }
 
   /** Creo el adaptador del proveedor configurado en `LLM_PROVIDER`. */
@@ -38,11 +29,16 @@ export class ChatModelFactory {
    * da texto). Reutilizo la misma selección y config de entorno.
    */
   static createLangChainModel(provider: LlmProvider): ChatOpenAI {
+    return ChatModelFactory.buildAdapter(provider).langChainModel
+  }
+
+  /** Elige y construye solo el adaptador del proveedor indicado (sin inicializar los demás). */
+  private static buildAdapter(provider: LlmProvider): OpenAIChatModel | LocalChatModel {
     switch (provider) {
       case LlmProvider.OpenAI:
-        return OpenAIChatModel.fromEnv().langChainModel
+        return OpenAIChatModel.fromEnv()
       case LlmProvider.Local:
-        return LocalChatModel.fromEnv().langChainModel
+        return LocalChatModel.fromEnv()
       default:
         throw new Error(
           `Proveedor LLM no soportado: "${provider}". Valores válidos: ${Object.values(LlmProvider).join(', ')}.`,

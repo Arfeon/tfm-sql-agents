@@ -7,6 +7,12 @@
  * código), con su dialecto. El dialecto se inyecta como variable, así la SQL sale
  * en la sintaxis del motor que toque (PostgreSQL, SQL Server…).
  *
+ * Si vengo de una revisión (SPEC-10/15) recibo también la consulta anterior y una
+ * instrucción de qué ajustar, y se las paso al LLM para que la corrija/amplíe en
+ * vez de generar a ciegas otra vez. No sé de dónde sale esa instrucción (de los
+ * errores del Judge en el reintento automático, o de la indicación del humano al
+ * afinar): quien me llama me la da ya formateada como texto.
+ *
  * Recibo el `IChatModel` inyectado (real por defecto), para probarlo con un doble.
  */
 import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
@@ -21,6 +27,17 @@ export interface SqlGenerationDependencies {
 /** Implementación real: el modelo configurado en el entorno (`LLM_PROVIDER`). */
 export const defaultSqlGenerationDependencies: SqlGenerationDependencies = {
   createChatModel: () => ChatModelFactory.fromEnv(),
+}
+
+/**
+ * Una revisión de la consulta anterior: la SQL que ya se generó más lo que hay que
+ * ajustar (ya en texto). Sirve tanto para el reintento automático del supervisor
+ * (SPEC-10, la instrucción son los problemas del Judge) como para el afinado del
+ * humano (SPEC-15, la instrucción es su indicación en lenguaje natural).
+ */
+export interface Revision {
+  previousSql: SqlStatement
+  instructions: string
 }
 
 /** Mensaje de sistema con las reglas, parametrizado por el dialecto del motor. */
@@ -48,12 +65,21 @@ export async function generateSql(
   question: string,
   schemaContext: SchemaContext,
   dialect: string,
+  revision?: Revision,
   deps: SqlGenerationDependencies = defaultSqlGenerationDependencies,
 ): Promise<SqlStatement> {
   const model = deps.createChatModel()
+  const userMessageParts = [`Esquema disponible (DDL):\n\n${schemaContext.ddl}`, `Pregunta: ${question}`]
+  if (revision) {
+    userMessageParts.push(
+      `Tu consulta anterior:\n${revision.previousSql.text}`,
+      `Lo que hay que ajustar:\n${revision.instructions}`,
+      'Reescribe la consulta teniéndolo en cuenta, sobre el esquema disponible.',
+    )
+  }
   const reply = await model.chat([
     { role: 'system', content: buildSqlSystemPrompt(dialect) },
-    { role: 'user', content: `Esquema disponible (DDL):\n\n${schemaContext.ddl}\n\nPregunta: ${question}` },
+    { role: 'user', content: userMessageParts.join('\n\n') },
   ])
   return { text: cleanSql(reply), dialect }
 }

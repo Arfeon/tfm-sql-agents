@@ -19,6 +19,7 @@ import { generateSql } from '../application/sqlGeneration'
 import { judgeSql } from '../application/sqlJudging'
 import type { JudgeVerdict } from '../domain/sql/JudgeVerdict'
 import { loadTargetDatabases, sqlDialectFor } from '../infrastructure/config/targetDatabases'
+import { NO_RELEVANT_TABLES_MESSAGE } from './schemaTools'
 
 /**
  * Formateo el veredicto del Judge como una sección propia, separada de la consulta
@@ -54,7 +55,7 @@ const generateSqlTool = tool(
   async ({ pregunta }) => {
     const context = await retrieveSchemaContext(pregunta)
     if (context.tableNames.length === 0) {
-      return 'No encontré tablas relevantes. ¿Está vectorizado el esquema? (CLI → "Escanear el esquema").'
+      return NO_RELEVANT_TABLES_MESSAGE
     }
     const dialect = sqlDialectFor(loadTargetDatabases()[0])
     const sql = await generateSql(pregunta, context, dialect)

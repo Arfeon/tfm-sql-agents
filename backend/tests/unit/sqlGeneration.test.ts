@@ -1,5 +1,5 @@
 /**
- * Tests unitarios del SQL Agent (SPEC-05).
+ * Tests unitarios del SQL Agent (SPEC-05 + reintento/afinado, SPEC-10/15).
  *
  * No tocan red: doblo el `IChatModel` y compruebo que el prompt lleva el DDL, la
  * pregunta y el dialecto, que la salida viene limpia (sin vallas) y que devuelve
@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { generateSql, cleanSql } from '../../src/graphsql/application/sqlGeneration'
-import type { SqlGenerationDependencies } from '../../src/graphsql/application/sqlGeneration'
+import type { SqlGenerationDependencies, Revision } from '../../src/graphsql/application/sqlGeneration'
 import type { IChatModel, ChatMessage } from '../../src/graphsql/domain/ports/IChatModel'
 import type { SchemaContext } from '../../src/graphsql/domain/schema/SchemaContext'
 
@@ -40,7 +40,7 @@ describe('generateSql', () => {
     }
     const deps: SqlGenerationDependencies = { createChatModel: () => fakeModel }
 
-    const sql = await generateSql('¿cuántos clientes hay en cada región?', CONTEXT, 'PostgreSQL', deps)
+    const sql = await generateSql('¿cuántos clientes hay en cada región?', CONTEXT, 'PostgreSQL', undefined, deps)
 
     expect(sql.text).toBe('SELECT region_id, COUNT(*) FROM customer GROUP BY region_id')
     expect(sql.dialect).toBe('PostgreSQL')
@@ -50,5 +50,30 @@ describe('generateSql', () => {
     // el mensaje de usuario incluye el DDL del contexto y la pregunta
     expect(captured[1].content).toContain('CREATE TABLE customer')
     expect(captured[1].content).toContain('¿cuántos clientes hay en cada región?')
+    // sin intento previo, el prompt no menciona ningún intento anterior
+    expect(captured[1].content).not.toContain('intento anterior')
+  })
+
+  it('con una revisión previa, el prompt incluye la SQL anterior y lo que hay que ajustar (SPEC-10/15)', async () => {
+    let captured: ChatMessage[] = []
+    const fakeModel: IChatModel = {
+      chat: async (messages) => {
+        captured = messages
+        return 'SELECT region_id, COUNT(*) FROM customer GROUP BY region_id'
+      },
+    }
+    const deps: SqlGenerationDependencies = { createChatModel: () => fakeModel }
+    // Las instrucciones ya vienen formateadas por quien llama (el Judge o el humano);
+    // generateSql no sabe de dónde salen, solo las mete en el prompt.
+    const revision: Revision = {
+      previousSql: { text: 'SELECT region, COUNT(*) FROM customer', dialect: 'PostgreSQL' },
+      instructions: '- la columna "region" no existe\n- Falta agrupar por region_id',
+    }
+
+    await generateSql('¿cuántos clientes hay en cada región?', CONTEXT, 'PostgreSQL', revision, deps)
+
+    expect(captured[1].content).toContain('SELECT region, COUNT(*) FROM customer')
+    expect(captured[1].content).toContain('la columna "region" no existe')
+    expect(captured[1].content).toContain('Falta agrupar por region_id')
   })
 })

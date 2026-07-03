@@ -85,7 +85,8 @@ export class OpenAICompatibleEmbeddings implements IEmbeddings {
         )
       }
     }
-    if (vectors.every((vector) => vector.every((value) => value === 0))) {
+    const isAllZeros = (vector: number[]) => vector.every((value) => value === 0)
+    if (vectors.every(isAllZeros)) {
       throw new Error(
         'El servidor de embeddings devolvió vectores de ceros. Comprueba que el modelo de embeddings esté cargado y sirva vectores reales.',
       )
