@@ -12,19 +12,26 @@ import chalk from 'chalk'
 import Table from 'cli-table3'
 import { highlight } from 'cli-highlight'
 import { select, input } from '@inquirer/prompts'
-import { loadTargetDatabases, sqlDialectFor } from '../graphsql/infrastructure/config/targetDatabases'
-import { createSqlPipelineGraph, HUMAN_REVIEW_NODE, MAX_JUDGE_ATTEMPTS, type PipelineStateType } from '../graphsql/graph/pipelineGraph'
+import { sqlDialectFor } from '../graphsql/infrastructure/config/targetDatabases'
+import { createSqlPipelineGraph, makePipelineDependencies, HUMAN_REVIEW_NODE, MAX_JUDGE_ATTEMPTS, type PipelineStateType } from '../graphsql/graph/pipelineGraph'
 import { CheckpointerFactory } from '../graphsql/infrastructure/checkpoint/CheckpointerFactory'
-import { withSpinner } from './ui'
+import { detectChart, renderBarChart, type BarChartPlan } from '../graphsql/application/resultCharting'
+import { chooseTargetForQuery } from './targetSelection'
+import { isExitRequest, withSpinner } from './ui'
 import type { JudgeVerdict, PurposeSource } from '../graphsql/domain/sql/JudgeVerdict'
 import type { HumanDecision } from '../graphsql/domain/sql/HumanDecision'
 import type { QueryResult } from '../graphsql/domain/sql/QueryResult'
 
 export async function runSqlPipeline(): Promise<void> {
-  const target = loadTargetDatabases()[0]
+  // Elijo sobre qué BD pregunto (SPEC-18); null = cancelado o índice sin preparar.
+  const target = await chooseTargetForQuery()
+  if (!target) {
+    return
+  }
   const dialect = sqlDialectFor(target)
-  const question = await input({ message: chalk.green('Tu pregunta:') })
-  if (question.trim() === '') {
+  const question = await input({ message: chalk.green('Tu pregunta (o "salir" para volver):') })
+  // Vacío o una palabra de salida: vuelvo al menú sin tratarla como consulta.
+  if (isExitRequest(question)) {
     return
   }
 
@@ -39,7 +46,8 @@ export async function runSqlPipeline(): Promise<void> {
     return
   }
 
-  const graph = createSqlPipelineGraph(checkpointer)
+  // El dry-run del Judge y la ejecución apuntan a la BD elegida, no a la de por defecto (SPEC-18).
+  const graph = createSqlPipelineGraph(checkpointer, makePipelineDependencies(target))
   const config = { configurable: { thread_id: randomUUID() } }
 
   try {
@@ -61,7 +69,7 @@ export async function runSqlPipeline(): Promise<void> {
 
     const finalState = (await graph.getState(config)).values
     if (finalState.result) {
-      presentResult(finalState.result)
+      await presentResult(finalState.result)
     } else {
       console.log(chalk.dim('\nNo se ejecutó ninguna consulta.\n'))
     }
@@ -210,18 +218,57 @@ async function askRefine(state: PipelineStateType): Promise<HumanDecision> {
   }
 }
 
-/** Muestro el resultado de la ejecución en una tabla con columnas alineadas. */
-function presentResult(result: QueryResult): void {
+/**
+ * Muestro el resultado de la ejecución. Si tiene forma de "categoría → valor"
+ * (SPEC-19), pregunto cómo verlo: tabla, gráfico de barras o ambas; si no, tabla.
+ */
+async function presentResult(result: QueryResult): Promise<void> {
   const suffix = result.truncated ? chalk.yellow(' (truncado al tope de filas)') : ''
   console.log(chalk.green(`\n✔ ${result.rowCount} fila(s) devueltas${suffix}.`))
-  if (result.rows.length > 0) {
-    const table = new Table({ head: result.columns, style: { head: ['cyan'] } })
-    for (const row of result.rows.slice(0, 50)) {
-      table.push(result.columns.map((name) => formatCell(row[name])))
-    }
-    console.log(table.toString())
+  if (result.rows.length === 0) {
+    console.log('')
+    return
   }
+
+  const chartPlan = detectChart(result)
+  if (!chartPlan) {
+    printResultTable(result)
+    return
+  }
+
+  const view = await select({
+    message: '¿Cómo lo muestro?',
+    choices: [
+      { name: 'Tabla', value: 'table' as const },
+      { name: `Gráfico de barras (${chartPlan.labelColumn} → ${chartPlan.valueColumn})`, value: 'chart' as const },
+      { name: 'Ambas', value: 'both' as const },
+    ],
+  })
+  if (view === 'table' || view === 'both') {
+    printResultTable(result)
+  }
+  if (view === 'chart' || view === 'both') {
+    printResultChart(result, chartPlan)
+  }
+}
+
+/** La tabla clásica con columnas alineadas (máximo 50 filas en pantalla). */
+function printResultTable(result: QueryResult): void {
+  const table = new Table({ head: result.columns, style: { head: ['cyan'] } })
+  for (const row of result.rows.slice(0, 50)) {
+    table.push(result.columns.map((name) => formatCell(row[name])))
+  }
+  console.log(table.toString())
   console.log('')
+}
+
+/** El gráfico de barras: el render es puro (sin ANSI); aquí le doy el color. */
+function printResultChart(result: QueryResult, plan: BarChartPlan): void {
+  const colored = renderBarChart(result, plan)
+    .split('\n')
+    .map((line) => line.replace(/█+/, (bar) => chalk.cyan(bar)))
+    .join('\n')
+  console.log(`\n${colored}\n`)
 }
 
 /** Un valor de celda como texto; el nulo lo marco en gris para que se distinga del vacío. */

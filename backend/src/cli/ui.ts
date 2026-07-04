@@ -18,6 +18,15 @@ export function showHeader(): void {
   console.log(chalk.dim('  Tu agente de SQL en lenguaje natural\n'))
 }
 
+/** Palabras que significan "no quiero seguir, vuelve al menú" (no son una consulta). */
+const EXIT_WORDS = ['salir', 'exit', 'quit', 'volver', 'atras', 'atrás', 'cancelar', 'menu', 'menú']
+
+/** ¿El texto es una petición de salir (vacío o una palabra de salida)? */
+export function isExitRequest(text: string): boolean {
+  const normalized = text.trim().toLowerCase()
+  return normalized === '' || EXIT_WORDS.includes(normalized)
+}
+
 /**
  * Ejecuto una tarea larga (recuperación, generación, LLM…) mostrando un spinner con su
  * texto, y lo marco como hecho o fallido al terminar. Si la tarea lanza, relanzo para

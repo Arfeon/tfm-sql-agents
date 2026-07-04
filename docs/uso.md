@@ -56,9 +56,12 @@ SQL, la valida, y **me para para que la revise antes de ejecutar nada**.
 ### Qué hago
 
 1. Elijo *Consultar en lenguaje natural*.
-2. Escribo la pregunta, p. ej. `¿qué 10 juegos se han jugado más minutos en total?`.
-3. Espero mientras el sistema recupera las tablas, genera la SQL y la pasa por el Judge.
-4. Reviso las dos cajas que aparecen (la consulta y la evaluación del Judge) y **decido**.
+2. Si hay más de una BD en el catálogo, elijo **sobre cuál pregunto** (la que está
+   indexada sale marcada; si elijo otra, me ofrece escanearla ahí mismo — ver abajo).
+3. Escribo la pregunta, p. ej. `¿qué 10 juegos se han jugado más minutos en total?`
+   (o `salir` para volver al menú).
+4. Espero mientras el sistema recupera las tablas, genera la SQL y la pasa por el Judge.
+5. Reviso las dos cajas que aparecen (la consulta y la evaluación del Judge) y **decido**.
 
 ### Qué pasa por dentro
 
@@ -99,15 +102,30 @@ propuesta`) o rojo si no lo pasó (`❌ Consulta SQL (no superó el Judge)`).
 *Afinar* y *Modificar* me devuelven a la revisión con la nueva propuesta: puedo iterar las veces
 que haga falta hasta aprobar o rechazar.
 
-### Los resultados
+### Los resultados: tabla, gráfico o ambas
 
-Al aprobar, salen el número de filas y una tabla con las columnas alineadas (máximo 50 filas en
-pantalla; si la consulta devolvió más, avisa de que está *truncado*). Los nulos se marcan con `∅`
-en gris para distinguirlos de un texto vacío.
+Al aprobar, sale el número de filas y, si el resultado tiene forma de **"categoría → valor"**
+(p. ej. clientes por región: una columna de texto + una numérica, entre 2 y 30 filas), me
+pregunta **¿Cómo lo muestro? Tabla / Gráfico de barras / Ambas**:
 
-> La consulta interactiva trabaja sobre la **BD objetivo principal** (`TARGET_DB_1`, Arcadia por
-> defecto). Para trabajar sobre otra BD, escanéala primero (§3); la evaluación multi-BD usa
-> `EVAL_TARGET` (§7).
+```
+Oceania               ████████████████████████████████████████ 883
+North America         ██████████████████████████████████████ 835
+Europe                █████████████████████████████████████ 823
+```
+
+Si el resultado no es graficable (una sola fila, todo texto, demasiadas filas), muestra la tabla
+directamente. En la tabla (máximo 50 filas en pantalla; si la consulta devolvió más, avisa de que
+está *truncado*) los nulos se marcan con `∅` en gris; en el gráfico, un valor 0 o nulo sale con su
+número y sin barra (un cero es información, no se esconde).
+
+### Elegir sobre qué BD pregunto (y el guardián del índice)
+
+Neo4j y pgvector guardan **un solo esquema a la vez**: el de la última BD escaneada. Por eso,
+al elegir BD en la consulta, la indexada sale marcada como `(indexada)`. Si elijo otra, el
+sistema **avisa** (la recuperación devolvería tablas de otra BD) y ofrece **escanearla ahí
+mismo** con el mismo modelo de embeddings del índice, o cancelar. Nunca genera SQL con el
+índice de otra BD sin avisar. La evaluación multi-BD, en cambio, usa `EVAL_TARGET` (§7).
 
 ---
 

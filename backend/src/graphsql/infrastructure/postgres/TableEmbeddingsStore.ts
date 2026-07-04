@@ -15,6 +15,8 @@ export interface IndexedModel {
   provider: string
   model: string
   dimensions: number
+  /** BD objetivo cuyo esquema contiene el índice; null en índices anteriores a SPEC-18. */
+  targetName: string | null
 }
 
 /** Representación textual de un vector para pgvector: `[v1,v2,…]`. */
@@ -37,7 +39,7 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
     return new TableEmbeddingsStore(client)
   }
 
-  /** Lee el modelo/dimensión del índice actual, o null si está vacío. */
+  /** Lee el modelo/dimensión (y de qué BD es) del índice actual, o null si está vacío. */
   async getIndexedModel(): Promise<IndexedModel | null> {
     const exists = await this.client.query<{ exists: boolean }>(
       "SELECT to_regclass('public.table_embeddings') IS NOT NULL AS exists",
@@ -45,19 +47,31 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
     if (!exists.rows[0].exists) {
       return null
     }
-    const result = await this.client.query<IndexedModel>(
-      'SELECT provider, model, dimensions FROM table_embeddings LIMIT 1',
+    // `target_name` no existía antes de SPEC-18: en un índice viejo la columna falta,
+    // así que la leo de forma tolerante y la devuelvo como null ("desconocido").
+    const result = await this.client.query<{ provider: string; model: string; dimensions: number; target_name?: string | null }>(
+      `SELECT provider, model, dimensions,
+              (to_jsonb(table_embeddings) ->> 'target_name') AS target_name
+       FROM table_embeddings LIMIT 1`,
     )
-    return result.rows[0] ?? null
+    const row = result.rows[0]
+    if (!row) {
+      return null
+    }
+    return { provider: row.provider, model: row.model, dimensions: row.dimensions, targetName: row.target_name ?? null }
   }
 
-  /** Reconstruye la tabla de embeddings con la dimensión indicada. */
-  async prepare(dimensions: number): Promise<void> {
+  /** Reconstruye la tabla de embeddings con la dimensión indicada, anotando de qué BD es. */
+  async prepare(dimensions: number, targetName: string): Promise<void> {
     if (!Number.isInteger(dimensions) || dimensions <= 0) {
       throw new Error(`Dimensión de embeddings inválida: ${dimensions}`)
     }
     await this.client.query('CREATE EXTENSION IF NOT EXISTS vector')
     await this.client.query('DROP TABLE IF EXISTS table_embeddings')
+    // La BD objetivo va como DEFAULT de la columna: el índice entero es de UNA BD
+    // (se reconstruye completo en cada vectorización), así cada fila la lleva sin
+    // tener que pasarla por `upsertTable`. Va escapada porque el DDL no admite $1.
+    const escapedTargetName = this.client.escapeLiteral(targetName)
     await this.client.query(`
       CREATE TABLE table_embeddings (
         table_name TEXT PRIMARY KEY,
@@ -68,6 +82,7 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
         provider TEXT,
         model TEXT,
         dimensions INT,
+        target_name TEXT DEFAULT ${escapedTargetName},
         updated_at TIMESTAMPTZ DEFAULT now()
       )
     `)

@@ -9,9 +9,11 @@
  * bucle automático Judge↔SQL reintenta, se agota y respeta la modificación manual, y
  * que el afinado guía la recuperación y la generación.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { MemorySaver } from '@langchain/langgraph'
-import { createSqlPipelineGraph, MAX_JUDGE_ATTEMPTS, type PipelineDependencies } from '../../src/graphsql/graph/pipelineGraph'
+import { createSqlPipelineGraph, makePipelineDependencies, MAX_JUDGE_ATTEMPTS, type PipelineDependencies } from '../../src/graphsql/graph/pipelineGraph'
+import { TargetDatabaseFactory } from '../../src/graphsql/infrastructure/targetdb/TargetDatabaseFactory'
+import type { TargetDatabaseConfig } from '../../src/graphsql/infrastructure/config/targetDatabases'
 import type { SchemaContext } from '../../src/graphsql/domain/schema/SchemaContext'
 import type { JudgeVerdict } from '../../src/graphsql/domain/sql/JudgeVerdict'
 import type { Revision } from '../../src/graphsql/application/sqlGeneration'
@@ -385,5 +387,28 @@ describe('afinado guiado por el humano (SPEC-15)', () => {
     // Las indicaciones se acumulan.
     expect(revisions[2]?.instructions).toContain('añade wishlist')
     expect(revisions[2]?.instructions).toContain('ordena por total')
+  })
+
+  it('makePipelineDependencies ejecuta y valida sintaxis contra la BD dada, no la de por defecto', async () => {
+    // Regresión (SPEC-18, prima del bug de la evaluación): con una BD elegida, el
+    // dry-run del Judge y la ejecución deben conectar a ESA BD, nunca a connectDefault.
+    const nebula: TargetDatabaseConfig = {
+      type: 'postgresql', name: 'nebula', host: 'h', port: 5432, user: 'u', password: 'p', schema: 'public',
+    }
+    const spy = vi.spyOn(TargetDatabaseFactory, 'connect').mockRejectedValue(new Error('conexión interceptada'))
+    try {
+      const deps = makePipelineDependencies(nebula)
+      await expect(deps.execute({ text: 'SELECT 1', dialect: 'PostgreSQL' })).rejects.toThrow('conexión interceptada')
+      await expect(deps.judge({ text: 'SELECT 1', dialect: 'PostgreSQL' }, contextFor(['customer']), '¿?')).rejects.toThrow(
+        'conexión interceptada',
+      )
+      // Todas las conexiones fueron a la BD elegida.
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(2)
+      for (const call of spy.mock.calls) {
+        expect(call[0]).toMatchObject({ name: 'nebula' })
+      }
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

@@ -34,8 +34,11 @@
 import { StateGraph, Annotation, START, END, type BaseCheckpointSaver } from '@langchain/langgraph'
 import { retrieveSchemaContext } from '../application/schemaRetrieval'
 import { generateSql, type Revision } from '../application/sqlGeneration'
-import { judgeSql } from '../application/sqlJudging'
+import { judgeSql, defaultSqlJudgingDependencies } from '../application/sqlJudging'
 import { executeQuery } from '../application/queryExecution'
+import { checkSqlSyntax } from '../application/sqlSyntaxCheck'
+import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
+import type { TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
 import type { SchemaContext } from '../domain/schema/SchemaContext'
 import type { SqlStatement } from '../domain/sql/SqlStatement'
 import type { JudgeVerdict } from '../domain/sql/JudgeVerdict'
@@ -129,6 +132,28 @@ export const defaultPipelineDependencies: PipelineDependencies = {
   judge: (sql, schemaContext, question) =>
     judgeSql(sql, schemaContext, question, { useDbCheck: true, useLlmJudge: true, minConfidence: MIN_CONFIDENCE }),
   execute: (sql) => executeQuery(sql),
+}
+
+/**
+ * Dependencias reales apuntando a una BD objetivo CONCRETA (SPEC-18): el dry-run del
+ * Judge y la ejecución conectan a `target`, no a la BD por defecto. Es la misma lección
+ * del bug de la evaluación (SPEC-17): cuando hay una BD elegida, nada de `connectDefault`
+ * implícito. La recuperación y la generación no cambian (leen el índice compartido).
+ */
+export function makePipelineDependencies(target: TargetDatabaseConfig): PipelineDependencies {
+  const judgingDeps = {
+    createChatModel: defaultSqlJudgingDependencies.createChatModel,
+    checkSyntax: (sql: SqlStatement) =>
+      checkSqlSyntax(sql, { connectDatabase: () => TargetDatabaseFactory.connect(target) }),
+  }
+  return {
+    retrieve: defaultPipelineDependencies.retrieve,
+    generate: defaultPipelineDependencies.generate,
+    judge: (sql, schemaContext, question) =>
+      judgeSql(sql, schemaContext, question, { useDbCheck: true, useLlmJudge: true, minConfidence: MIN_CONFIDENCE }, judgingDeps),
+    execute: (sql) =>
+      executeQuery(sql, {}, { connectDatabase: (options) => TargetDatabaseFactory.connect(target, options) }),
+  }
 }
 
 /** Construyo y compilo el pipeline con la pausa de revisión humana. */

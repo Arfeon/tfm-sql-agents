@@ -74,6 +74,9 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-15 | Afinar la consulta en la revisión con indicaciones en lenguaje natural (fusiona la acción "fijar tablas") | ✅ Cerrada |
 | SPEC-16 | Seguimiento conversacional de una consulta (pregunta de seguimiento tras ejecutar) | 🔮 Futuro (fuera del MVP) |
 | SPEC-17 | Prueba de escala: segunda BD objetivo grande (sintética, 66 tablas) + evaluación multi-BD | ✅ Cerrada (arnés + ejecutado; GraphRAG plano 774→759 tokens de 17→66 tablas, recall 99%→100%) |
+| SPEC-18 | Selección de la BD objetivo en el flujo de consulta (catálogo + índice consciente de su BD) | ✅ Cerrada |
+| SPEC-19 | Presentación gráfica de resultados en consola (tabla / gráfico de barras / ambas) | ✅ Cerrada |
+| SPEC-20 | Índice multi-inquilino: varias BDs indexadas a la vez en Neo4j/pgvector | 🔮 Futuro (fuera del MVP) |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §10](arquitectura.md).
 
@@ -781,5 +784,88 @@ cd backend && npm test    # unit del afinado guiado (con dobles)
 ```bash
 cd backend && npm run evaluate:scale    # prueba de escala sobre la BD grande (opt-in; ingiere/vectoriza y restaura Arcadia)
 ```
+
+---
+
+### SPEC-18 — Selección de la BD objetivo en el flujo de consulta
+
+**Objetivo.** Poder elegir sobre QUÉ base de datos del catálogo pregunto desde "Consultar en lenguaje natural", igual que ya elijo cuál escanear. Hoy el flujo de consulta usa siempre la primera del catálogo (`TARGET_DB_1`): el dialecto, la comprobación de sintaxis del Judge y la ejecución van fijos a ella, aunque el índice tenga otro esquema.
+
+**Contrato.**
+
+- *Índice consciente de su BD.* Neo4j y pgvector son de un solo inquilino: contienen el esquema de la ÚLTIMA BD escaneada. Para que la selección sea segura, el índice vectorial registra **de qué BD** es (el nombre de la BD se guarda al vectorizar, junto al modelo/dimensión que ya se guardaban). `getIndexedModel` lo expone (`targetName`; `null` en índices anteriores a este cambio, que se tratan como "desconocido").
+- *Selector en el flujo de consulta.* Si el catálogo tiene más de una BD, el flujo pregunta cuál consultar, marcando la que está indexada. Con una sola BD, no pregunta nada (comportamiento actual intacto).
+- *Guardia de desajuste.* Si la BD elegida NO es la indexada, el flujo avisa (la recuperación devolvería tablas de otra BD) y ofrece **escanearla ahí mismo** (ingesta + vectorización con el mismo modelo del índice, mismas piezas que la prueba de escala) o cancelar. Nunca se genera SQL con un índice de otra BD sin avisar.
+- *Todo el pipeline apunta a la BD elegida.* El dialecto, la comprobación de sintaxis del Judge (dry-run) y la ejecución usan la BD seleccionada, no la de por defecto. Se inyecta con el mismo patrón que `makeEvaluationDependencies` (la lección del bug de SPEC-17: nada de `connectDefault` implícito cuando hay una BD elegida).
+
+**Pasos**
+
+1. Registrar el nombre de la BD al vectorizar: `IEmbeddingsStore.prepare(dimensions, targetName)` y columna `target_name`; `getIndexedModel` devuelve también `targetName`.
+2. `makePipelineDependencies(target)` en el grafo del pipeline: `execute` y el `checkSyntax` del Judge conectan a la BD dada vía `TargetDatabaseFactory.connect(target)`; recuperación y generación no cambian.
+3. CLI: selector de BD en "Consultar" (solo si hay más de una), con la indexada marcada; guardia de desajuste con oferta de escaneo inline.
+4. Tests: la vectorización guarda el nombre (doble del almacén); `makePipelineDependencies` conecta a la BD dada (regresión, mismo estilo que la de la evaluación); el guardia de desajuste no deja pasar sin escanear o cancelar.
+
+**Criterios de aceptación**
+
+- [X] Al vectorizar queda registrado de qué BD es el índice, y `getIndexedModel` lo expone (`targetName`; verificado que un índice anterior al cambio se lee como `null` sin romper)
+- [X] Con más de una BD en el catálogo, "Consultar" deja elegir y marca la indexada; con una sola, no pregunta
+- [X] Elegir una BD no indexada avisa y ofrece escanearla ahí mismo (con el modelo del índice); el pipeline nunca corre con el índice de otra BD sin aviso
+- [X] Dry-run del Judge y ejecución usan la BD elegida (test de regresión: `makePipelineDependencies` conecta a la BD dada)
+- [X] Suite unitaria verde, sin tocar Docker
+
+---
+
+### SPEC-19 — Presentación gráfica de resultados en consola
+
+**Objetivo.** Cuando el resultado de una consulta aprobada tiene forma de "categoría → valor" (la mayoría de agregaciones del golden set), poder verlo como **gráfico de barras en la terminal**, además de (o en vez de) la tabla. La detección de si un resultado es graficable es **determinista** (una función pura sobre la forma del resultado), no cosa del LLM: gratis, instantánea y testeable — mismo criterio que el Judge (determinista donde se puede, LLM solo donde hace falta).
+
+**Contrato.**
+
+- *Detección pura.* `detectChart(result)` devuelve un plan de gráfico o `null`: hay gráfico si el resultado tiene entre 2 y ~30 filas, una columna de etiqueta (texto) y al menos una numérica. La primera columna de texto es la etiqueta; la primera numérica, el valor. Filas con valor nulo se muestran con `∅` y barra vacía.
+- *Render puro.* `renderBarChart(result, plan)` devuelve un `string`: barras horizontales proporcionales con caracteres de bloque (`█`), etiquetas alineadas y el valor numérico al final de cada barra. Sin dependencias nuevas. Los valores ≤ 0 se muestran con barra vacía y su número (no se ocultan: un 0 es información, D-13).
+- *Elección del usuario.* Tras aprobar y ejecutar, si el resultado es graficable el CLI pregunta **"¿Cómo lo muestro? Tabla / Gráfico / Ambas"**; si no lo es, muestra la tabla directamente como hasta ahora. La lógica de detección/render vive en la capa de aplicación (funciones puras); el CLI solo pregunta y pinta.
+
+**Pasos**
+
+1. `application/resultCharting.ts`: `detectChart` y `renderBarChart` como funciones puras, con TDD (formas graficables y no graficables, nulos, ceros, negativos, empates, anchura de etiquetas).
+2. CLI (`sqlPipeline.presentResult`): si hay plan de gráfico, preguntar Tabla/Gráfico/Ambas y pintar según la elección; color con chalk en la capa CLI (el render puro devuelve texto sin ANSI).
+3. Documentar en la guía de uso (`docs/uso.md`).
+
+**Criterios de aceptación**
+
+- [X] Un resultado "categoría → valor" (p. ej. clientes por región) ofrece Tabla / Gráfico / Ambas, y el gráfico de barras se ve proporcional y legible (verificado con datos reales de Arcadia)
+- [X] Un resultado no graficable (una sola fila, todo texto, demasiadas filas) muestra la tabla directamente, sin preguntar
+- [X] Detección y render son funciones puras con tests (13, incluyendo nulos, ceros, negativos y numéricos-como-texto); el CLI no contiene lógica de detección
+- [X] Suite unitaria verde (169 tests)
+
+---
+
+### SPEC-20 — Índice multi-inquilino: varias BDs indexadas a la vez 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** Que Neo4j y pgvector puedan contener los esquemas de **varias BDs objetivo a la vez**, cada una en su "inquilino", para cambiar de BD en la consulta sin re-escanear. Hoy son de un solo inquilino: escanear una BD reconstruye ambos almacenes y desindexa la anterior, y por eso el flujo de consulta lleva un guardián (SPEC-18) que avisa del desajuste y ofrece re-escanear. Funciona y es seguro, pero cambiar de BD cuesta un escaneo cada vez; con el multi-inquilino, el selector elegiría BD y listo.
+
+**Contrato.**
+
+- *pgvector por inquilino.* La columna `target_name` (ya existe desde SPEC-18) pasa de anotación a **clave de partición**: `prepare` deja de hacer `DROP TABLE` y borra solo las filas de su BD; `searchSimilar` filtra por la BD indicada. Re-escanear una BD no toca el índice de las demás. La dimensión del vector es única por tabla física: si dos BDs se vectorizan con modelos de dimensión distinta, se rechaza con un error claro (mismo modelo para todo el índice).
+- *Neo4j por inquilino.* Los nodos `Table`/`Column` llevan una propiedad `target`; la ingesta borra y recrea solo los nodos de su BD, y TODAS las consultas del `SchemaGraphManager` (recuperación, expansión por FK, resumen) filtran por ella. Dos BDs con una tabla del mismo nombre no se mezclan.
+- *La recuperación recibe la BD.* `retrieveSchemaContext` (y su traza de SPEC-13) reciben qué BD consultar y lo propagan a la búsqueda semántica y al grafo. El pipeline ya sabe su `target` (SPEC-18): solo hay que pasarlo hacia abajo.
+- *CLI sin guardián.* El selector de BD muestra qué BDs están indexadas (puede haber varias); elegir una indexada no pregunta nada, y una no indexada ofrece escanearla (que ya no desindexa a las demás). El guardián de desajuste de SPEC-18 desaparece porque el desajuste ya no puede existir.
+- *Compatibilidad.* Un índice de un solo inquilino (anterior) se migra con un re-escaneo normal; la evaluación (`EVAL_TARGET`) y la prueba de escala dejan de necesitar el baile de "ingerir → medir → restaurar Arcadia".
+
+**Pasos**
+
+1. pgvector: `prepare`/`upsert` por inquilino (borrado selectivo), `searchSimilar(target, …)`, y el guard de dimensión única.
+2. Neo4j: propiedad `target` en nodos y relaciones; ingesta y todas las lecturas del `SchemaGraphManager` filtradas.
+3. Propagar la BD por `retrieveSchemaContext`, la traza (SPEC-13) y las tools; el pipeline ya la tiene.
+4. CLI: selector con varias indexadas; retirar el guardián de desajuste. Simplificar la restauración en los runners de evaluación.
+5. Tests: dos BDs indexadas no se mezclan (recuperación filtrada), re-escanear una no toca la otra, dimensión distinta se rechaza.
+
+**Criterios de aceptación**
+
+- [ ] Dos BDs escaneadas conviven: la recuperación de cada una solo ve sus tablas (incluso con nombres repetidos)
+- [ ] Re-escanear una BD no desindexa las demás
+- [ ] El selector de consulta cambia de BD indexada sin re-escanear ni avisar
+- [ ] Vectorizar con una dimensión distinta a la del índice se rechaza con error claro
+- [ ] La prueba de escala ya no necesita restaurar Arcadia al terminar
 
 ---

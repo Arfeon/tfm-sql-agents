@@ -59,10 +59,10 @@ export async function vectorizeSchema(
   const texts = tables.map((table) => composeSearchText(table, descriptions?.get(table.name)))
   const vectors = await embeddings.embedMany(texts)
 
-  // 3. Reconstruir el índice y guardar cada tabla con su vector.
+  // 3. Reconstruir el índice (anotando de qué BD es, SPEC-18) y guardar cada tabla con su vector.
   const store = await deps.openEmbeddingsStore()
   try {
-    await store.prepare(embeddings.dimensions)
+    await store.prepare(embeddings.dimensions, target.name)
     for (let i = 0; i < tables.length; i++) {
       const table = tables[i]
       const description = descriptions?.get(table.name) ?? null

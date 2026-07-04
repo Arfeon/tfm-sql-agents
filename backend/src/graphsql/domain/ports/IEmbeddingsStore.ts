@@ -14,8 +14,11 @@ export interface TableMatch {
 }
 
 export interface IEmbeddingsStore {
-  /** Reconstruye la tabla de embeddings con la dimensión indicada. */
-  prepare(dimensions: number): Promise<void>
+  /**
+   * Reconstruye la tabla de embeddings con la dimensión indicada, registrando de qué
+   * BD objetivo es el índice (el almacén es de un solo inquilino, SPEC-18).
+   */
+  prepare(dimensions: number, targetName: string): Promise<void>
 
   /** Guarda (o reemplaza) una tabla con su texto de búsqueda, su vector y el modelo usado. */
   upsertTable(

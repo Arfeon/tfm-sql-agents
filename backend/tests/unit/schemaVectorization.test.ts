@@ -56,11 +56,13 @@ interface RecordedUpsert {
 /** Almacén falso en memoria: apunta las llamadas para poder aseverarlas. */
 class FakeEmbeddingsStore implements IEmbeddingsStore {
   preparedDimensions?: number
+  preparedTargetName?: string
   upserts: RecordedUpsert[] = []
   closed = false
 
-  async prepare(dimensions: number): Promise<void> {
+  async prepare(dimensions: number, targetName: string): Promise<void> {
     this.preparedDimensions = dimensions
+    this.preparedTargetName = targetName
   }
   async upsertTable(
     tableName: string,
@@ -96,6 +98,8 @@ describe('vectorizeSchema', () => {
     const summary = await vectorizeSchema(TARGET, 'openai', new FakeEmbeddings(), new Map([['game', 'juegos']]), deps)
 
     expect(store.preparedDimensions).toBe(3)
+    // El índice queda anotado con la BD de la que es (SPEC-18).
+    expect(store.preparedTargetName).toBe('arcadia')
     expect(store.upserts).toHaveLength(2)
 
     // game lleva esquema -> nombre cualificado, y la descripción aportada.

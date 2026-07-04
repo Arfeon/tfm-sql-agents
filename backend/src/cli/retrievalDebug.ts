@@ -10,12 +10,12 @@ import boxen from 'boxen'
 import chalk from 'chalk'
 import { input } from '@inquirer/prompts'
 import { explainSchemaRetrieval } from '../graphsql/application/schemaRetrieval'
-import { withSpinner } from './ui'
+import { isExitRequest, withSpinner } from './ui'
 import type { RetrievalTrace } from '../graphsql/domain/schema/RetrievalTrace'
 
 export async function runRetrievalDebug(): Promise<void> {
-  const question = await input({ message: chalk.green('Pregunta a depurar:') })
-  if (question.trim() === '') {
+  const question = await input({ message: chalk.green('Pregunta a depurar (o "salir" para volver):') })
+  if (isExitRequest(question)) {
     return
   }
   try {
