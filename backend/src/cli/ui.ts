@@ -1,25 +1,38 @@
 /**
  * Utilidades de presentación compartidas por los flujos del CLI.
  *
- * La cabecera de bienvenida y el preflight de LM Studio (avisar si el modelo no
- * está cargado) los usan varios flujos, así que viven aquí para no repetirlos.
+ * La cabecera de bienvenida, el spinner para los pasos largos y el preflight de LM
+ * Studio (avisar si el modelo no está cargado) los usan varios flujos, así que viven
+ * aquí para no repetirlos.
  */
-import boxen from 'boxen'
 import chalk from 'chalk'
+import figlet from 'figlet'
+import gradient from 'gradient-string'
+import ora from 'ora'
 import { listLoadedModels } from '../graphsql/infrastructure/llm/lmStudio'
 
-/** Muestro la cabecera de bienvenida dentro de un recuadro con color. */
+/** Muestro la cabecera de bienvenida: el nombre en grande con un degradado de color. */
 export function showHeader(): void {
-  const title = chalk.cyan.bold('GraphSQL Agent')
-  const subtitle = chalk.dim('Tu agente de SQL en lenguaje natural')
-  console.log(
-    boxen(`${title}\n${subtitle}`, {
-      padding: 1,
-      margin: 1,
-      borderStyle: 'round',
-      borderColor: 'cyan',
-    }),
-  )
+  const banner = figlet.textSync('GraphSQL', { font: 'Standard' })
+  console.log(gradient(['#22d3ee', '#a855f7']).multiline(banner))
+  console.log(chalk.dim('  Tu agente de SQL en lenguaje natural\n'))
+}
+
+/**
+ * Ejecuto una tarea larga (recuperación, generación, LLM…) mostrando un spinner con su
+ * texto, y lo marco como hecho o fallido al terminar. Si la tarea lanza, relanzo para
+ * que quien llama muestre su mensaje de error; el spinner ya queda marcado como fallido.
+ */
+export async function withSpinner<T>(text: string, task: () => Promise<T>): Promise<T> {
+  const spinner = ora(text).start()
+  try {
+    const result = await task()
+    spinner.succeed()
+    return result
+  } catch (error) {
+    spinner.fail()
+    throw error
+  }
 }
 
 /** Preflight: en local, aviso si el modelo (chat o embeddings) no está cargado en LM Studio. */

@@ -41,7 +41,7 @@ flowchart LR
 
 El pipeline de una consulta lo monto como una máquina de estados en LangGraph: cada paso es un agente y, según cómo queda el estado compartido (la pregunta, las tablas recuperadas, la SQL, lo que diga el Judge…), se decide el siguiente. El enrutado lo llevo con reglas, no con un LLM: el flujo es siempre el mismo, así que no necesito que un modelo decida por dónde seguir.
 
-Este pipeline determinista lo monto como un **grafo propio**, distinto del grafo conversacional con *tools* de SPEC-01: aquí el flujo es fijo (recuperar → SQL ↔ Judge → revisión → ejecutar) y lo enruto con reglas sobre el estado, no con el modelo. El conversacional sigue existiendo para el chat; el pipeline es el que formaliza el supervisor (SPEC-10). Ya tengo el esqueleto del grafo (SPEC-01), la ingesta/vectorización del esquema (SPEC-02/03), los agentes de recuperación, SQL y Judge (SPEC-04/05/06), la ejecución (SPEC-07), la revisión humana con su pausa (SPEC-08) y el supervisor con el reintento automático (SPEC-10); el estado de cada componente está en [SPEC.md](SPEC.md).
+Este pipeline determinista lo monto como un **grafo propio**, distinto del grafo conversacional con *tools* de SPEC-01: aquí el flujo es fijo (recuperar → SQL ↔ Judge → revisión → ejecutar) y lo enruto con reglas sobre el estado, no con el modelo. El grafo conversacional se conserva en el código como base reutilizable (p. ej. para un futuro servidor MCP), pero **ya no se expone en el menú del CLI** (D-12): el pipeline cubre el caso de uso real y es el que formaliza el supervisor (SPEC-10). Ya tengo el esqueleto del grafo (SPEC-01), la ingesta/vectorización del esquema (SPEC-02/03), los agentes de recuperación, SQL y Judge (SPEC-04/05/06), la ejecución (SPEC-07), la revisión humana con su pausa (SPEC-08) y el supervisor con el reintento automático (SPEC-10); el estado de cada componente está en [SPEC.md](SPEC.md).
 
 ```mermaid
 flowchart TD
@@ -156,13 +156,76 @@ Evito a propósito la redundancia entre suites: si un test de integración solo 
 
 ## 10. Evaluación experimental
 
+> Términos como *ablation*, *GraphRAG*, *schema-linking recall* o *execution accuracy* están explicados en el [glosario](../glosario.md).
+
 Quiero poder enseñar que el GraphRAG sirve de algo, no solo decirlo. El problema es que los modelos ya han visto los esquemas públicos de siempre (Northwind, Chinook…) cuando se entrenaron, así que si pruebo sobre ellos no sabría si aciertan porque mi sistema les da el contexto bueno o porque se lo saben de memoria. Por eso evalúo sobre Arcadia, la base de datos que me he montado para el TFM: nombres en inglés, preguntas en español y algún nombre poco evidente, para que tenga que buscar de verdad las tablas.
 
-Tengo preparado un conjunto de preguntas con su SQL de referencia en [`golden_set.yaml`](../../setup/datasets/arcadia/golden_set.yaml) (24 casos, anotando qué tablas debería tocar cada uno). La idea es lanzar esas preguntas de tres formas —sin recuperación, solo con la búsqueda vectorial, y con el GraphRAG completo— y comparar cuántas devuelven el resultado correcto y si se recuperaron las tablas que hacían falta. Si el GraphRAG aporta, debería verse ahí, y más cuanto más grande es el esquema.
+El conjunto de preguntas con su SQL de referencia está en [`golden_set.yaml`](../../setup/datasets/arcadia/golden_set.yaml) (25 casos, cada uno con las tablas que la SQL correcta debe tocar y su SQL de referencia). El arnés de evaluación (SPEC-11, `npm run evaluate`) lanza esas preguntas en **tres modos** de recuperación —sin recuperación (el esquema entero en el contexto), solo búsqueda vectorial (top-K sin expandir por FK) y GraphRAG completo (top-K + expansión por FK)— y mide, por caso y modo:
 
-Hay una pieza que quiero medir por separado: las descripciones, que son lo más propio de mi enfoque. Así que, además de las tres formas de arriba, compararé el GraphRAG con y sin descripciones. Y para que tengan algo que demostrar, meteré en Arcadia una tabla con un nombre opaco —que no delate qué guarda— y una pregunta que la necesite: sin descripción, por nombre no debería aparecer; con descripción, sí. Lo dejo pendiente para cuando monte la recuperación (SPEC-04).
+- **schema-linking recall**: de las tablas que la SQL correcta debe tocar, cuántas trae la recuperación. Aísla la recuperación de si el LLM acierta la SQL.
+- **tamaño de contexto** (tablas y tokens estimados del DDL): lo que enseña que "sin recuperación" no escala.
+- **execution accuracy**: la SQL generada, ejecutada en solo lectura, ¿da el mismo resultado que la de referencia? Comparo el resultado como multiconjunto de filas (no el texto de la SQL), en dos variantes: **estricta** (idéntico) y **justa** (la candidata *contiene* el resultado de referencia, para no penalizar una columna de más). Solo la ejecuto si pasa la comprobación de seguridad.
+- **equivalencia semántica (LLM, complementaria)**: si la candidata se ejecuta, un segundo LLM juzga si responde a la MISMA pregunta que la de referencia. Recupera aciertos que la comparación de filas descarta, pero como lo decide un LLM la reporto **al lado** de la execution accuracy, no en su lugar (ver [Sesgos y límites de las métricas](#sesgos-y-límites-de-las-métricas) al final).
 
-Cuando tenga los números los enseñaré con sus límites por delante (el golden set es pequeño, es un solo dominio y un solo modelo): decirlo es parte de hacerlo bien. Más adelante, si da tiempo, estaría bien repetir la prueba sobre una base de datos pública grande para ver cómo aguanta la recuperación con cientos de tablas.
+El arnés agrega por modo y por dificultad y guarda el informe en `docs/evaluacion/`.
+
+Las **descripciones** son lo más propio de mi enfoque, así que las mido aparte: Arcadia incluye `t_042`, una tabla de nombre opaco (no delata que guarda las listas de deseos) con una pregunta que la necesita (G-25). Con descripción se recupera por significado y la consulta acierta; sin descripción, por nombre no debería aparecer. La comparación con/sin descripciones exige re-vectorizar el índice en cada condición, así que es el paso más pesado del ablation.
+
+**Resultados (Arcadia, `npm run evaluate`).** Ejecutado con el chat en OpenAI y los embeddings locales (bge-m3), sobre los 25 casos:
+
+| Modo | Recall | Exec. justa | Equiv. semántica (LLM) | Exec. estricta | Tokens |
+|------|--------|-------------|------------------------|----------------|--------|
+| Sin recuperación | 100% | 72% | 64% | 16% | 1498 |
+| Solo vectorial | 93% | 68% | 60% | 24% | 481 |
+| GraphRAG | 99% | 64% | 56% | 28% | 774 |
+
+Lectura honesta:
+
+- **La recuperación funciona**: GraphRAG trae el 99% de las tablas correctas (≈ el esquema entero, 100%) y bastante más que la búsqueda vectorial sola (93%) — la expansión por FK recupera las tablas de JOIN que el vector se deja. Esta métrica no depende del LLM.
+- **Con la mitad del contexto**: GraphRAG logra ese recall con ~774 tokens frente a los ~1498 del esquema entero.
+- **Execution accuracy**: a la escala de Arcadia (17 tablas) las tres formas quedan parejas (72/68/64%), y las diferencias <10 puntos están dentro del ruido de una sola tirada (la generación no es determinista; la familia gpt-5 no deja fijar `temperature`). O sea, a esta escala el argumento del GraphRAG **no es más precisión sino la misma con la mitad del contexto**; la ventaja de precisión aparece a mayor escala (ver la prueba de escala más abajo, donde en Nebula sí despunta).
+- **Sesgos de la métrica**: la *estricta* sale muy baja (16-28%) porque el LLM devuelve el `id` junto al nombre; la *justa* lo corrige, y el juez de equivalencia (LLM) es un tercer cristal. Los detallo todos en [Sesgos y límites de las métricas](#sesgos-y-límites-de-las-métricas).
+
+**Aporte de las descripciones (ablation 2×2, `npm run evaluate:descriptions`).** Comparando con y sin descripciones (re-vectorizando el índice en cada condición):
+
+- Las descripciones **suben la precisión de forma clara** — en búsqueda vectorial, de 44% a 72% dentro de la misma tirada — y el recall.
+- La tabla de nombre opaco `t_042` (listas de deseos) **solo se localiza bien con descripciones**: sin ellas, la búsqueda vectorial la falla; con ellas, acierta.
+- **El grafo da robustez**: aun sin descripciones, GraphRAG rescata `t_042` siguiendo su clave foránea con `customer`. Las dos piezas (semántica + grafo) se cubren la espalda.
+
+**Prueba de escala (SPEC-17, `npm run evaluate:scale`).** Para ver si el argumento del GraphRAG crece con el tamaño del esquema, comparo Arcadia (17 tablas) con Nebula (66 tablas, una BD sintética de la misma familia de dominio, sembrada ligera). Evaluación completa (recall + execution accuracy + contexto) por modo:
+
+| BD | Tablas | Modo | Recall | Exec. justa | Equiv. (LLM) | Tokens |
+|----|--------|------|--------|-------------|--------------|--------|
+| Arcadia | 17 | Sin recuperación | 100% | 68% | 68% | 1498 |
+| Arcadia | 17 | Solo vectorial | 93% | 68% | 56% | 481 |
+| Arcadia | 17 | GraphRAG | 99% | 68% | 64% | 774 |
+| Nebula | 66 | Sin recuperación | 100% | 67% | 80% | 5748 |
+| Nebula | 66 | Solo vectorial | 80% | 60% | 53% | 457 |
+| Nebula | 66 | GraphRAG | 100% | **80%** | 73% | 759 |
+
+Lo que muestra, con tres lecturas separadas:
+
+- **Contexto (el argumento fuerte).** Al pasar de 17 a 66 tablas, el contexto de "sin recuperación" se multiplica por ~3,8 (1498 → 5748), mientras que **el del GraphRAG se queda plano** (774 → 759). El ahorro **crece** con el esquema; a suficiente escala el esquema entero ni cabe en la ventana de contexto y el GraphRAG sigue igual.
+- **Recuperación.** El recall del GraphRAG se mantiene (99% → 100%) mientras la búsqueda vectorial *sola* lo pierde al crecer el esquema (93% → 80%): se deja tablas de JOIN que la expansión por el grafo recupera. La ventaja del grafo sobre el vector se ensancha a escala.
+- **Aciertos (aquí sí despunta a escala).** *Dentro* de Nebula, GraphRAG (80% justa) **supera** tanto a volcar el esquema entero (67%) como a la búsqueda vectorial sola (60%), y encima con ~1/7 del contexto. A 17 tablas las tres formas empataban; a 66 el GraphRAG despega — justo lo que predecía el argumento de escala. Con cautela: son 15 preguntas y una sola tirada, así que lo leo como **señal en la dirección esperada**, no como una ventaja robusta de tribunal. La accuracy absoluta entre Arcadia y Nebula **no es comparable directa** (golden sets distintos); lo limpio es comparar *entre modos dentro de cada BD*.
+
+> **Aviso (por qué estos números cambiaron respecto a una versión anterior).** En una primera tirada Nebula daba un 40% engañoso: el arnés ejecutaba las consultas contra la BD por defecto (Arcadia), no contra la que evaluaba, así que las tablas propias de Nebula fallaban con *"relation does not exist"* y las compartidas coincidían por casualidad. Lo detecté mirando a mano 3 fallos y 3 aciertos (aparecían tablas de Nebula como inexistentes). Corregido —ahora ejecuto contra la BD evaluada, con test de regresión— los aciertos reales de Nebula suben de 40% a 80% en GraphRAG. Es el ejemplo perfecto del punto de abajo: un número sospechoso casi siempre es la medición, no el sistema.
+
+Los informes reproducibles quedan en [`docs/evaluacion/`](../evaluacion/) (`resumen.md`, `descripciones.md`, `escala.md`, y el detalle por caso en `escala-casos.json`). La lectura orientada a producto (economía a escala y por volumen, públicos, casos de uso) está en [`docs/propuesta-valor.md`](../propuesta-valor.md); aquí me quedo con la lectura neutra.
+
+### Sesgos y límites de las métricas
+
+Revisar los resultados caso por caso (leyendo la SQL generada frente a la de referencia, no solo el porcentaje) me enseñó que la execution accuracy tiene sesgos que hay que declarar. Los recojo aquí para que los números se lean con cabeza; son la razón de tener **tres** cristales (estricta, justa y equivalencia LLM) en vez de uno.
+
+1. **Columna de más (el `id`).** La variante *estricta* exige un resultado idéntico, así que marca como fallo una consulta correcta que además devuelve `game_id` junto al título — algo que el LLM tiende a hacer. Por eso reporto la *justa* (referencia contenida en la candidata): no penaliza columnas descriptivas de más. La estricta se queda como cota inferior, no como el titular.
+
+2. **`INNER` vs `LEFT JOIN` / interpretación de la referencia única.** Comparo contra UNA sola SQL de referencia, que fija una interpretación. Varias preguntas "por/cada categoría" (clientes por región, media por género, duración por plataforma…) admiten dos lecturas válidas: incluir solo las categorías con actividad (`INNER`) o **todas**, con 0/NULL en las vacías (`LEFT`). Mis referencias usaban `INNER` y ocultaban las categorías vacías, cuando "cada/por X" pide justamente todas —un 0 es información, no una fila a esconder—, así que penalizaba al modelo por escribir una consulta *mejor* que mi ground truth. Corregí las referencias a la interpretación inclusiva (**D-13**). Hay un caso engañoso que conviene tener presente: si en los datos ninguna categoría está vacía, `INNER` y `LEFT` devuelven las MISMAS filas, así que la comparación de resultados **no ve** una diferencia que sí existe en la consulta — el sesgo puede esconderse en los datos.
+
+3. **El juez de equivalencia (LLM) corrige en las dos direcciones, pero es falible.** Lo añadí (**D-11**) para capturar aciertos que la comparación de filas descarta (el `id` de más, empates en un top-N, agregaciones equivalentes). En la práctica se movió en los dos sentidos: rescató consultas correctas *y* cazó diferencias reales que la comparación de resultados no veía (un `LEFT JOIN` que cambia la respuesta, un `COUNT(DISTINCT)` frente a `COUNT(*)`). Eso lo hace valioso como tercer cristal, pero como lo decide un LLM también se equivoca y **hereda el marco de la referencia**; por eso va SIEMPRE al lado de la execution accuracy objetiva, nunca en su lugar (mismo motivo por el que el Judge de SPEC-06 no bloquea).
+
+4. **El bug que invalidó los primeros números de Nebula.** Los primeros aciertos de Nebula (40%) eran falsos: el arnés ejecutaba las consultas contra la BD por defecto (Arcadia), no contra la que evaluaba, así que las tablas propias de Nebula fallaban y las compartidas coincidían por casualidad. Lo detecté precisamente mirando a mano 3 fallos y 3 aciertos. Arreglado (ejecuto contra la BD evaluada) y con test de regresión; los números de Nebula de arriba ya son los correctos (40% → 80%). **Moraleja, otra vez: un número sospechosamente malo casi siempre es la medición, no el sistema — pero solo lo ves si abres los casos.**
+
+Y los límites de siempre: golden set pequeño (25 + 15), un dominio, un modelo y **una sola tirada** (la generación no es determinista — se nota en que Arcadia sale 72/68/64 en un arnés y 68/68/68 en el otro). Son señales honestas para la presentación, no una evaluación estadística de tribunal.
 
 ## 11. Mejoras futuras
 

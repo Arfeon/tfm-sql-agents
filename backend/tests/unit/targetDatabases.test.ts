@@ -6,7 +6,7 @@
  * valores por defecto.
  */
 import { describe, it, expect } from 'vitest'
-import { loadTargetDatabases, targetDatabaseLabel } from '../../src/graphsql/infrastructure/config/targetDatabases'
+import { loadTargetDatabases, targetDatabaseLabel, selectEvalTarget } from '../../src/graphsql/infrastructure/config/targetDatabases'
 
 describe('loadTargetDatabases', () => {
   it('clavesNumeradas_cargaTodasLasBdsEnOrden', () => {
@@ -56,6 +56,31 @@ describe('loadTargetDatabases', () => {
     const targets = loadTargetDatabases({})
     expect(targets).toHaveLength(1)
     expect(targets[0].name).toBe('arcadia')
+  })
+})
+
+describe('selectEvalTarget', () => {
+  const env = {
+    TARGET_DB_1_NAME: 'arcadia',
+    TARGET_DB_2_TYPE: 'postgresql',
+    TARGET_DB_2_NAME: 'nebula',
+  }
+
+  it('sinEvalTarget_devuelveLaPrimera', () => {
+    expect(selectEvalTarget(env).name).toBe('arcadia')
+  })
+
+  it('conEvalTarget_devuelveLaBdPorNombre', () => {
+    expect(selectEvalTarget({ ...env, EVAL_TARGET: 'nebula' }).name).toBe('nebula')
+  })
+
+  it('evalTargetDesconocido_lanzaError', () => {
+    expect(() => selectEvalTarget({ ...env, EVAL_TARGET: 'noExiste' })).toThrow(/no está en el catálogo/)
+  })
+
+  it('leeElFlagPublicDelEntorno', () => {
+    const targets = loadTargetDatabases({ TARGET_DB_1_NAME: 'a', TARGET_DB_1_PUBLIC: 'true' })
+    expect(targets[0].public).toBe(true)
   })
 })
 

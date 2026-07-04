@@ -1,0 +1,137 @@
+# =====================================================================
+# Golden set — Nebula (BD grande de escala, SPEC-17)
+# =====================================================================
+# Mismo formato que el de Arcadia. En esta fase se usa sobre todo para el
+# schema-linking recall (¿la recuperación trae las tablas gold?) sobre un esquema
+# de ~66 tablas. Las tablas van vacías, así que la `sql` de referencia documenta la
+# intención pero no se ejecuta todavía (la execution accuracy queda para cuando se
+# siembren datos). Preguntas en ESPAÑOL, esquema en INGLÉS.
+# =====================================================================
+
+- id: N-01
+  question: "¿Cuántos juegos hay en el catálogo?"
+  difficulty: easy
+  tables: [game]
+  sql: |
+    SELECT COUNT(*) FROM game;
+
+- id: N-02
+  question: "Dame los 5 juegos con mayor precio base."
+  difficulty: easy
+  tables: [game]
+  sql: |
+    SELECT title, base_price FROM game ORDER BY base_price DESC LIMIT 5;
+
+- id: N-03
+  question: "¿Cuántos clientes hay en cada región?"
+  difficulty: easy
+  tables: [customer, region]
+  sql: |
+    SELECT r.name, COUNT(c.customer_id)
+    FROM region r LEFT JOIN customer c ON c.region_id = r.region_id
+    GROUP BY r.name;
+  note: "Interpretación inclusiva (D-13): 'cada región' incluye regiones con 0 clientes (LEFT JOIN)."
+
+- id: N-04
+  question: "Lista los planes de suscripción con su precio mensual."
+  difficulty: easy
+  tables: [subscription_plan]
+  sql: |
+    SELECT name, monthly_price FROM subscription_plan ORDER BY monthly_price;
+
+- id: N-05
+  question: "¿Qué juegos pertenecen a alguna franquicia y cuál es?"
+  difficulty: medium
+  tables: [game, franchise]
+  sql: |
+    SELECT g.title, f.name FROM game g JOIN franchise f ON f.franchise_id = g.franchise_id;
+
+- id: N-06
+  question: "Muéstrame los 10 juegos con más minutos jugados en total."
+  difficulty: medium
+  tables: [play_session, game]
+  sql: |
+    SELECT g.title, SUM(ps.duration_minutes) AS total
+    FROM play_session ps JOIN game g ON g.game_id = ps.game_id
+    GROUP BY g.title ORDER BY total DESC LIMIT 10;
+
+- id: N-07
+  question: "¿Qué 10 clientes tienen más logros desbloqueados?"
+  difficulty: hard
+  tables: [customer_achievement, customer]
+  sql: |
+    SELECT c.username, COUNT(*) AS logros
+    FROM customer_achievement ca JOIN customer c ON c.customer_id = ca.customer_id
+    GROUP BY c.username ORDER BY logros DESC LIMIT 10;
+
+- id: N-08
+  question: "¿Cuál es el importe total facturado por estado de la factura?"
+  difficulty: medium
+  tables: [invoice]
+  sql: |
+    SELECT status, SUM(total) FROM invoice GROUP BY status;
+
+- id: N-09
+  question: "¿Qué juegos tienen algún torneo con un bote de más de 10000?"
+  difficulty: medium
+  tables: [tournament, game]
+  sql: |
+    SELECT DISTINCT g.title FROM tournament t JOIN game g ON g.game_id = t.game_id WHERE t.prize_pool > 10000;
+
+- id: N-10
+  question: "¿Cuáles son las 10 reseñas con más votos de útil?"
+  difficulty: hard
+  tables: [review, review_vote]
+  sql: |
+    SELECT r.title, COUNT(*) AS utiles
+    FROM review r JOIN review_vote rv ON rv.review_id = r.review_id
+    WHERE rv.is_helpful GROUP BY r.review_id, r.title ORDER BY utiles DESC LIMIT 10;
+
+- id: N-11
+  question: "¿Qué clientes tienen tickets de soporte abiertos?"
+  difficulty: medium
+  tables: [support_ticket, customer]
+  sql: |
+    SELECT DISTINCT c.username
+    FROM support_ticket t JOIN customer c ON c.customer_id = t.customer_id
+    WHERE t.status = 'open';
+
+- id: N-12
+  question: "¿Qué juegos están disponibles en la plataforma llamada PC?"
+  difficulty: hard
+  tables: [game, game_platform, platform]
+  sql: |
+    SELECT g.title
+    FROM game g
+    JOIN game_platform gp ON gp.game_id = g.game_id
+    JOIN platform p ON p.platform_id = gp.platform_id
+    WHERE p.name = 'PC';
+
+- id: N-13
+  question: "¿Qué 5 clientes tienen más juegos en su lista de deseos?"
+  difficulty: hard
+  tables: [t_042, customer]
+  sql: |
+    SELECT c.username, COUNT(*) AS deseados
+    FROM t_042 w JOIN customer c ON c.customer_id = w.customer_id
+    GROUP BY c.username ORDER BY deseados DESC LIMIT 5;
+
+- id: N-14
+  question: "Lista los estudios con más de 100 empleados y su compañía matriz."
+  difficulty: medium
+  tables: [studio, company]
+  sql: |
+    SELECT s.name, co.name
+    FROM studio s JOIN company co ON co.company_id = s.company_id
+    WHERE s.headcount > 100;
+
+- id: N-15
+  question: "¿Qué juegos tienen audio en español?"
+  difficulty: hard
+  tables: [game, game_language, language]
+  sql: |
+    SELECT DISTINCT g.title
+    FROM game g
+    JOIN game_language gl ON gl.game_id = g.game_id
+    JOIN language l ON l.language_id = gl.language_id
+    WHERE l.name = 'Spanish' AND gl.kind = 'audio';

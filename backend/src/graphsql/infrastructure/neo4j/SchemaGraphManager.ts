@@ -59,8 +59,7 @@ export class SchemaGraphManager {
     if (tableNames.length === 0) {
       return []
     }
-
-    // 1. Expando: las candidatas + sus vecinas por FK (un salto, ambos sentidos).
+    // Expando: las candidatas + sus vecinas por FK (un salto, ambos sentidos).
     const expanded = await this.neo4j.run<{ names: string[] }>(
       `MATCH (t:Table) WHERE t.name IN $names
        OPTIONAL MATCH (t)-[:REFERENCES]-(neighbor:Table)
@@ -70,12 +69,23 @@ export class SchemaGraphManager {
        RETURN collect(name) AS names`,
       { names: tableNames },
     )
-    const allNames = expanded[0]?.names ?? []
-    if (allNames.length === 0) {
+    return this.reconstructTables(expanded[0]?.names ?? [])
+  }
+
+  /**
+   * Devuelve exactamente las tablas indicadas (con sus columnas y claves), SIN
+   * expandir por claves foráneas. Es la recuperación "solo vectorial" del ablation
+   * (SPEC-11): las candidatas por significado, sin las vecinas que trae el grafo.
+   */
+  async getTables(tableNames: string[]): Promise<TableSchema[]> {
+    return this.reconstructTables(tableNames)
+  }
+
+  /** Reconstruyo cada tabla con sus columnas y FKs (comprehensions: sin producto cartesiano). */
+  private async reconstructTables(names: string[]): Promise<TableSchema[]> {
+    if (names.length === 0) {
       return []
     }
-
-    // 2. Reconstruyo cada tabla con sus columnas y FKs (comprehensions: sin producto cartesiano).
     const rows = await this.neo4j.run<{
       name: string
       schema: string | null
@@ -92,7 +102,7 @@ export class SchemaGraphManager {
               [(t)-[:HAS_COLUMN]->(c:Column) | {name: c.name, type: c.type, nullable: c.nullable}] AS columns,
               [(t)-[fk:REFERENCES]->(ref:Table) | {column: fk.from_column, referencesTable: ref.name, referencesColumn: fk.to_column}] AS foreignKeys
        ORDER BY t.name`,
-      { names: allNames },
+      { names },
     )
 
     return rows.map((row) => ({

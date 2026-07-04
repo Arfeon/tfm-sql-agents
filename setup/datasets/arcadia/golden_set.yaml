@@ -45,11 +45,12 @@
   difficulty: easy
   tables: [customer, region]
   sql: |
-    SELECT r.name AS region, COUNT(*) AS customers
-    FROM customer c
-    JOIN region r ON r.region_id = c.region_id
+    SELECT r.name AS region, COUNT(c.customer_id) AS customers
+    FROM region r
+    LEFT JOIN customer c ON c.region_id = r.region_id
     GROUP BY r.name
     ORDER BY customers DESC;
+  note: "Interpretación inclusiva (D-13): 'cada región' incluye regiones con 0 clientes (LEFT JOIN)."
 
 - id: G-05
   question: "¿Qué juegos tienen clasificación de edad para adultos (M)?"
@@ -79,12 +80,12 @@
   tables: [rating, game_genre, genre]
   sql: |
     SELECT ge.name AS genre, ROUND(AVG(r.score), 2) AS avg_score
-    FROM rating r
-    JOIN game_genre gg ON gg.game_id = r.game_id
-    JOIN genre ge ON ge.genre_id = gg.genre_id
+    FROM genre ge
+    LEFT JOIN game_genre gg ON gg.genre_id = ge.genre_id
+    LEFT JOIN rating r ON r.game_id = gg.game_id
     GROUP BY ge.name
-    ORDER BY avg_score DESC;
-  note: "Tres tablas vía M:N game_genre."
+    ORDER BY avg_score DESC NULLS LAST;
+  note: "Tres tablas vía M:N game_genre. Interpretación inclusiva (D-13): 'cada género' incluye géneros sin valoraciones (LEFT JOIN, media NULL)."
 
 - id: G-08
   question: "¿Cuántos ingresos por compras de DLC se generaron en 2025?"
@@ -101,12 +102,12 @@
   difficulty: medium
   tables: [subscription, subscription_plan]
   sql: |
-    SELECT sp.name AS plan, COUNT(*) AS active_subscriptions
-    FROM subscription s
-    JOIN subscription_plan sp ON sp.plan_id = s.plan_id
-    WHERE s.status = 'active'
+    SELECT sp.name AS plan, COUNT(s.plan_id) AS active_subscriptions
+    FROM subscription_plan sp
+    LEFT JOIN subscription s ON s.plan_id = sp.plan_id AND s.status = 'active'
     GROUP BY sp.name
     ORDER BY active_subscriptions DESC;
+  note: "Interpretación inclusiva (D-13): 'por plan' incluye planes con 0 activas (LEFT JOIN con el filtro en el ON, no en el WHERE)."
 
 - id: G-10
   question: "Top 5 desarrolladoras por número de juegos desarrollados."
@@ -140,10 +141,11 @@
   tables: [play_session, platform]
   sql: |
     SELECT p.name AS platform, ROUND(AVG(ps.duration_minutes), 1) AS avg_minutes
-    FROM play_session ps
-    JOIN platform p ON p.platform_id = ps.platform_id
+    FROM platform p
+    LEFT JOIN play_session ps ON ps.platform_id = p.platform_id
     GROUP BY p.name
-    ORDER BY avg_minutes DESC;
+    ORDER BY avg_minutes DESC NULLS LAST;
+  note: "Interpretación inclusiva (D-13): 'por plataforma' incluye plataformas sin sesiones (LEFT JOIN, media NULL)."
 
 - id: G-13
   question: "¿Qué juegos tienen una editora distinta de su desarrolladora?"
@@ -248,12 +250,13 @@
   difficulty: hard
   tables: [purchase, customer, region]
   sql: |
-    SELECT r.name AS region, SUM(p.amount) AS dlc_revenue
-    FROM purchase p
-    JOIN customer c ON c.customer_id = p.customer_id
-    JOIN region r ON r.region_id = c.region_id
+    SELECT r.name AS region, COALESCE(SUM(p.amount), 0) AS dlc_revenue
+    FROM region r
+    LEFT JOIN customer c ON c.region_id = r.region_id
+    LEFT JOIN purchase p ON p.customer_id = c.customer_id
     GROUP BY r.name
     ORDER BY dlc_revenue DESC;
+  note: "Interpretación inclusiva (D-13): 'por región' incluye regiones con 0 ingresos (LEFT JOIN, SUM→0). Un 0 es información: una región sin ventas es una señal, no una fila a ocultar."
 
 - id: G-21
   question: "¿Qué género acumula el mayor pico de jugadores concurrentes?"

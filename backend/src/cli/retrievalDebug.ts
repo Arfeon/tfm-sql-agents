@@ -10,6 +10,7 @@ import boxen from 'boxen'
 import chalk from 'chalk'
 import { input } from '@inquirer/prompts'
 import { explainSchemaRetrieval } from '../graphsql/application/schemaRetrieval'
+import { withSpinner } from './ui'
 import type { RetrievalTrace } from '../graphsql/domain/schema/RetrievalTrace'
 
 export async function runRetrievalDebug(): Promise<void> {
@@ -17,9 +18,11 @@ export async function runRetrievalDebug(): Promise<void> {
   if (question.trim() === '') {
     return
   }
-  console.log(chalk.dim('\nRecuperando (ranking semántico + expansión por FK)...\n'))
   try {
-    presentTrace(await explainSchemaRetrieval(question))
+    const trace = await withSpinner('Recuperando (ranking semántico + expansión por FK)…', () =>
+      explainSchemaRetrieval(question),
+    )
+    presentTrace(trace)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.log(chalk.red('\n⚠ No pude ejecutar la recuperación.'))

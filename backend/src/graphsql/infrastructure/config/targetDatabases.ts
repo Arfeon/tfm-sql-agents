@@ -17,6 +17,11 @@ export interface TargetDatabaseConfig {
   user: string
   password: string
   schema: string
+  /**
+   * Marca una BD como pública/conocida. Si es `true`, la evaluación avisa de que el
+   * LLM puede haberla visto en su entrenamiento (posible contaminación de resultados).
+   */
+  public?: boolean
 }
 
 /** Etiqueta legible para mostrar en el CLI, p. ej. "postgresql / arcadia". */
@@ -67,5 +72,23 @@ function readTarget(env: NodeJS.ProcessEnv, prefix: string): TargetDatabaseConfi
     user: value('USER') ?? 'postgres',
     password: value('PASSWORD') ?? 'postgres',
     schema: value('SCHEMA') ?? 'public',
+    public: value('PUBLIC') === 'true',
   }
+}
+
+/**
+ * La BD objetivo a evaluar: la que indique `EVAL_TARGET` (por nombre) o, si no está,
+ * la primera del catálogo (Arcadia). Así la evaluación por defecto no cambia.
+ */
+export function selectEvalTarget(env: NodeJS.ProcessEnv = process.env): TargetDatabaseConfig {
+  const targets = loadTargetDatabases(env)
+  const name = env.EVAL_TARGET
+  if (!name) {
+    return targets[0]
+  }
+  const found = targets.find((target) => target.name === name)
+  if (!found) {
+    throw new Error(`EVAL_TARGET="${name}" no está en el catálogo (${targets.map((t) => t.name).join(', ')}).`)
+  }
+  return found
 }

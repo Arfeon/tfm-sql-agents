@@ -9,7 +9,7 @@ import chalk from 'chalk'
 import { select, input } from '@inquirer/prompts'
 import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
 import { createConversationGraph, askGraph } from '../graphsql/graph/agentGraph'
-import { warnIfLocalModelMissing } from './ui'
+import { warnIfLocalModelMissing, withSpinner } from './ui'
 
 /** Submenú de proveedor: OpenAI (nube) o LM Studio (local). */
 function askProvider(): Promise<LlmProvider> {
@@ -41,7 +41,7 @@ export async function runConversation(): Promise<void> {
     }
 
     try {
-      const reply = await askGraph(graph, threadId, question)
+      const reply = await withSpinner('Pensando…', () => askGraph(graph, threadId, question))
       if (reply.trim() === '') {
         console.log(
           chalk.yellow('\n⚠ El modelo no devolvió respuesta (puede pasar con modelos locales tras usar una herramienta). Prueba de nuevo o reformula.\n'),

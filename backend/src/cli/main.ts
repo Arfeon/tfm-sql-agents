@@ -19,13 +19,20 @@ import { runSqlPipeline } from './sqlPipeline'
 import { runRetrievalDebug } from './retrievalDebug'
 import { runConversation } from './conversation'
 
-/** Menú principal: elijo qué hacer. */
+/**
+ * Menú principal: elijo qué hacer.
+ *
+ * La conversación libre (chat) queda OCULTA del menú a propósito: el pipeline
+ * "Consultar en lenguaje natural" cubre el caso de uso real. No la borro: conservo
+ * el grafo conversacional (`agentGraph`) y sus tools (`schemaTools`, `sqlTools`) como
+ * base reutilizable para un futuro servidor MCP o backends específicos. Reactivarla es
+ * volver a añadir aquí su opción de menú.
+ */
 function askMainAction(): Promise<'chat' | 'query' | 'scan' | 'debug' | 'exit'> {
   return select({
     message: '¿Qué quieres hacer?',
     choices: [
       { name: 'Consultar en lenguaje natural (con revisión humana)', value: 'query' },
-      { name: 'Iniciar una conversación', value: 'chat' },
       { name: 'Escanear el esquema de la BD objetivo', value: 'scan' },
       { name: 'Depurar recuperación (ver el circuito)', value: 'debug' },
       { name: 'Salir', value: 'exit' },

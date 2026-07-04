@@ -9,10 +9,13 @@
 import { randomUUID } from 'node:crypto'
 import boxen from 'boxen'
 import chalk from 'chalk'
+import Table from 'cli-table3'
+import { highlight } from 'cli-highlight'
 import { select, input } from '@inquirer/prompts'
 import { loadTargetDatabases, sqlDialectFor } from '../graphsql/infrastructure/config/targetDatabases'
 import { createSqlPipelineGraph, HUMAN_REVIEW_NODE, MAX_JUDGE_ATTEMPTS, type PipelineStateType } from '../graphsql/graph/pipelineGraph'
 import { CheckpointerFactory } from '../graphsql/infrastructure/checkpoint/CheckpointerFactory'
+import { withSpinner } from './ui'
 import type { JudgeVerdict, PurposeSource } from '../graphsql/domain/sql/JudgeVerdict'
 import type { HumanDecision } from '../graphsql/domain/sql/HumanDecision'
 import type { QueryResult } from '../graphsql/domain/sql/QueryResult'
@@ -40,8 +43,9 @@ export async function runSqlPipeline(): Promise<void> {
   const config = { configurable: { thread_id: randomUUID() } }
 
   try {
-    console.log(chalk.dim('\nRecuperando tablas, generando la SQL y validándola con el Judge...\n'))
-    await graph.invoke({ question, dialect, mustInclude: [] }, config)
+    await withSpinner('Recuperando tablas, generando la SQL y validándola con el Judge…', () =>
+      graph.invoke({ question, dialect, mustInclude: [] }, config),
+    )
 
     // Bucle de revisión: mientras el grafo siga parado antes de la revisión.
     while (true) {
@@ -52,7 +56,7 @@ export async function runSqlPipeline(): Promise<void> {
       presentReview(snapshot.values)
       const decision = await askHumanDecision(snapshot.values)
       await graph.updateState(config, { decision })
-      await graph.invoke(null, config)
+      await withSpinner(spinnerLabelFor(decision), () => graph.invoke(null, config))
     }
 
     const finalState = (await graph.getState(config)).values
@@ -74,7 +78,7 @@ export async function runSqlPipeline(): Promise<void> {
 /** Presento la consulta y la evaluación del Judge en dos cajas separadas. */
 function presentReview(state: PipelineStateType): void {
   const tables = state.schemaContext?.tableNames ?? []
-  const queryText = chalk.cyan(state.sql?.text ?? '(sin consulta)')
+  const queryText = state.sql ? highlight(state.sql.text, { language: 'sql', ignoreIllegals: true }) : chalk.dim('(sin consulta)')
   const tablesLine = chalk.dim(`Tablas usadas: ${tables.join(', ') || '(ninguna)'}`)
   const bodyLines = [queryText, '', tablesLine]
   // Solo muestro los intentos si hubo reintento automático (SPEC-10): con 1 no aporta nada.
@@ -169,6 +173,20 @@ async function askHumanDecision(state: PipelineStateType): Promise<HumanDecision
   return { action } // approve | reject
 }
 
+/** Texto del spinner mientras el grafo procesa mi decisión. */
+function spinnerLabelFor(decision: HumanDecision): string {
+  switch (decision.action) {
+    case 'approve':
+      return 'Ejecutando la consulta…'
+    case 'modify':
+      return 'Validando la consulta editada con el Judge…'
+    case 'refine':
+      return 'Rehaciendo la consulta con tu ajuste…'
+    default: // reject
+      return 'Cerrando…'
+  }
+}
+
 /**
  * Recojo el afinado (SPEC-15) con dos sub-preguntas guiadas: la indicación en
  * lenguaje natural (la principal) y, opcional, tablas a forzar. Exijo al menos una;
@@ -192,12 +210,21 @@ async function askRefine(state: PipelineStateType): Promise<HumanDecision> {
   }
 }
 
-/** Muestro el resultado de la ejecución (columnas y una vista de las filas). */
+/** Muestro el resultado de la ejecución en una tabla con columnas alineadas. */
 function presentResult(result: QueryResult): void {
   const suffix = result.truncated ? chalk.yellow(' (truncado al tope de filas)') : ''
   console.log(chalk.green(`\n✔ ${result.rowCount} fila(s) devueltas${suffix}.`))
   if (result.rows.length > 0) {
-    console.table(result.rows.slice(0, 50))
+    const table = new Table({ head: result.columns, style: { head: ['cyan'] } })
+    for (const row of result.rows.slice(0, 50)) {
+      table.push(result.columns.map((name) => formatCell(row[name])))
+    }
+    console.log(table.toString())
   }
   console.log('')
+}
+
+/** Un valor de celda como texto; el nulo lo marco en gris para que se distinga del vacío. */
+function formatCell(value: unknown): string {
+  return value === null || value === undefined ? chalk.dim('∅') : String(value)
 }

@@ -32,6 +32,10 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | D-06 | Recuperación GraphRAG: búsqueda exacta por coseno (sin índice ANN), consultar con el **mismo modelo/dimensión** con que se indexó, y rechazar vectores degenerados | A escala de un esquema (cientos de tablas) el seqscan por coseno es exacto e instantáneo; un índice ANN (ivfflat) con pocas filas devolvía listas vacías. Comparar vectores de espacios distintos no tiene sentido → se reconstruye el modelo del índice, no el del `.env`. El guard (rechazar ceros o dimensión incorrecta) evita indexar/consultar con embeddings rotos sin enterarse | ✅ Cerrada |
 | D-07 | Judge por capas: solo las comprobaciones **deterministas** (seguridad sin LLM + sintaxis real vía dry-run contra la BD) invalidan una consulta; el juez LLM es **asesor** (aporta confianza/avisos, no bloquea por sí solo) | El LLM-as-judge da falsos positivos (demasiado estricto); si bloqueara, tumbaría consultas válidas. La BD (dry-run) es la autoridad objetiva de la sintaxis y la seguridad es determinista. El umbral de confianza queda como palanca opcional del operador, separada de la opinión del LLM | ✅ Cerrada |
 | D-08 | Pipeline NL→SQL como grafo propio (distinto del conversacional), con la revisión humana como `interrupt_before` y checkpointer en PostgreSQL; el bucle de fijar/modificar lo controla el humano, no el LLM | El flujo determinista (recuperar→SQL→Judge→revisión→ejecutar) no encaja en el grafo de chat con tools de SPEC-01: quiero enrutado por reglas sobre el estado, no decidido por el modelo. `interrupt_before` + checkpointer Postgres dan la pausa recuperable por `thread_id` (una consulta no se ejecuta sin visto bueno). El *must-include* es UX determinista: el humano fija tablas y el grafo rehace la recuperación, sin depender de que el LLM acierte. El reintento automático Judge↔SQL con cuenta de intentos se deja para el supervisor (SPEC-10); aquí el pipeline es el esqueleto que ese supervisor formalizará | ✅ Cerrada |
+| D-09 | Evaluación por ablation de tres modos (sin recuperación / solo vectorial / GraphRAG) sobre el golden set, midiendo schema-linking recall, tamaño de contexto y execution accuracy (comparando el resultado, no el texto de la SQL) | Aísla la aportación de cada capa de recuperación con una baseline justa (no un ninot de palla). El recall aísla la recuperación de si el LLM acierta; el tamaño de contexto captura el coste que el recall no ve (la baseline "sin recuperación" tiene recall 1 pero contexto enorme); la execution accuracy por comparación de resultado es el estándar (una misma pregunta admite varias SQL equivalentes). Se asume el límite de un golden set pequeño, un dominio y un modelo, y se declara | ✅ Cerrada |
+| D-11 | Métrica **complementaria** de equivalencia semántica: un segundo LLM juzga si la SQL candidata responde a la MISMA pregunta que la de referencia (con la candidata ejecutable como precondición); se reporta **al lado** de la execution accuracy, no en su lugar | Comparar el resultado (aun con la variante "justa" de contención) exige un conjunto de filas casi idéntico, y eso infravalora aciertos correctos que difieren en cosas irrelevantes: empates en un top-N, columnas descriptivas de más, agregaciones equivalentes escritas distinto; y la generación LLM no es determinista, así que exigir resultado casi idéntico penaliza de más. Un juez de equivalencia captura esos aciertos. Ahora bien, la equivalencia de consultas es indecidible en general y un LLM-juez también se equivoca (mismo riesgo que el juez de SPEC-06): por eso NO es la métrica titular —esa sigue siendo la execution accuracy objetiva y reproducible— sino una cota superior "semántica" que se reporta junto a ella, con su falibilidad declarada | ✅ Cerrada |
+| D-12 | Oculto el chat conversacional del menú del CLI (YAGNI), pero **conservo** el grafo `agentGraph` y sus tools (`schemaTools`, `sqlTools`) sin borrarlos | El pipeline NL→SQL con revisión (SPEC-08/10/15) cubre el caso de uso real; la conversación libre no aportaba y confundía en la demo. No la borro porque el grafo y sus tools son una base reutilizable para direcciones futuras (un servidor MCP, backends específicos): oculto solo el punto de entrada (la opción de menú), reactivable con una línea. Distinto de borrar código muerto: aquí es código vivo y reutilizable, solo no expuesto | ✅ Cerrada |
+| D-13 | Golden set: interpretación **inclusiva** de las agregaciones "por/cada categoría" — la SQL de referencia incluye las categorías con 0/NULL (LEFT JOIN), no solo las que tienen actividad | Revisando a mano los fallos vi que varias referencias usaban INNER JOIN y ocultaban categorías sin actividad (regiones sin clientes, géneros sin valoraciones, planes sin suscripciones, plataformas sin sesiones, regiones sin ingresos). Pero una pregunta "por/cada X" pregunta por TODAS las X, y un 0 es información (una región sin ventas es una señal, no una fila a ocultar; el front la etiqueta "sin datos"). Así que la respuesta fiel incluye las vacías, y penalizar al modelo por generarla era un error de la ground truth, no del modelo. Aplico la regla por el ENUNCIADO y de forma uniforme (puede perjudicar a un candidato que usara INNER), no para favorecer al modelo, y mantengo los números anteriores para transparencia. Límite conocido: cualquier referencia única fija una interpretación; para preguntas ambiguas es intrínseco a la execution accuracy (por eso está D-11) | ✅ Cerrada |
 
 ### 3.1 Patrón obligatorio: acceso a recursos externos (puerto + adaptador + factory)
 
@@ -61,16 +65,17 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ✅ Cerrada |
 | SPEC-07 | Execute SQL (solo lectura) | ✅ Cerrada |
 | SPEC-08 | Human Review (interrupt) integrado en el pipeline | ✅ Cerrada |
-| SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | ⏳ Pendiente |
+| SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | 🔮 Futuro (fuera del MVP) |
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ✅ Cerrada |
-| SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ⏳ Pendiente |
-| SPEC-12 | Gestión de conversaciones: nombrar, listar y reanudar hilos | ⏳ Pendiente |
+| SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ✅ Cerrada (arnés + experimento ejecutado; ablation de 3 modos y de descripciones, informes en `docs/evaluacion/`) |
+| SPEC-12 | Gestión de conversaciones: nombrar, listar y reanudar hilos | 🔮 Futuro (fuera del MVP) |
 | SPEC-13 | Explicabilidad de la recuperación (traza del GraphRAG) + modo depuración en el CLI | ✅ Cerrada |
 | SPEC-14 | El Judge evalúa la certeza del propósito de las tablas usadas (documentada / evidente / supuesta) | ✅ Cerrada |
 | SPEC-15 | Afinar la consulta en la revisión con indicaciones en lenguaje natural (fusiona la acción "fijar tablas") | ✅ Cerrada |
-| SPEC-16 | Seguimiento conversacional de una consulta (pregunta de seguimiento tras ejecutar) | ⏳ Pendiente |
+| SPEC-16 | Seguimiento conversacional de una consulta (pregunta de seguimiento tras ejecutar) | 🔮 Futuro (fuera del MVP) |
+| SPEC-17 | Prueba de escala: segunda BD objetivo grande (sintética, 66 tablas) + evaluación multi-BD | ✅ Cerrada (arnés + ejecutado; GraphRAG plano 774→759 tokens de 17→66 tablas, recall 99%→100%) |
 
-> **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §9](arquitectura.md).
+> **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §10](arquitectura.md).
 
 ---
 
@@ -138,7 +143,7 @@ cd backend && npm run test:integration   # smoke test contra el LLM real (opt-in
 
 ### SPEC-00C — CLI inicial: punto de entrada, selección de proveedor y primera conversación
 
-**Objetivo.** Quiero una primera interfaz de consola, agradable y con color, que me deje arrancar la aplicación, elegir con qué LLM hablar y hacerle una pregunta. Es el primer hito visible de extremo a extremo: del menú al modelo y vuelta. La versión completa (CLI integrado con todo el pipeline de agentes y la aprobación humana) queda para SPEC-09; aquí solo monto el esqueleto y la primera conversación directa con el modelo.
+**Objetivo.** Quiero una primera interfaz de consola, agradable y con color, que me deje arrancar la aplicación, elegir con qué LLM hablar y hacerle una pregunta. Es el primer hito visible de extremo a extremo: del menú al modelo y vuelta. La versión completa (CLI integrado con todo el pipeline de agentes y la aprobación humana) queda para SPEC-11; aquí solo monto el esqueleto y la primera conversación directa con el modelo.
 
 **Contrato.** El punto de entrada arranca un flujo interactivo: muestra una cabecera, ofrece un menú principal y, si elijo conversar, me deja escoger proveedor (OpenAI o LM Studio) y escribir preguntas que se envían al modelo a través de `ChatModelFactory` e `IChatModel`. No expongo un puerto nuevo: el CLI es la capa más externa (composición), reutiliza lo construido en SPEC-00B y muestra las respuestas por consola.
 
@@ -169,6 +174,8 @@ cd backend && npm start
 ---
 
 ### SPEC-01 — Primer grafo LangGraph: conversar y completar acciones
+
+> **Nota (D-12, 2026-07-04).** El chat conversacional cumplió su objetivo (validar la orquestación) y su código se **conserva** (`agentGraph` + `schemaTools`/`sqlTools`) como base reutilizable, pero **ya no se expone en el menú del CLI**: el pipeline NL→SQL con revisión (SPEC-08/10/15) cubre el caso de uso real. Reactivarlo es volver a añadir su opción de menú en `main.ts`.
 
 **Objetivo.** Antes de montar los agentes especializados quiero validar el esqueleto de orquestación: un primer grafo de LangGraph.js capaz de mantener una conversación con estado y de **completar acciones** llamando a herramientas (tools). Es la prueba de que LangGraph hace lo que necesito (nodos, edges condicionales, estado por hilo) antes de invertir en el pipeline real.
 
@@ -507,6 +514,61 @@ cd backend && npm test    # unit del bucle de reintento Judge↔SQL (con dobles)
 
 ---
 
+### SPEC-11 — Integración CLI final + evaluación experimental (ablation)
+
+**Objetivo.** Cerrar el proyecto por dos lados. **(A)** Dejar el CLI listo para la demo: que desde el menú se llegue con fluidez a todo lo construido (conversar, escanear, consultar con revisión, depurar recuperación). **(B)** Medir lo que hasta ahora solo afirmo: que la recuperación GraphRAG localiza las tablas relevantes **sin volcar todo el esquema**, y que las descripciones rescatan tablas de nombre opaco. La evaluación no busca rigor estadístico de tribunal universitario (el golden set es pequeño, un solo dominio y un solo modelo, y lo declaro), sino **pocos números claros y honestos que se vean en la presentación**: cuánto contexto ahorro, cuántas tablas correctas recupero, y el caso `t_042`.
+
+**Contrato.**
+
+*Parte A — CLI final.* El menú principal da acceso a: conversar con el agente, escanear/vectorizar el esquema, lanzar una consulta con revisión humana (pipeline SPEC-08/10/15) y depurar la recuperación (SPEC-13). Un recorrido de demo va del menú a cada función y vuelve sin romperse.
+
+*Parte B — evaluación (ablation sobre el golden set).*
+
+- *Dataset*: el golden set de Arcadia ([`golden_set.yaml`](../../setup/datasets/arcadia/golden_set.yaml), 25 casos G-01..G-25), cada uno con la pregunta, las tablas que la SQL correcta debe tocar (`tables`) y la SQL de referencia (`sql`).
+- *Variable independiente — modo de recuperación*, tres niveles:
+  - **sin recuperación**: el contexto es el esquema ENTERO (todas las tablas). Baseline que revienta el contexto.
+  - **solo vectorial**: las top-K tablas por similitud, SIN expandir por claves foráneas.
+  - **GraphRAG completo**: top-K + expansión por FK en el grafo (lo actual).
+- *Segunda dimensión — descripciones on/off* (D-03): con y sin las descripciones de las tablas, para aislar su aporte. Cada nivel exige (re)vectorizar el índice en ese modo (con/sin la descripción en el texto embebido) y renderizar el DDL con/sin el comentario de descripción. Es el paso más pesado; si el tiempo aprieta, como mínimo la comparación dirigida sobre G-25 (`t_042`).
+- *Métricas por caso y modo*:
+  - **schema-linking recall**: de las tablas `gold`, cuántas aparecen en el contexto recuperado (∩ / total). Aísla la recuperación; no depende de que el LLM acierte la SQL.
+  - **tamaño de contexto**: nº de tablas (y un estimado de tokens del DDL) que se le pasan al SQL Agent. Es lo que enseña que "sin recuperación" no escala.
+  - **execution accuracy**: ejecuto la SQL candidata (la que genera el sistema en ese modo) y la SQL de referencia contra Arcadia en solo lectura y comparo el RESULTADO (mismo conjunto de filas, sin importar el orden). Solo ejecuto la candidata si pasa la comprobación de seguridad; si no, cuenta como fallo.
+  - **equivalencia semántica (LLM, complementaria, D-11)**: si la candidata es ejecutable, un segundo LLM juzga si responde a la MISMA pregunta que la de referencia. Recupera aciertos que la comparación de resultados descarta (empates en un top-N, columnas descriptivas de más, agregaciones equivalentes) y que la no-idempotencia del LLM haría casi imposibles de igualar por resultado exacto. Se reporta **al lado** de la execution accuracy, nunca en su lugar: un LLM-juez también se equivoca (la equivalencia de consultas es indecidible en general), así que la métrica objetiva sigue siendo la titular.
+- *Salida*: un informe reproducible (tabla en consola + fichero CSV/JSON y un resumen en `docs/evaluacion/`) agregando por modo (recall medio, tamaño de contexto medio, execution accuracy %) y desglose por dificultad (easy/medium/hard). Los números salen tal cual para las slides.
+- *Honestidad*: el informe declara sus límites (golden set de 25, un dominio, un modelo, generación no determinista → indico si es una tirada o media de N), y la baseline es justa (sin recuperación / solo vectorial / GraphRAG), no un ninot de palla. **Aviso de escala**: a las ~17 tablas de Arcadia, la baseline "sin recuperación" puede aún responder bien porque el esquema entero cabe en el contexto; por eso a esta escala el argumento lo carga el **tamaño de contexto/tokens**, y la brecha de execution accuracy se espera que crezca con el tamaño del esquema (lo confirmaría la BD pública grande opcional).
+
+**Pasos**
+
+1. Cargador del golden set: leer `golden_set.yaml` a una lista de casos tipados (`id`, `question`, `difficulty`, `tables`, `sql`).
+2. Modos de recuperación reutilizando la DI de SPEC-04: `graphrag` = deps reales; `solo vectorial` = `expandByForeignKeys` sustituido por una lectura que devuelve solo las tablas candidatas con sus columnas/claves, sin vecinas (añadir esa lectura al grafo si no existe); `sin recuperación` = saltar la recuperación y construir el contexto con TODAS las tablas (`readTargetSchema` + `buildSchemaContext`).
+3. Descripciones on/off: parametrizar la (re)vectorización y el render del DDL para incluir o no la descripción; documentar el paso de re-vectorizar entre condiciones.
+4. Caso de uso `evaluateGoldenSet(cases, mode, deps)` (capa aplicación, deps inyectadas con real por defecto): por cada caso recupera en el modo dado → genera la SQL → comprueba seguridad → ejecuta candidata y referencia → calcula recall, tamaño de contexto y execution accuracy. Devuelve resultados estructurados (no pinta nada).
+5. Comparación de resultados de ejecución: igualdad de conjuntos de filas independiente del orden (multiset), normalizando tipos básicos.
+6. Runner/script (`npm run evaluate`, opt-in, requiere Docker + LLM): corre los tres modos (y descripciones on/off si hay tiempo), agrega y escribe el informe (consola + fichero). Opcional: una entrada de menú en el CLI para lanzarlo en la demo.
+7. Redactar en `arquitectura.md` §10 (evaluación experimental) la lectura de los números y sus límites; volcar la narrativa al diario.
+8. Tests: unit con dobles del cálculo de métricas (recall, comparación de result sets, tamaño de contexto) sin tocar BD ni LLM; el runner completo es integración opt-in.
+
+**Criterios de aceptación**
+
+- [X] Desde el menú del CLI llego a conversar, escanear, consultar con revisión y depurar recuperación, y vuelvo sin que la app se rompa
+- [X] El cargador lee los 25 casos del golden set con sus tablas `gold` y su SQL de referencia
+- [X] Los tres modos de recuperación (sin recuperación / solo vectorial / GraphRAG) están implementados y producen contextos distintos
+- [X] Por cada caso y modo obtengo: schema-linking recall, tamaño de contexto y execution accuracy (resultado candidato vs referencia)
+- [X] La SQL candidata solo se ejecuta si pasa la comprobación de seguridad; si no, cuenta como fallo
+- [X] El runner agrega por modo (y por dificultad) y guarda el informe de forma reproducible (`docs/evaluacion/`); declara sus límites
+- [X] Tests unit con dobles del cálculo de métricas y de la orquestación; el runner completo es integración opt-in
+- [X] Ejecutado `npm run evaluate` (chat OpenAI, embeddings locales): 3 modos → recall 100/93/99%, execution accuracy justa 72/68/64%, equivalencia semántica (LLM) 64/60/56%, contexto 1498/481/774 tokens (una tirada; varía ~±8pp por no-determinación)
+- [X] Ablation de descripciones (`npm run evaluate:descriptions`, 2×2): las descripciones suben recall y precisión; `t_042` (G-25) se recupera y acierta con descripciones, y en solo-vectorial falla sin ellas (GraphRAG la rescata por FK)
+- [X] `arquitectura.md` §10 recoge la lectura neutra de los resultados; `docs/propuesta-valor.md` la lectura orientada a producto
+
+```bash
+cd backend && npm test                 # unit del cálculo de métricas (con dobles)
+cd backend && npm run evaluate         # ablation completa sobre Arcadia (opt-in, Docker + LLM)
+```
+
+---
+
 ### SPEC-12 — Gestión de conversaciones: nombrar, listar y reanudar hilos
 
 **Objetivo.** Quiero poder ponerle un nombre a la conversación (chat o consulta) que voy a empezar, ver más tarde un listado de las conversaciones guardadas (con su identificador y una descripción) y **retomar** cualquiera donde la dejé. Es gestión de sesiones, no memoria semántica: se apoya en el checkpointer que ya persiste el estado por `thread_id` (SPEC-08), y es cosa distinta del Memory Agent (SPEC-09), que reutiliza consultas pasadas como ejemplos *few-shot*. La descripción puede escribirla el usuario o generarla el modelo (un resumen breve del hilo).
@@ -669,7 +731,7 @@ cd backend && npm test    # unit del afinado guiado (con dobles)
 
 ### SPEC-16 — Seguimiento conversacional de una consulta (pregunta de seguimiento)
 
-**Objetivo.** Tras ejecutar una consulta y ver los resultados, quiero poder hacer una **pregunta de seguimiento** ligada a esa consulta ("¿y si además…?", "ahora agrúpalo por mes") sin empezar de cero, como una conversación sobre la propia consulta. Es el primer paso hacia el **análisis conversacional** (visión BI, README §12.3). Es distinto de "Afinar" (SPEC-15): afinar ocurre **antes** de ejecutar, sobre la consulta propuesta y para el usuario técnico que ve que algo falla; el seguimiento ocurre **después** de ejecutar, sobre los resultados que ya he visto.
+**Objetivo.** Tras ejecutar una consulta y ver los resultados, quiero poder hacer una **pregunta de seguimiento** ligada a esa consulta ("¿y si además…?", "ahora agrúpalo por mes") sin empezar de cero, como una conversación sobre la propia consulta. Es el primer paso hacia el **análisis conversacional** (visión BI, [arquitectura.md §11](arquitectura.md)). Es distinto de "Afinar" (SPEC-15): afinar ocurre **antes** de ejecutar, sobre la consulta propuesta y para el usuario técnico que ve que algo falla; el seguimiento ocurre **después** de ejecutar, sobre los resultados que ya he visto.
 
 **Contrato (esbozo, se detallará al implementar).**
 
@@ -678,5 +740,46 @@ cd backend && npm test    # unit del afinado guiado (con dobles)
 - Se apoya en el checkpointer que ya persiste el estado por `thread_id` (SPEC-08) y encaja con la gestión de conversaciones (SPEC-12), que da el hilo con nombre e historial.
 
 *(Contrato completo, pasos y criterios de aceptación: se detallarán al abordar el SPEC-16.)*
+
+---
+
+### SPEC-17 — Prueba de escala: segunda BD objetivo grande + evaluación multi-BD
+
+**Objetivo.** Validar con datos el argumento que hasta ahora solo defiendo de palabra: que el valor del GraphRAG **crece con el tamaño del esquema**. Arcadia tiene 17 tablas y a esa escala "volcar el esquema entero" aún cabe en el contexto. Quiero una segunda BD objetivo **grande** (~60 tablas) para enseñar que, al crecer el esquema, el contexto de "sin recuperación" se dispara (tokens, y a cierto punto ni cabe) mientras que el GraphRAG se mantiene **acotado** con un recall alto. Todo **sin tocar nada de lo que tengo**: Arcadia sigue siendo la BD por defecto.
+
+**Decisión de la BD (D-10).** Uso una BD **sintética** grande (dominio extendido del universo de Arcadia, "plataforma de videojuegos/medios", ~60 tablas con claves foráneas reales), reproducible con `seed=42`, no una pública. Motivo: una sintética la puedo montar entera y controlada; el argumento de escala (tokens de contexto + recall) **no depende** de que la BD sea pública, y de hecho una sintética es no-contaminada (como Arcadia), lo que evita el confound de memorización. Dejo igualmente el **mecanismo de configuración** para elegir qué BD se evalúa y un **aviso de contaminación** que se mostraría si algún día conecto una BD pública real ("puede que el LLM ya la haya visto en su entrenamiento").
+
+**Contrato.**
+
+- *Segunda BD objetivo, no invasiva.* La BD grande se declara como `TARGET_DB_2_*` en `.env` (Arcadia sigue en `TARGET_DB_1_*`), se carga como una BD más en el mismo Postgres de Docker (su `schema.sql`), y aparece en el catálogo del CLI para consultarla igual que Arcadia. Nada de lo existente cambia; Arcadia es el defecto.
+- *Elegir qué BD se evalúa.* El runner de evaluación admite una variable `EVAL_TARGET` (nombre de la BD; por defecto Arcadia) y carga el **golden set correspondiente** a esa BD (un pequeño registro nombre→fichero). El golden set de la BD grande vive en su carpeta de dataset.
+- *Aislamiento y restauración.* Neo4j y pgvector son de un solo inquilín (una schema-graph y un índice, compartidos). Evaluar la BD grande exige ingerir+vectorizar **su** esquema, lo que sustituye temporalmente el de Arcadia. Por eso la prueba de escala **restaura Arcadia al terminar** (re-ingesta + re-vectorización, en `try/finally`), igual que el ablation de descripciones. Aislar por inquilín (namespace por BD en Neo4j/pgvector) queda como mejora futura.
+- *Métricas de la prueba de escala.* El titular es **tamaño de contexto** (tablas y tokens que recibiría el LLM) y **schema-linking recall** por modo (sin recuperación / solo vectorial / GraphRAG). Ambas se miden **sin datos** (tablas vacías bastan: el contexto sale del DDL y la recuperación del esquema + FKs), así que esta fase no necesita seed ni SQL de referencia. La **execution accuracy** sobre la BD grande (que sí necesita datos sembrados + SQL de referencia) queda como fase posterior.
+- *Golden set de la BD grande.* ~12-15 preguntas en español con sus **tablas gold** (para el recall), varias multi-hop (JOINs que obligan a la expansión por FK). La SQL de referencia es opcional en esta fase (se añade cuando se siembren datos).
+
+**Pasos**
+
+1. Diseñar `setup/datasets/<grande>/schema.sql`: ~60 tablas coherentes (módulos: catálogo, contenido/DLC, clientes/suscripciones, comercio/facturación, partidas/telemetría, social, reseñas/moderación, eventos/torneos, soporte…) con FKs reales. Mantener el motivo de la tabla de nombre opaco.
+2. Cargar la BD grande en Docker como una BD más (init SQL), sin tocar la carga de Arcadia.
+3. Config: añadir `TARGET_DB_2_*` a `.env.example`; el catálogo (`loadTargetDatabases`) ya la recoge. Marcar en la config si una BD es pública (para el aviso de contaminación).
+4. Registro golden set por BD (nombre→fichero) y `EVAL_TARGET` en el runner para elegir BD + golden set; por defecto Arcadia (comportamiento actual intacto).
+5. Golden set de la BD grande (~12-15 preguntas con tablas gold).
+6. Prueba de escala (script opt-in): ingerir+vectorizar la BD grande, medir recall + tamaño de contexto por modo, y **restaurar Arcadia** en `try/finally`. Sin LLM (retrieval puro), así es rápida y barata. Guardar informe en `docs/evaluacion/`.
+7. Comparar Arcadia (17 tablas) vs la BD grande (~60): enseñar que el contexto de "sin recuperación" se dispara con el nº de tablas y el del GraphRAG se mantiene acotado, con recall alto.
+
+**Criterios de aceptación**
+
+- [X] La BD grande (66 tablas, `nebula`) se declara como `TARGET_DB_2` y se puede elegir/consultar desde el CLI, con Arcadia intacta como defecto
+- [X] `EVAL_TARGET` selecciona la BD a evaluar y su golden set (registro nombre→fichero); sin ella, todo funciona como hoy (Arcadia)
+- [X] La prueba de escala mide, por modo, el tamaño de contexto (tablas y tokens) y el schema-linking recall sobre la BD grande, sin necesitar datos sembrados
+- [X] Al terminar, Arcadia queda restaurada en Neo4j y pgvector (verificado: mismos números que antes de la prueba)
+- [X] El informe compara Arcadia (17) vs Nebula (66): "sin recuperación" 1498→5748 tokens, GraphRAG plano 774→759 con recall 99%→100% (`docs/evaluacion/escala.md`)
+- [X] Existe el aviso de contaminación para BDs marcadas como públicas (`TARGET_DB_n_PUBLIC=true`); Nebula es sintética (`false`)
+- [X] Nebula sembrada (seeder ligero, seed=42) y execution accuracy medida (ejecutando contra la BD evaluada, no la de por defecto — ver el bug corregido abajo): dentro de Nebula, GraphRAG **supera** a "sin recuperación" (80% vs 67%) y al vectorial solo (60%) con ~1/7 del contexto. Nota: accuracy no comparable directa entre BDs (golden sets distintos); 15 preguntas y una tirada → señal, no ventaja de tribunal
+- [X] Corregido un bug de la evaluación: `makeEvaluationDependencies` ejecutaba contra la BD por defecto (Arcadia) en vez de la BD evaluada, invalidando los primeros aciertos de Nebula (un engañoso 40%); ahora conecta al `target` correcto, con test de regresión. Interpretación inclusiva de agregaciones "por categoría" en el golden set (D-13)
+
+```bash
+cd backend && npm run evaluate:scale    # prueba de escala sobre la BD grande (opt-in; ingiere/vectoriza y restaura Arcadia)
+```
 
 ---

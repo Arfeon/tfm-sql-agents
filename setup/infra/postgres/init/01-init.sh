@@ -10,10 +10,11 @@ echo "════════════════════════�
 echo "  GraphSQL — Init de Postgres"
 echo "══════════════════════════════════════"
 
-# ── 1. Crear BD arcadia ──────────────────────────────────────────────────────
-echo "[1/3] Creando base de datos arcadia..."
+# ── 1. Crear BDs arcadia y nebula ─────────────────────────────────────────────
+echo "[1/3] Creando bases de datos arcadia y nebula..."
 $PG --dbname postgres <<-EOSQL
     CREATE DATABASE arcadia;
+    CREATE DATABASE nebula;
 EOSQL
 
 # ── 2. Activar pgvector en ambas bases ───────────────────────────────────────
@@ -25,9 +26,17 @@ EOSQL
 done
 
 # ── 3. Esquema ───────────────────────────────────────────────────────────────
-echo "[3/3] Cargando esquema (02-schema.sql)..."
+echo "[3/3] Cargando esquema de arcadia (02-schema.sql)..."
 $PG --dbname arcadia -f "$SCRIPT_DIR/sql/02-schema.sql"
-echo "      Esquema listo."
+echo "      Esquema de arcadia listo."
+
+# Nebula: BD grande sintética para la prueba de escala (SPEC-17). Esquema (66 tablas) +
+# datos ligeros sembrados (seed=42), para poder medir también la execution accuracy.
+echo "      Cargando esquema de nebula (04-nebula-schema.sql)..."
+$PG --dbname nebula -f "$SCRIPT_DIR/sql/04-nebula-schema.sql"
+echo "      Cargando datos de nebula (05-nebula-dataset.sql)..."
+$PG --dbname nebula -q -f "$SCRIPT_DIR/sql/05-nebula-dataset.sql"
+echo "      Nebula lista (66 tablas, datos ligeros)."
 
 # ── 4. Datos (con monitor de progreso) ───────────────────────────────────────
 echo ""

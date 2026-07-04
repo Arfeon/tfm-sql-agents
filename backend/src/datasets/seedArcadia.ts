@@ -30,7 +30,10 @@ import { faker } from '@faker-js/faker'
 import seedrandom from 'seedrandom'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import 'dotenv/config'
+import { config } from 'dotenv'
+
+// El `.env` de la raíz del repo, relativo a este fichero (backend/src/datasets/).
+config({ path: join(__dirname, '../../../.env') })
 
 // ---------------------------------------------------------------------------
 // PRNG reproducible
@@ -212,17 +215,18 @@ async function batchInsert(
   return results
 }
 
+/** Conexión a Arcadia (TARGET_DB_1_* del .env, con defaults de Postgres local). */
 function connect(): Client {
   const connectionString = process.env.TARGET_DB_CONNECTION_STRING
   if (connectionString) {
     return new Client({ connectionString })
   }
   return new Client({
-    host: process.env.TARGET_DB_HOST ?? 'localhost',
-    port: parseInt(process.env.TARGET_DB_PORT ?? '5432'),
-    database: process.env.TARGET_DB_NAME ?? 'arcadia',
-    user: process.env.TARGET_DB_USER ?? 'postgres',
-    password: process.env.TARGET_DB_PASSWORD ?? 'postgres',
+    host: process.env.TARGET_DB_1_HOST ?? 'localhost',
+    port: parseInt(process.env.TARGET_DB_1_PORT ?? '5432'),
+    database: process.env.TARGET_DB_1_NAME ?? 'arcadia',
+    user: process.env.TARGET_DB_1_USER ?? 'postgres',
+    password: process.env.TARGET_DB_1_PASSWORD ?? 'postgres',
   })
 }
 
@@ -244,7 +248,7 @@ async function main(): Promise<void> {
     await client.query('BEGIN')
 
     if (RESET) {
-      const schemaSql = readFileSync(join(__dirname, 'schema.sql'), 'utf-8')
+      const schemaSql = readFileSync(join(__dirname, '../../../setup/datasets/arcadia/schema.sql'), 'utf-8')
       await client.query(schemaSql)
       console.log('· esquema recreado (schema.sql)')
     }

@@ -15,7 +15,7 @@ import { EmbeddingsFactory } from '../graphsql/infrastructure/embeddings/Embeddi
 import { EmbeddingProvider } from '../graphsql/infrastructure/embeddings/EmbeddingProvider'
 import { hasDescriptionsFile, loadDescriptions, DESCRIPTIONS_DIR } from '../graphsql/infrastructure/config/descriptions'
 import type { IEmbeddings } from '../graphsql/domain/ports/IEmbeddings'
-import { warnIfLocalModelMissing } from './ui'
+import { warnIfLocalModelMissing, withSpinner } from './ui'
 
 export async function runSchemaScan(): Promise<void> {
   const targets = loadTargetDatabases()
@@ -40,12 +40,12 @@ export async function runSchemaScan(): Promise<void> {
   }
 
   // --- Fase 2: reconstruir ambos almacenes con la misma decisión de descripciones ---
-  console.log(chalk.dim(`\nEscaneando "${targetDatabaseLabel(target)}" e ingiriendo en Neo4j...\n`))
   try {
-    const summary = await ingestSchema(target, descriptions)
+    const summary = await withSpinner(`Escaneando "${targetDatabaseLabel(target)}" e ingiriendo en Neo4j…`, () =>
+      ingestSchema(target, descriptions),
+    )
     console.log(
-      chalk.green('✔ Esquema en Neo4j:') +
-        ` ${summary.tables} tablas, ${summary.columns} columnas, ${summary.relationships} relaciones.\n`,
+      chalk.dim(`  ${summary.tables} tablas, ${summary.columns} columnas, ${summary.relationships} relaciones en Neo4j.\n`),
     )
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
@@ -124,12 +124,12 @@ async function executeVectorization(
   embeddings: IEmbeddings,
   descriptions?: Map<string, string>,
 ): Promise<boolean> {
-  console.log(chalk.dim('Vectorizando el esquema en pgvector...\n'))
   try {
-    const summary = await vectorizeSchema(target, provider, embeddings, descriptions)
+    const summary = await withSpinner('Vectorizando el esquema en pgvector…', () =>
+      vectorizeSchema(target, provider, embeddings, descriptions),
+    )
     console.log(
-      chalk.green('✔ Esquema vectorizado:') +
-        ` ${summary.count} tablas (${summary.provider}, modelo ${summary.model}, ${summary.dimensions} dims).\n`,
+      chalk.dim(`  ${summary.count} tablas vectorizadas (${summary.provider}, modelo ${summary.model}, ${summary.dimensions} dims).\n`),
     )
     return true
   } catch (error) {

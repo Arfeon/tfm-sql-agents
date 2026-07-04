@@ -68,22 +68,38 @@ flowchart LR
 - **Modelo de lenguaje (LLM) configurable** — OpenAI (nube) o un modelo local (LM Studio); genera y valida la SQL.
 - **CLI en terminal** — `@inquirer/prompts` + `boxen` + `chalk`.
 
-> El *porqué* de algunas decisiones técnica se documenta en [`docs/design/arquitectura.md`](docs/design/arquitectura.md) a medida que se toma.
+> El *porqué* de algunas decisiones técnicas se documenta en [`docs/design/arquitectura.md`](docs/design/arquitectura.md) a medida que se toma.
 
-## 5. Estado actual
+## 5. Puesta en marcha rápida
+
+Cuatro pasos (el detalle, con requisitos y problemas frecuentes, en la
+[guía de instalación](docs/instalacion.md)):
+
+```bash
+cp .env.example .env         # 1. configura contraseñas y proveedor de LLM/embeddings
+docker compose up -d         # 2. levanta Postgres (con Arcadia y Nebula cargadas) y Neo4j
+cd backend && npm install    # 3. el ÚNICO npm install del repo
+npm start                    # 4. abre el CLI → escanea el esquema → pregunta en lenguaje natural
+```
+
+La primera vez, en el menú elige **"Escanear el esquema"** antes de consultar (construye
+el grafo en Neo4j y el índice vectorial). Después, **"Consultar en lenguaje natural"** y a
+preguntar. Cómo usar cada función: [guía de uso](docs/uso.md).
+
+## 6. Estado actual
 
 Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medida que valido cada pieza. Lo que ya funciona:
 
-- ✅ **Infraestructura** — Docker Compose con PostgreSQL + pgvector y Neo4j; el dataset de pruebas *Arcadia* se carga al arrancar y está validado.
+- ✅ **Infraestructura** — Docker Compose con PostgreSQL + pgvector y Neo4j; las bases de pruebas *Arcadia* (17 tablas) y *Nebula* (66 tablas, para la prueba de escala) se cargan al arrancar, con datos reproducibles (seed=42).
 - ✅ **Acceso a la BD objetivo** — puerto `ITargetDatabase` con un adaptador Postgres que fuerza la sesión en **solo lectura**.
 - ✅ **Proveedor LLM configurable** — puerto `IChatModel` + factory que crea OpenAI (nube) o un modelo local de LM Studio, eligiendo por configuración.
-- ✅ **CLI en terminal** — cabecera, menú y selección de proveedor; puedo conversar con el modelo (`npm start`).
-- ✅ **Primer grafo LangGraph** — conversa con estado (checkpointer por hilo) y completa acciones llamando a *tools*, tanto con OpenAI como en local.
+- ✅ **CLI en terminal** — cabecera y menú (`npm start`) desde el que consulto en lenguaje natural con revisión humana, escaneo el esquema y depuro la recuperación. La guía de uso paso a paso está en [`docs/uso.md`](docs/uso.md).
+- ✅ **Primer grafo LangGraph** — un grafo conversacional con estado (checkpointer por hilo) que completa acciones llamando a *tools*, con OpenAI o en local. Lo conservo como base reutilizable (p. ej. para un futuro servidor MCP o backends específicos), pero **no lo expongo en el menú del CLI**: el pipeline NL→SQL con revisión cubre el caso de uso real.
 - ✅ **Ingesta del esquema en Neo4j** — escaneo de la BD objetivo (tablas, columnas, claves) y volcado a un grafo de conocimiento (nodos `Table`/`Column`, relaciones `HAS_COLUMN`/`REFERENCES`), disparable desde el CLI o como *tool* del agente.
 - ✅ **Vectorización del esquema en pgvector** — cada tabla se embebe (con OpenAI o un modelo local de LM Studio, a elegir) y se guarda para la búsqueda semántica; descripciones opcionales sincronizadas en Neo4j y pgvector.
 - ✅ **Recuperación GraphRAG (Schema Agent)** — dada una pregunta, encuentra las tablas relevantes combinando la búsqueda semántica en pgvector con la expansión por claves foráneas en Neo4j; expuesta como *tool* de schema-linking. Encuentra incluso tablas de nombre opaco por su descripción.
 - ✅ **SQL Agent (NL→SQL)** — a partir de la pregunta y el contexto recuperado, genera la consulta SQL en el dialecto de la BD objetivo (inyectado en el prompt); expuesto como *tool* `generar_sql`.
-- ✅ **Judge (validación de seguridad y corrección)** — antes de ejecutar nada, una barrera por capas comprueba la SQL: una **Capa 1** pura y determinista (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección), una **Capa 2** que valida la sintaxis real contra la BD con `EXPLAIN` (sin ejecutar), y un **juez LLM** opcional que aporta confianza, avisos y sugerencias. Bloquean solo las capas deterministas (1 y 2); el juez LLM no bloquea por sí solo, para que un falso positivo no tumbe una consulta válida. El veredicto se muestra junto a la SQL en el chat.
+- ✅ **Judge (validación de seguridad y corrección)** — antes de ejecutar nada, una barrera por capas comprueba la SQL: una **Capa 1** pura y determinista (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección), una **Capa 2** que valida la sintaxis real contra la BD con `EXPLAIN` (sin ejecutar), y un **juez LLM** opcional que aporta confianza, avisos y sugerencias. Bloquean solo las capas deterministas (1 y 2); el juez LLM no bloquea por sí solo, para que un falso positivo no tumbe una consulta válida. El veredicto se muestra junto a la SQL en la revisión humana del CLI.
 
 - ✅ **Ejecución segura (solo lectura)** — ejecuta una consulta ya validada contra la BD objetivo y devuelve las filas. Antes de tocar la BD vuelve a comprobar la seguridad (última barrera, lanza error si no es de solo lectura); la sesión es de solo lectura; aplica un tope de filas (marcando si se trunca) y un `statement_timeout`.
 - ✅ **Revisión humana (aprobación con *interrupt*)** — un pipeline propio (recuperación → SQL → Judge → **revisión** → ejecución) que se **para** antes de ejecutar: LangGraph pausa con `interrupt_before` y persiste el estado en PostgreSQL (recuperable por `thread_id`). Desde el CLI veo la consulta y el veredicto del Judge en cajas con color y decido: **aprobar** (ejecuta), **rechazar** (termina), **modificar** la SQL a mano (vuelve al Judge) o **afinar** (ver abajo). Ninguna SQL se ejecuta sin mi visto bueno.
@@ -92,11 +108,18 @@ Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medi
 - ✅ **Explicabilidad de la recuperación (modo depuración)** — una opción del CLI que, dada una pregunta, muestra el circuito GraphRAG en tablas: el ranking semántico con su score (marcando las candidatas top-K), las tablas que entran por **expansión de FK** con su score, y el contexto final con el **motivo** de cada tabla (semántica / expansión / fijada). Deja ver de un vistazo si una tabla se recuperó por significado o la arrastró el grafo — clave para no dar por buena una recuperación a ciegas y para el análisis del *ablation*.
 - ✅ **El Judge evalúa el propósito de las tablas** — además de seguridad y sintaxis, el Judge juzga si *sabe* qué contiene cada tabla que usa la consulta: si tiene descripción (o su nombre/columnas lo dejan claro) informa del mapeo (`t_042 → "lista de deseos", según descripción`); si es de **nombre opaco y sin descripción**, avisa de que se usa **por suposición** y hay que verificarla (no bloquea, solo advierte). Así una tabla opaca que entra por el grafo no se da por sabida sin más. Para esto, la descripción de cada tabla viaja ya en el contexto (DDL).
 
-Lo siguiente es integrarlo todo en el CLI final y medir el sistema con el golden set (SPEC-11). El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
+- ✅ **Evaluación experimental (ablation)** — un arnés (`npm run evaluate`) lanza el golden set (25 casos) en tres modos de recuperación (sin recuperación / solo vectorial / GraphRAG) y mide **schema-linking recall**, **tamaño de contexto** (tablas y tokens) y **execution accuracy** (la SQL generada, ejecutada, ¿da el mismo resultado que la de referencia?). Resultado sobre Arcadia: GraphRAG recupera el **99% de las tablas correctas con la mitad del contexto** (774 vs 1498 tokens) que volcar el esquema entero, con precisión equivalente; y las descripciones son las que rescatan tablas de nombre opaco. Un segundo arnés (`npm run evaluate:descriptions`) mide el aporte de las descripciones (2×2). Como métrica **complementaria** de la execution accuracy, un LLM juez decide si la SQL generada responde a la **misma pregunta** que la de referencia (captura aciertos equivalentes que la comparación de filas descarta, y a la vez caza diferencias reales que esa comparación no ve); se reporta al lado, nunca en lugar de la métrica objetiva. Informes en `docs/evaluacion/`; lectura de negocio en [`docs/propuesta-valor.md`](docs/propuesta-valor.md).
+- ✅ **Prueba de escala (17 vs 66 tablas)** — un tercer arnés (`npm run evaluate:scale`) repite la evaluación completa sobre *Nebula* (66 tablas). Resultado: el contexto del GraphRAG **se mantiene plano** al crecer el esquema (774 → 759 tokens, mientras "volcar el esquema entero" se dispara 1498 → 5748) con recall 100%, y en aciertos **supera** tanto al esquema entero (80% vs 67%) como a la búsqueda vectorial sola (60%) — a 17 tablas empataban; a 66 el GraphRAG despunta. Con su asterisco declarado: 15 preguntas y una sola tirada, señal consistente, no ventaja estadística de tribunal. Los sesgos conocidos de las métricas (columna de más, `INNER` vs `LEFT JOIN`, juez LLM falible) están documentados en [`arquitectura.md` §10](docs/design/arquitectura.md).
+
+Lo siguiente (opcional) es el seguimiento conversacional (SPEC-16), la gestión de hilos (SPEC-12) y confirmar la ventaja de precisión con más tiradas o una BD pública grande. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
 
 ## Documentación del proyecto
 
+- [`docs/instalacion.md`](docs/instalacion.md) — cómo montar el entorno desde cero (Docker, `.env`, dependencias).
+- [`docs/uso.md`](docs/uso.md) — guía de uso paso a paso: consultar, escanear, depurar y evaluar.
 - [`docs/design/arquitectura.md`](docs/design/arquitectura.md) — diseño detallado (incremental, se completa por fases).
 - [`docs/design/SPEC.md`](docs/design/SPEC.md) — especificación e historial de componentes (SDD).
+- [`docs/propuesta-valor.md`](docs/propuesta-valor.md) — para qué sirve y por qué vale la pena (posicionamiento).
+- [`docs/glosario.md`](docs/glosario.md) — términos que uso (ablation, GraphRAG, schema-linking, embedding…) explicados en el sentido del proyecto.
 
 
