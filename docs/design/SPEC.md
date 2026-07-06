@@ -65,7 +65,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ✅ Cerrada |
 | SPEC-07 | Execute SQL (solo lectura) | ✅ Cerrada |
 | SPEC-08 | Human Review (interrupt) integrado en el pipeline | ✅ Cerrada |
-| SPEC-09 | Memory Agent / Store Feedback (opcional, primero en recortar) | 🔮 Futuro (fuera del MVP) |
+| SPEC-09 | Memory Agent / Store Feedback: consultas aprobadas como ejemplos *few-shot* | 🔮 Futuro (fuera del MVP; especificada y lista para implementar) |
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ✅ Cerrada |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ✅ Cerrada (arnés + experimento ejecutado; ablation de 3 modos y de descripciones, informes en `docs/evaluacion/`) |
 | SPEC-12 | Gestión de conversaciones: nombrar, listar y reanudar hilos | 🔮 Futuro (fuera del MVP) |
@@ -77,6 +77,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-18 | Selección de la BD objetivo en el flujo de consulta (catálogo + índice consciente de su BD) | ✅ Cerrada |
 | SPEC-19 | Presentación gráfica de resultados en consola (tabla / gráfico de barras / ambas) | ✅ Cerrada |
 | SPEC-20 | Índice multi-inquilino: varias BDs indexadas a la vez en Neo4j/pgvector | 🔮 Futuro (fuera del MVP) |
+| SPEC-21 | Experimento de confusión: tablas y columnas con nombres opacos, ¿quién sobrevive sin descripciones? | ✅ Cerrada (fase dura: sin descripciones colapsa todo — esquema entero 17% equiv incluido; con descripciones, GraphRAG 83% vs esquema entero 17%: la recuperación es lo que hace la documentación usable) |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §10](arquitectura.md).
 
@@ -101,7 +102,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 - [X] Existen las dos bases de datos que necesito: `arcadia` y `graphsql_memory`
 - [X] pgvector está activo en `arcadia` (lo necesitaré más adelante para la memoria semántica)
 - [X] La conexión a `arcadia` es de solo lectura: un INSERT debe fallar
-- [X] El esquema de Arcadia tiene las 16 tablas esperadas
+- [X] El esquema de Arcadia tiene las tablas esperadas (16 al validarse; hoy son 17 tras añadir la tabla opaca `t_042` para el caso de schema-linking por descripción)
 - [X] `game` tiene `developer_company_id` y `publisher_company_id` como columnas separadas
 - [X] Los conteos de filas cuadran con el seed (`game`=320, `customer`=5000, etc.)
 - [X] Los datos no tienen anomalías: age ratings válidos, sesiones con duración positiva, ratings entre 1 y 5
@@ -476,6 +477,40 @@ cd backend && npm run test:integration   # human review con checkpointer (opt-in
 
 ---
 
+### SPEC-09 — Memory Agent: reutilizar consultas aprobadas como ejemplos *few-shot* 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** Cerrar el círculo del human-in-the-loop: cada consulta que apruebo en la revisión es una **etiqueta de calidad gratis** (pregunta en lenguaje natural + SQL validada por un humano). Quiero guardarlas y, ante una pregunta nueva parecida, pasarle al SQL Agent las más similares como ejemplos *few-shot*, para que acierte más en preguntas recurrentes y aprenda las convenciones del dominio (cómo se calcula "activo", qué significa "ingresos"…). Son las dos piezas que la visión llama **Store Feedback** (guardar) y **Memory Agent** (recuperar).
+
+**Contrato.**
+
+- *Guardar solo lo validado (Store Feedback).* Al **aprobar y ejecutar con éxito** una consulta, se guarda: la pregunta, la SQL final (la editada a mano vale aún más: lleva corrección humana), la BD objetivo, las tablas usadas y la fecha, junto al **embedding de la pregunta**, en una tabla propia de `graphsql_memory` (separada del índice de esquema). Las rechazadas no se guardan. Guardar es **no crítico**: si falla, la consulta ya se ejecutó y no rompe nada (un aviso y seguir).
+- *Recuperar por similitud (Memory Agent).* Ante una pregunta nueva, se embebe y se buscan las top-K preguntas guardadas más parecidas **de la misma BD objetivo** (lección de SPEC-18: nunca ejemplos de Arcadia para preguntas de Nebula), filtrando por un umbral de similitud. Palancas ya reservadas en el `.env`: `SIMILARITY_THRESHOLD` (0.75) y `MAX_FEEDBACK_EXAMPLES` (5). Sin ejemplos por encima del umbral, el pipeline sigue exactamente como hoy (la memoria es aditiva, nunca bloqueante).
+- *Mismo modelo de embeddings que el índice* (lección de D-06): se embebe y se busca con el modelo del índice actual; si el índice se re-vectoriza con otro modelo, los embeddings de la memoria se regeneran igual (o se invalidan con aviso).
+- *Integración en el grafo.* Un nodo `memory` al empezar el ciclo (antes de generar) añade los ejemplos al estado; `generateSql` los recibe como bloque *few-shot* en el prompt (pregunta → SQL, N ejemplos). El enrutado no cambia: la memoria enriquece, no decide.
+- *Transparencia en la revisión.* Si se usaron ejemplos, la caja de la consulta lo dice ("apoyada en N consultas aprobadas similares"), para que el humano sepa de dónde viene el estilo de la SQL — mismo criterio de explicabilidad que la traza de recuperación (SPEC-13).
+- *Medir el aporte SIN trampa.* El arnés de evaluación gana un modo "con memoria", pero con **leave-one-out obligatorio**: al evaluar un caso se excluyen de la memoria ese mismo caso y cualquier pregunta idéntica — si no, sembrar la memoria con el golden set y evaluar sobre el golden set sería filtración (el ejemplo *es* la respuesta) y el número saldría inflado. Este sesgo se declara en la sección de sesgos de `arquitectura.md` §10 el día que se mida.
+- *Mantenimiento mínimo.* Una forma de vaciar la memoria (por BD o entera) desde el CLI o un script; sin edición fina de entradas en esta fase.
+
+**Pasos**
+
+1. Tabla `approved_queries` en `graphsql_memory` (pregunta, SQL, BD, tablas, embedding, fecha) detrás de un puerto + adaptador + factory (patrón D-05), separada del índice de esquema.
+2. Caso de uso `storeApprovedQuery` (deps inyectadas): lo llama el pipeline tras ejecutar con éxito; fallo → aviso, no rotura.
+3. Caso de uso `findSimilarApprovedQueries(question, target)`: embeber, buscar top-K de la misma BD, filtrar por umbral.
+4. `generateSql` acepta ejemplos *few-shot* opcionales y los inyecta en el prompt con formato estable.
+5. Nodo `memory` en el pipeline + canal `examples` en el estado; el CLI muestra la línea de transparencia en la revisión.
+6. Evaluación: modo "con memoria" con leave-one-out; comparar con/sin memoria sobre el mismo golden set y declarar el método.
+7. Tests con dobles: guardar solo aprobadas, no romper si falla el guardado, filtrar por BD y umbral, prompt con ejemplos, leave-one-out.
+
+**Criterios de aceptación**
+
+- [ ] Una consulta aprobada y ejecutada queda guardada con su embedding; una rechazada, no; un fallo al guardar no rompe el flujo
+- [ ] Ante una pregunta parecida, el SQL Agent recibe como mucho `MAX_FEEDBACK_EXAMPLES` ejemplos de la MISMA BD por encima de `SIMILARITY_THRESHOLD`; sin ejemplos, el pipeline se comporta exactamente como hoy
+- [ ] La revisión muestra si la consulta se apoyó en ejemplos (transparencia)
+- [ ] El aporte se mide con leave-one-out y se declara el método (sin filtración golden set → memoria → golden set)
+- [ ] Suite unitaria verde con dobles, sin Docker ni LLM
+
+---
+
 ### SPEC-10 — Supervisor (enrutador determinista)
 
 **Objetivo.** Unir todas las piezas en un único flujo, enrutado con reglas sobre el estado compartido (no con un LLM): Schema → SQL → Judge → (decisión) → Human Review → Execute. Formalizo sobre el esqueleto del pipeline (SPEC-08) el bucle automático de reintento que hasta ahora faltaba: si el Judge no da la consulta por buena, vuelve al SQL Agent con sus errores antes de subirla a que la revise el humano.
@@ -532,7 +567,7 @@ cd backend && npm test    # unit del bucle de reintento Judge↔SQL (con dobles)
   - **sin recuperación**: el contexto es el esquema ENTERO (todas las tablas). Baseline que revienta el contexto.
   - **solo vectorial**: las top-K tablas por similitud, SIN expandir por claves foráneas.
   - **GraphRAG completo**: top-K + expansión por FK en el grafo (lo actual).
-- *Segunda dimensión — descripciones on/off* (D-03): con y sin las descripciones de las tablas, para aislar su aporte. Cada nivel exige (re)vectorizar el índice en ese modo (con/sin la descripción en el texto embebido) y renderizar el DDL con/sin el comentario de descripción. Es el paso más pesado; si el tiempo aprieta, como mínimo la comparación dirigida sobre G-25 (`t_042`).
+- *Segunda dimensión — descripciones on/off*: con y sin las descripciones de las tablas, para aislar su aporte. Cada nivel exige (re)vectorizar el índice en ese modo (con/sin la descripción en el texto embebido) y renderizar el DDL con/sin el comentario de descripción. Es el paso más pesado; si el tiempo aprieta, como mínimo la comparación dirigida sobre G-25 (`t_042`).
 - *Métricas por caso y modo*:
   - **schema-linking recall**: de las tablas `gold`, cuántas aparecen en el contexto recuperado (∩ / total). Aísla la recuperación; no depende de que el LLM acierte la SQL.
   - **tamaño de contexto**: nº de tablas (y un estimado de tokens del DDL) que se le pasan al SQL Agent. Es lo que enseña que "sin recuperación" no escala.
@@ -867,5 +902,33 @@ cd backend && npm run evaluate:scale    # prueba de escala sobre la BD grande (o
 - [ ] El selector de consulta cambia de BD indexada sin re-escanear ni avisar
 - [ ] Vectorizar con una dimensión distinta a la del índice se rechaza con error claro
 - [ ] La prueba de escala ya no necesita restaurar Arcadia al terminar
+
+---
+
+### SPEC-21 — Experimento de confusión: nombres opacos casi-duplicados
+
+**Objetivo.** El benchmark actual es amable con la baseline (sesgo #5 de `arquitectura.md` §10): los nombres de las tablas son autoexplicativos, así que "volcar el esquema entero" acierta aunque no entienda nada. Una BD de empresa real tiene familias de tablas indistinguibles por nombre (`dades_client_x`, `dades_client_y`, copias `_v2`, códigos de ERP). Este experimento reproduce esa realidad en pequeño y mide la hipótesis: **cuando el nombre no discrimina, ¿quién acierta — y cuánto rescatan las descripciones?**
+
+**Contrato.**
+
+- *Ofuscación reversible.* Seis tablas de Nebula, **con datos y no usadas por el golden set existente** (las 15 preguntas actuales quedan intactas), se renombran al MISMO patrón opaco para que el nombre no discrimine nada entre dominios distintos: `purchase→t_ops_01`, `refund→t_ops_02`, `gift_card→t_ops_03`, `rating→t_ops_04`, `message→t_ops_05`, `save_game→t_ops_06`. El renombrado es `ALTER TABLE … RENAME` al empezar y se **revierte siempre** al terminar (`try/finally`, las FKs sobreviven al rename); Arcadia se restaura en el índice al final, como en la prueba de escala.
+- *Fase dura: columnas opacas también.* La fase 1 demostró que renombrar solo la tabla NO basta para confundir al sistema: las columnas (`purchase_date`, `balance`, `sender_id`…) delatan el propósito y el recall aguantó ~100% sin descripciones. La fase dura renombra además las **columnas a c1..c5** (el mismo patrón en las seis tablas, como un ERP legacy): sin descripciones no habla nada — ni nombre ni columnas —; quedan los **tipos de dato** y las **claves foráneas** (estructura, que es lo que usa el grafo y sobrevive a los renombres). La descripción de la condición "con" **mapea las columnas** (`c5 = importe pagado`), como documentaría un *data steward* una tabla legacy real: es el caso donde la documentación no es una ayuda sino la ÚNICA fuente semántica. La motivación es el caso de coste alto (BD sanitaria/química/financiera): confundir una tabla ambigua no puede depender de la suerte, y el experimento mide qué capa lo evita.
+- *Mini golden set propio.* 4-6 preguntas (C-01..C-06) que SOLO se responden con las tablas ofuscadas, en su propio fichero (`golden_confusion.yaml`, mismo formato de siempre), con la SQL de referencia sobre los nombres ofuscados. Al menos dos multi-hop (JOIN con `customer`/`game`) para medir el rescate por FK del grafo, el mecanismo que salvó a `t_042`.
+- *Condiciones.* 2×3: descripciones {con, sin} × modo {sin recuperación, solo vectorial, GraphRAG}. Las descripciones de las tablas ofuscadas viven en el runner (un mapa inline, no hace falta fichero) y afectan a las dos vías, como en el ablation de SPEC-11: al índice vectorial (re-vectorización por condición) y al DDL que ve el SQL Agent.
+- *Métricas.* Las de siempre sobre el subconjunto: schema-linking recall (¿aparece la tabla ofuscada?), execution accuracy justa y equivalencia semántica. El informe (`docs/evaluacion/confusion.md`) desglosa POR CASO qué tabla se recuperó y por qué vía, porque con 4-6 casos el detalle vale más que el agregado.
+- *Hipótesis declarada (antes de medir).* Sin descripciones, todos los modos sufren — incluida la baseline "esquema entero", porque el nombre ya no le dice qué tabla usar (como mucho la salvan las columnas). Con descripciones, la recuperación se recupera; y en las preguntas multi-hop el grafo puede rescatar la tabla opaca por FK incluso sin descripción. Si la baseline NO sufre, también es un resultado (las columnas bastan como pista) y se reporta igual.
+
+**Pasos**
+
+1. `setup/datasets/nebula/golden_confusion.yaml` con los casos C-01..C-06 (referencias sobre nombres ofuscados, interpretación D-13 donde aplique).
+2. Runner opt-in `npm run evaluate:confusion`: renombrar (con guardas si ya está renombrado a medias) → por condición de descripciones: ingesta+vectorización de Nebula y evaluación del subconjunto en los tres modos → revertir renombres y restaurar Arcadia en `finally`.
+3. Informe en consola + `docs/evaluacion/confusion.md` (tabla 2×3 + detalle por caso), y la lectura en `arquitectura.md` §10 junto al sesgo #5 que motiva el experimento.
+
+**Criterios de aceptación**
+
+- [X] Las 6 tablas se renombran y SIEMPRE se revierten (incluso si la evaluación falla); Nebula queda idéntica y Arcadia restaurada en el índice (verificado tras la ejecución)
+- [X] El golden set existente de Nebula (N-01..N-15) no se ve afectado (ninguna de sus tablas se toca)
+- [X] El informe muestra la matriz 2×3 con recall, justa y equivalencia, y el detalle por caso (`docs/evaluacion/confusion.md`)
+- [X] La lectura honesta queda en `arquitectura.md` §10. **Fase 1** (solo tabla opaca): hipótesis parcialmente refutada — el recall aguantó ~100% sin descripciones porque las COLUMNAS delatan el propósito y la vectorización las incluye. **Fase dura** (tabla + columnas c1..c5 opacas): hipótesis confirmada con contundencia — sin descripciones colapsa todo (vectorial 8% recall, GraphRAG 17%, y el esquema ENTERO solo 17-33% de equivalencia: verlo todo no sirve si nada habla), el rescate por FK solo no basta (la tabla opaca pierde el sitio del recorte de contexto frente a vecinas con score), y el hallazgo estrella: **las descripciones solo funcionan CON recuperación** — GraphRAG+descripciones 83% de equivalencia y 100% de recall, mientras el esquema entero con las MISMAS descripciones en el DDL se queda en 17% (la documentación ahogada entre 66 tablas no es usable; la recuperación la hace visible)
 
 ---

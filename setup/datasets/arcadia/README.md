@@ -1,75 +1,88 @@
 # Arcadia — base de datos objetivo del TFM
 
-> **Estado: validado.** Levanté el esquema en PostgreSQL 16 + pgvector (vía
-> `docker-compose.yml`), poblé con `seed_data.py` (seed=42: 60 compañías, 320 juegos,
-> 5 000 clientes, 80 000 sesiones, 55 000 snapshots) y ejecuté las 24 consultas del
-> golden set contra la BD real: **24/24 corren y devuelven filas**. El proceso me
-> destapó un bug en el seeder (PK de `subscription_plan`) y dos preguntas frágiles
-> que corregí (G-14 sin editoras puras, G-19 con umbral inalcanzable).
+> **Estado: validada y en uso.** El esquema y los datos se cargan solos al levantar
+> Docker (`02-schema.sql` + `03-dataset.sql`), el golden set completo (25 preguntas)
+> se ejecuta contra la BD real en la evaluación experimental, y el seeder
+> reproducible vive en `backend/src/datasets/seedArcadia.ts` (seed=42: 60 compañías,
+> 320 juegos, 5 000 clientes, 80 000 sesiones, 55 000 snapshots).
 
-Base de datos **propia** (decisión D-03) que sirve de banco de pruebas para el
-sistema NL→SQL. Modela una **plataforma de suscripción de videojuegos en
-streaming** ("Netflix de videojuegos"): catálogo de juegos incluidos en la
-suscripción, compras puntuales de DLC y telemetría de uso.
+Base de datos **propia** (sintética) que sirve de banco de pruebas para el sistema
+NL→SQL. Modela una **plataforma de suscripción de videojuegos en streaming**
+("Netflix de videojuegos"): catálogo de juegos incluidos en la suscripción, compras
+puntuales de DLC y telemetría de uso.
 
 ## Por qué este dominio
 
-- **Nombres sintéticos.** Juegos y compañías inventados (no son reales), así que el
-  dataset no depende de conocimiento previo que pueda tener el modelo.
+- **Nombres sintéticos.** Juegos y compañías inventados (no reales), así que el
+  modelo no puede acertar de memoria: al ser una BD que no existe en su
+  entrenamiento, no hay contaminación.
 - **Estructura de grafo natural.** Tablas unidas por claves foráneas (compañías,
   franquicias, juegos, géneros, plataformas, clientes, suscripciones, telemetría):
-  un buen caso para **vectorizar toda la base de datos y navegarla gráficamente en
-  Neo4j**, que es donde se aprecia el valor en bases de datos grandes.
+  un buen caso para vectorizar el esquema y navegarlo por el grafo en Neo4j.
 - **Rico en métricas.** Ingresos (MRR de suscripción + DLC), jugadores
   concurrentes, playtime, valoraciones, churn y retención → preguntas variadas.
 - **Multilingüe.** Esquema en inglés, preguntas en español (caso del TFM).
+- **Una tabla trampa.** `t_042` (la lista de deseos) tiene nombre **opaco** a
+  propósito: solo se localiza por su descripción o por sus claves foráneas, no por
+  el nombre. Es el caso de prueba estrella del schema-linking por descripción.
 
-## Esquema (16 tablas)
+## Esquema (17 tablas)
 
-```
-company ──< franchise                 game >── company  (developer / publisher)
-   │                                   │
-   └──< game >── franchise             ├──< game_genre >── genre
-                                       ├──< game_platform >── platform
-                                       └──< dlc
-
-region ──< customer ──< subscription >── subscription_plan
-              │                purchase >── dlc
-              └──< play_session >── game / platform
-              └──< rating >── game
-region / game ──< concurrent_snapshot
+```mermaid
+erDiagram
+    company ||--o{ franchise : "posee"
+    company ||--o{ game : "desarrolla / publica"
+    franchise ||--o{ game : "agrupa"
+    game ||--o{ game_genre : "clasificado en"
+    genre ||--o{ game_genre : ""
+    game ||--o{ game_platform : "disponible en"
+    platform ||--o{ game_platform : ""
+    game ||--o{ dlc : "amplia con"
+    region ||--o{ customer : "reside en"
+    customer ||--o{ subscription : "contrata"
+    subscription_plan ||--o{ subscription : "define"
+    customer ||--o{ purchase : "compra"
+    dlc ||--o{ purchase : ""
+    customer ||--o{ play_session : "juega"
+    game ||--o{ play_session : ""
+    platform ||--o{ play_session : ""
+    customer ||--o{ rating : "valora"
+    game ||--o{ rating : ""
+    region ||--o{ concurrent_snapshot : ""
+    game ||--o{ concurrent_snapshot : "pico de jugadores"
+    customer ||--o{ t_042 : "lista de deseos"
+    game ||--o{ t_042 : ""
 ```
 
 Definición completa y comentada en [schema.sql](schema.sql).
 
-## Cómo levantarla
+## Cómo se levanta
 
-Requisitos: PostgreSQL local (Docker, ver infra del proyecto) y Python con
-`psycopg2-binary` y `faker`.
+**No hay que hacer nada**: el `docker compose up -d` del proyecto crea la BD y carga
+esquema + datos desde `setup/infra/postgres/init/` (ver la
+[guía de instalación](../../../docs/instalacion.md)).
+
+Solo si cambias el esquema o el volumen hace falta el seeder reproducible
+(seed=42, misma semilla → mismos datos), que vive en el backend y usa sus
+dependencias (un solo `npm install`):
 
 ```bash
-# variables de conexión (o usar el .env del proyecto, TARGET_DB_*)
-export TARGET_DB_HOST=localhost TARGET_DB_PORT=5432 \
-       TARGET_DB_NAME=arcadia TARGET_DB_USER=postgres TARGET_DB_PASSWORD=postgres
-
-# crear esquema + poblar en un paso (volumen medio, ~200k filas)
-python seed_data.py --reset
+cd backend
+npm run seed -- --truncate    # repuebla arcadia (TARGET_DB_1)
 ```
 
-El seeder es **reproducible** (`seed=42`): misma semilla → mismos datos. Volumen
-medio (≈ 60 compañías, 320 juegos, 5 000 clientes, 80 000 sesiones, 55 000
-snapshots de concurrencia). Ajustable en las constantes `N_*` de
-[seed_data.py](seed_data.py).
-
-> **Seguridad por diseño:** crea y puebla con un usuario con permisos de escritura,
-> pero configura el agente para consultar con un usuario de **solo lectura** distinto.
+> **Seguridad por diseño:** el seeder escribe con un usuario con permisos, pero el
+> agente consulta siempre con una sesión de **solo lectura**.
 
 ## Golden set
 
-[golden_set.yaml](golden_set.yaml) — 24 preguntas ES→SQL etiquetadas por
-dificultad (`easy` / `medium` / `hard`) y con las tablas que la SQL correcta debe
-tocar. La SQL de referencia es PostgreSQL de solo lectura; para comparar respuestas
-es preferible contrastar el **resultado**, no el texto de la consulta.
+[golden_set.yaml](golden_set.yaml) — **25 preguntas** ES→SQL (G-01..G-25) etiquetadas
+por dificultad (`easy` / `medium` / `hard`) y con las tablas que la SQL correcta debe
+tocar. La SQL de referencia es PostgreSQL de solo lectura; para comparar respuestas se
+contrasta el **resultado**, no el texto de la consulta. Las agregaciones "por/cada
+categoría" siguen la interpretación **inclusiva** (LEFT JOIN, las categorías vacías
+salen — decisión D-13). G-25 apunta a la tabla opaca `t_042`.
 
-Sirve para probar el sistema a mano mientras se desarrolla: desde lookups simples
-hasta consultas multi-tabla (multi-hop de 3-4 tablas, anti-joins, agregaciones).
+Sirve para la evaluación experimental (`npm run evaluate`) y para probar el sistema a
+mano: desde lookups simples hasta consultas multi-tabla (multi-hop de 3-4 tablas,
+anti-joins, agregaciones).

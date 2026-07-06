@@ -28,23 +28,19 @@ El problema concreto que aborda: las bases de datos relacionales son el reposito
 
 El usuario escribe una pregunta en lenguaje natural. Varios agentes especializados colaboran para **localizar las tablas relevantes**, **generar la SQL**, **validar que es segura** (solo lectura), **pedir aprobación** al usuario y, tras el visto bueno, **ejecutarla y mostrar los resultados**.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                          Usuario                            │
-│   "Muéstrame las 10 categorías con más ventas este año"     │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ Lenguaje natural
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        GraphSQL                             │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│   │ Memory   │→ │ Schema   │→ │   SQL    │→ │  Judge   │    │
-│   │  Agent   │  │  Agent   │  │  Agent   │  │  Agent   │    │
-│   └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
-│                                     │                        │
-│                                     ▼                        │
-│         Aprobación humana → Ejecución segura → Resultados    │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    U["Usuario<br/>«Muéstrame las 10 categorías con más ventas este año»"]
+    U -->|Lenguaje natural| GS
+    subgraph GS [GraphSQL]
+        direction LR
+        MA["Memory Agent<br/>(futuro)"] -.-> SA[Schema Agent]
+        SA --> SQL[SQL Agent]
+        SQL --> JA[Judge Agent]
+    end
+    GS --> H[Aprobación humana]
+    H --> E[Ejecución segura<br/>solo lectura]
+    E --> R[Resultados]
 ```
 
 Flujo de una consulta:
@@ -70,9 +66,30 @@ flowchart LR
 
 > El *porqué* de algunas decisiones técnicas se documenta en [`docs/design/arquitectura.md`](docs/design/arquitectura.md) a medida que se toma.
 
-## 5. Puesta en marcha rápida
+## 5. Requisitos
 
-Cuatro pasos (el detalle, con requisitos y problemas frecuentes, en la
+| Requisito | Versión mínima | Para qué |
+|-----------|----------------|----------|
+| **Node.js** | 20+ | El backend, el CLI, los seeders y los tests. |
+| **Docker Desktop** | Compose v2 | Levanta PostgreSQL (con pgvector) y Neo4j sin instalarlos a mano. |
+| **Git** | — | Clonar el repositorio. |
+
+Y **un proveedor de LLM y de embeddings** (se configuran en el `.env`, se pueden mezclar):
+
+- **Nube (OpenAI)**: necesitas una **API key** (`OPENAI_API_KEY`). Tiene coste por uso; el
+  proyecto está medido con `gpt-5-mini` como chat.
+- **Local (LM Studio), sin coste ni API key**: es la combinación que hemos usado nosotros en
+  local — [LM Studio](https://lmstudio.ai/) con el modelo de embeddings
+  **`text-embedding-bge-m3`** y el LLM **`qwen/qwen3.5-9b`**, cargados **los dos a la vez**
+  (el CLI avisa si falta alguno). Cualquier otro modelo del catálogo de LM Studio sirve,
+  pero estos son los que hemos validado.
+
+> La evaluación experimental del proyecto está ejecutada con la mezcla: chat en OpenAI
+> (`gpt-5-mini`) + embeddings locales (`bge-m3`).
+
+## 6. Puesta en marcha rápida
+
+Cuatro pasos (el detalle, con la configuración del `.env` y problemas frecuentes, en la
 [guía de instalación](docs/instalacion.md)):
 
 ```bash
@@ -86,7 +103,7 @@ La primera vez, en el menú elige **"Escanear el esquema"** antes de consultar (
 el grafo en Neo4j y el índice vectorial). Después, **"Consultar en lenguaje natural"** y a
 preguntar. Cómo usar cada función: [guía de uso](docs/uso.md).
 
-## 6. Estado actual
+## 7. Estado actual
 
 Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medida que valido cada pieza. Lo que ya funciona:
 

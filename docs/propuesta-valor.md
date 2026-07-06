@@ -42,15 +42,15 @@ tres formas de dar contexto al LLM:
 
 | Modo | Schema-linking recall | Execution accuracy | Contexto (tablas) | Contexto (tokens) |
 |------|----------------------|--------------------|-------------------|-------------------|
-| Sin recuperación (esquema entero) | 100% | 76% | 17 | 1498 |
-| Solo búsqueda vectorial | 93% | 64% | 5 | 481 |
-| **GraphRAG (vector + grafo)** | **99%** | **72%** | **8** | **774** |
+| Sin recuperación (esquema entero) | 100% | 72% | 17 | 1498 |
+| Solo búsqueda vectorial | 93% | 68% | 5 | 481 |
+| **GraphRAG (vector + grafo)** | **99%** | **64%** | **8** | **774** |
 
 **Titular:** GraphSQL recupera el **99% de las tablas correctas con la mitad del contexto**
-(774 vs 1498 tokens) que volcar el esquema entero, y con una precisión **equivalente** (72%
-vs 76%, dentro del ruido de una sola tirada). Y recupera bastantes más tablas correctas que la
-búsqueda vectorial sola (99% vs 93%): la expansión por el grafo trae las tablas de JOIN que el
-vector se deja.
+(774 vs 1498 tokens) que volcar el esquema entero, y con una precisión **equivalente** (64%
+vs 72%, dentro del ruido de una sola tirada; en otra tirada del arnés de escala salen 68% las
+tres). Y recupera bastantes más tablas correctas que la búsqueda vectorial sola (99% vs 93%):
+la expansión por el grafo trae las tablas de JOIN que el vector se deja.
 
 ### Las descripciones aportan (y el grafo da robustez)
 
@@ -62,6 +62,13 @@ Midiendo GraphRAG y búsqueda vectorial **con** y **sin** descripciones:
 - **El grafo da robustez**: incluso sin descripciones, GraphRAG rescata `t_042` siguiendo su
   clave foránea con `customer`. Es decir, las dos piezas (semántica + grafo) se cubren la
   espalda.
+- **Y el caso extremo, medido (experimento de confusión)**: con tablas donde NADA habla —
+  nombre y columnas opacos, el ERP legacy real (`t_ops_01(c1..c5)`) — sin descripciones colapsa
+  todo, **incluida la baseline con el esquema entero delante** (17-33% de equivalencia). Con
+  descripciones documentadas, GraphSQL sube al **83%**… mientras que el esquema entero con las
+  MISMAS descripciones se queda en el **17%**: la documentación ahogada entre 66 tablas no es
+  usable — **la recuperación es lo que la hace visible**. No es "descripciones o GraphRAG":
+  cada una necesita a la otra, y esa combinación es exactamente este producto.
 
 ## 4. Por qué esto gana a escala (el argumento que de verdad vende)
 
@@ -87,11 +94,24 @@ igual. (Bonus medido: la búsqueda vectorial *sola* pierde recall al crecer el e
 porque se deja tablas de JOIN; es la expansión por el grafo la que las recupera, así que la ventaja
 del grafo se ensancha a escala.)
 
-**Eje 2 — volumen de peticiones.** Este ahorro por consulta se multiplica por cada petición. Un
-chatbot de negocio o una herramienta de consultoría BI con, pongamos, 1.000 consultas/día, sobre
-un esquema mediano-grande, ahorra **decenas de millones de tokens al día** solo en el contexto
-del esquema → coste directo y **menor latencia** (menos contexto = respuesta más rápida = mejor
-experiencia justo cuando hay volumen).
+**Eje 2 — volumen de peticiones (y el multiplicador oculto: las llamadas por pregunta).** El
+esquema no viaja una vez por pregunta: viaja en **cada llamada del bucle**. En una pregunta
+interactiva normal, el DDL va en la generación, en el juez LLM, en cada reintento automático
+(hasta 3 por ciclo) y en cada afinado del usuario — fácilmente **6-8 llamadas con el esquema
+dentro por pregunta**. Con 200+ tablas (~18k tokens de esquema) eso son ~110-140k tokens POR
+PREGUNTA volcando el esquema entero, contra ~5-6k con GraphSQL. Multiplícalo por 1.000
+consultas/día y el ahorro son **decenas de millones de tokens al día** → coste directo y
+**menor latencia** justo cuando hay volumen.
+
+**Eje 3 — despliegue local/privado (donde no es ahorro: es viabilidad).** El caso que obliga a
+un modelo local es justo el de datos que no pueden salir (el caso empresa). Y ahí el contexto
+acotado deja de ser una optimización: (1) la ventana *práctica* de un modelo local la fija la
+VRAM, no el spec — un esquema de 18k tokens directamente **no cabe**, o cabe él solo sin sitio
+para la pregunta; (2) los modelos pequeños se degradan mucho más con contexto largo (*lost in
+the middle*), así que esquema entero = menos precisión, no la misma; y (3) el *prefill* de 18k
+tokens por llamada en GPU de consumo son segundos, ×6-8 llamadas por pregunta. GraphSQL ya corre
+entero en local (qwen3.5-9b + bge-m3, medido): con ~800 tokens de contexto, el despliegue
+privado es **posible**; con el esquema entero, a esa escala, no lo es.
 
 *(Las filas de 17 y 66 tablas son medidas reales; la de 300 es una proyección lineal del coste
 por tabla — no medida a esa escala todavía, ver §6.)*

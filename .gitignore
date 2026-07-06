@@ -61,6 +61,7 @@ secrets.json
 docs/roadmap/
 docs/spikes/
 docs/investigacion
+docs/PLANNING.md
 
 # Temporary files
 *.swp
@@ -71,3 +72,4 @@ docs/investigacion
 # Database files
 *.sqlite
 *.sqlite3
+descriptions/descriptions.json

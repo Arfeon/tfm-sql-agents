@@ -1,11 +1,12 @@
 # =====================================================================
 # Golden set — Nebula (BD grande de escala, SPEC-17)
 # =====================================================================
-# Mismo formato que el de Arcadia. En esta fase se usa sobre todo para el
-# schema-linking recall (¿la recuperación trae las tablas gold?) sobre un esquema
-# de ~66 tablas. Las tablas van vacías, así que la `sql` de referencia documenta la
-# intención pero no se ejecuta todavía (la execution accuracy queda para cuando se
-# siembren datos). Preguntas en ESPAÑOL, esquema en INGLÉS.
+# Mismo formato que el de Arcadia: preguntas en ESPAÑOL, esquema en INGLÉS.
+# Mide el schema-linking recall (¿la recuperación trae las tablas gold?) sobre un
+# esquema de 66 tablas, y la execution accuracy: Nebula está sembrada (seeder
+# ligero, seed=42, dump commiteado), así que la `sql` de referencia SE EJECUTA y
+# se compara el resultado. Las referencias "por/cada categoría" siguen la
+# interpretación inclusiva de D-13 (LEFT JOIN: las categorías vacías salen).
 # =====================================================================
 
 - id: N-01

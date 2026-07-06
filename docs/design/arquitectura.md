@@ -8,24 +8,24 @@ Acceder a una base de datos relacional exige conocer SQL y el esquema exacto (ta
 
 Pipeline **multi-agente** orquestado con LangGraph: agentes especializados localizan las tablas relevantes, generan la SQL, la validan, piden aprobación humana y la ejecutan en solo lectura.
 
+```mermaid
+flowchart TD
+    U["Usuario<br/>«Muéstrame las 10 categorías con más ventas este año»"]
+    U -->|Lenguaje natural| GS
+    subgraph GS [GraphSQL]
+        direction LR
+        MA["Memory Agent<br/>(futuro)"] -.-> SA[Schema Agent]
+        SA --> SQL[SQL Agent]
+        SQL --> JA[Judge Agent]
+    end
+    GS --> H[Aprobación humana]
+    H --> E[Ejecución segura<br/>solo lectura]
+    E --> R[Resultados]
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                          Usuario                            │
-│   "Muéstrame las 10 categorías con más ventas este año"     │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ Lenguaje natural
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        GraphSQL                             │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│   │ Memory   │→ │ Schema   │→ │   SQL    │→ │  Judge   │    │
-│   │  Agent   │  │  Agent   │  │  Agent   │  │  Agent   │    │
-│   └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
-│                                     │                        │
-│                                     ▼                        │
-│         Aprobación humana → Ejecución segura → Resultados    │
-└─────────────────────────────────────────────────────────────┘
-```
+
+Es la visión completa: todo está implementado salvo el **Memory Agent** (ejemplos
+*few-shot* de consultas pasadas), que queda como pieza futura (SPEC-09). El flujo
+simplificado de una consulta:
 
 ```mermaid
 flowchart LR
@@ -37,28 +37,35 @@ flowchart LR
     E --> R[Mostrar<br/>resultados]
 ```
 
+> Simplificado a propósito: el flujo real añade el bucle automático Judge↔SQL y las
+> cuatro decisiones de la revisión (aprobar / rechazar / modificar / afinar) — el grafo
+> completo, tal cual está implementado, es el de §3.
+
 ## 3. Arquitectura técnica (grafo de estados)
 
 El pipeline de una consulta lo monto como una máquina de estados en LangGraph: cada paso es un agente y, según cómo queda el estado compartido (la pregunta, las tablas recuperadas, la SQL, lo que diga el Judge…), se decide el siguiente. El enrutado lo llevo con reglas, no con un LLM: el flujo es siempre el mismo, así que no necesito que un modelo decida por dónde seguir.
 
 Este pipeline determinista lo monto como un **grafo propio**, distinto del grafo conversacional con *tools* de SPEC-01: aquí el flujo es fijo (recuperar → SQL ↔ Judge → revisión → ejecutar) y lo enruto con reglas sobre el estado, no con el modelo. El grafo conversacional se conserva en el código como base reutilizable (p. ej. para un futuro servidor MCP), pero **ya no se expone en el menú del CLI** (D-12): el pipeline cubre el caso de uso real y es el que formaliza el supervisor (SPEC-10). Ya tengo el esqueleto del grafo (SPEC-01), la ingesta/vectorización del esquema (SPEC-02/03), los agentes de recuperación, SQL y Judge (SPEC-04/05/06), la ejecución (SPEC-07), la revisión humana con su pausa (SPEC-08) y el supervisor con el reintento automático (SPEC-10); el estado de cada componente está en [SPEC.md](SPEC.md).
 
+Este es el grafo **tal cual está implementado** (los nodos de `pipelineGraph.ts`, con sus aristas condicionales):
+
 ```mermaid
 flowchart TD
-    START([Inicio]) --> MA[Memory Agent\nBuscar ejemplos similares]
-    MA --> SA[Schema Agent\nLocalizar tablas relevantes]
+    START([Inicio]) --> SA[Schema Agent\nLocalizar tablas relevantes\nreinicia el contador de intentos]
     SA --> SQL[SQL Agent\nGenerar consulta SQL]
     SQL --> JA[Judge Agent\nValidar la consulta]
-    JA -->|Inválida y quedan reintentos| SQL
-    JA -->|Válida o reintentos agotados| HR[Human Review\n⏸ aprobación humana]
-    HR -->|Aprobado| EX[Execute SQL\nEjecutar en solo lectura]
-    HR -->|Rechazado| END2([Cancelado])
-    HR -->|Modificación a mano| JA
-    HR -->|Afinar\nindicación + tablas| SA
-    EX --> SF[Store Feedback\nGuardar consulta aprobada]
-    SF --> FR[Format Response\nMostrar resultados]
-    FR --> END1([Fin])
+    JA -->|Inválida y quedan reintentos\nSPEC-10, máx. 3 por ciclo| SQL
+    JA -->|Válida, reintentos agotados\no SQL editada a mano| HR[Human Review\n⏸ aprobación humana]
+    HR -->|Aprobar| EX[Execute SQL\nEjecutar en solo lectura]
+    HR -->|Rechazar| END2([Cancelado])
+    HR -->|Modificar a mano\nsin reintento automático| JA
+    HR -->|Afinar\nindicación + tablas forzadas| SA
+    EX --> END1([Fin: resultados en el CLI\ntabla / gráfico / ambas])
 ```
+
+> El **Memory Agent** (buscar consultas pasadas como ejemplos *few-shot*) y el **Store Feedback**
+> (guardar las aprobadas) son la pieza futura SPEC-09: no forman parte del grafo actual. La
+> presentación de resultados (tabla o gráfico de barras, SPEC-19) es cosa del CLI, no un nodo.
 
 Lo importante del flujo es la pausa para aprobar la SQL antes de ejecutarla, y ya está montada (SPEC-08): el nodo de revisión humana detiene el grafo (`interrupt_before`), **persiste el estado en PostgreSQL** (`graphsql_memory`, vía el `PostgresSaver` de LangGraph) y espera mi decisión; como el estado queda guardado y es recuperable por `thread_id`, la pausa sobrevive al proceso. Al reanudar con mi decisión, el grafo enruta: aprobar → ejecutar, rechazar → fin, modificar → vuelve al Judge con la SQL editada, y **afinar** → rehace la recuperación con mi indicación y las tablas forzadas (`mustInclude`). Afinar (SPEC-15) es la vía guiada por el humano: doy una indicación en lenguaje natural ("añade la popularidad por wishlist") y/o fuerzo tablas, y el SQL Agent reescribe la consulta partiendo de la anterior; la indicación además se suma a la pregunta al recuperar, para que pueda aparecer una tabla nueva por significado. Las indicaciones y las tablas forzadas viven en el estado, así que se conservan y acumulan entre afinados, y las tablas forzadas son **UX determinista**: el humano controla el bucle, no el LLM.
 
@@ -75,8 +82,8 @@ De estos, el **Schema Agent** (la recuperación GraphRAG), el **Judge** y el **S
 - **Judge.** Revisa que la SQL sea segura. Lo primero y obligatorio es comprobar que solo lee (empieza por `SELECT`/`WITH`, sin palabras peligrosas ni inyección); si eso falla, no se ejecuta diga lo que diga el resto. Por encima puede ir una comprobación de sintaxis y una revisión con el propio LLM. Además (SPEC-14) juzga el **sentido**: por cada tabla usada evalúa si conoce su propósito —documentado por su descripción, evidente por nombre/columnas, o **supuesto** si el nombre es opaco y no hay descripción—; en ese último caso avisa de que la tabla se usa por suposición (aviso, no bloqueo). Para esto la descripción de cada tabla viaja ya en el contexto (DDL).
 - **Human Review** (hecho, SPEC-08 + SPEC-15). Para el grafo antes de ejecutar y me enseña, en cajas con color, la SQL propuesta y el veredicto del Judge; espera a que la apruebe, la rechace, la modifique a mano o la **afine** (una indicación en lenguaje natural y/o forzar tablas, que rehace la recuperación y regenera la SQL). La pausa persiste en PostgreSQL, recuperable por `thread_id`.
 - **Execute.** Ejecuta la consulta aprobada en solo lectura y devuelve los resultados.
-- **Store Feedback.** Guarda la consulta aprobada para reutilizarla como ejemplo. Si falla, no rompe nada (no es crítico).
-- **Format.** Pinta la SQL y los resultados en el CLI; los agentes devuelven datos y la presentación es cosa aparte.
+- **Store Feedback** (futuro, SPEC-09, junto al Memory Agent). Guardaría la consulta aprobada para reutilizarla como ejemplo. Si fallara, no rompería nada (no es crítico).
+- **Format** (no es un agente: es la capa de presentación del CLI). Pinta la SQL resaltada, el veredicto del Judge en cajas y los resultados como tabla o gráfico de barras (SPEC-19); los agentes devuelven datos y la presentación es cosa aparte.
 
 ## 5. Grafo de conocimiento (Neo4j)
 
@@ -192,7 +199,7 @@ Lectura honesta:
 - La tabla de nombre opaco `t_042` (listas de deseos) **solo se localiza bien con descripciones**: sin ellas, la búsqueda vectorial la falla; con ellas, acierta.
 - **El grafo da robustez**: aun sin descripciones, GraphRAG rescata `t_042` siguiendo su clave foránea con `customer`. Las dos piezas (semántica + grafo) se cubren la espalda.
 
-**Prueba de escala (SPEC-17, `npm run evaluate:scale`).** Para ver si el argumento del GraphRAG crece con el tamaño del esquema, comparo Arcadia (17 tablas) con Nebula (66 tablas, una BD sintética de la misma familia de dominio, sembrada ligera). Evaluación completa (recall + execution accuracy + contexto) por modo:
+**Prueba de escala (SPEC-17, `npm run evaluate:scale`).** Para ver si el argumento del GraphRAG crece con el tamaño del esquema, comparo Arcadia (17 tablas) con Nebula (66 tablas, una BD sintética de la misma familia de dominio, sembrada ligera). Evaluación completa (recall + execution accuracy + contexto) por modo. Ojo: es una **tirada distinta** de la tabla anterior, por eso los números de Arcadia no coinciden exactamente (72/68/64 allí, 68/68/68 aquí — la generación no es determinista, ±8pp entre tiradas):
 
 | BD | Tablas | Modo | Recall | Exec. justa | Equiv. (LLM) | Tokens |
 |----|--------|------|--------|-------------|--------------|--------|
@@ -225,7 +232,11 @@ Revisar los resultados caso por caso (leyendo la SQL generada frente a la de ref
 
 4. **El bug que invalidó los primeros números de Nebula.** Los primeros aciertos de Nebula (40%) eran falsos: el arnés ejecutaba las consultas contra la BD por defecto (Arcadia), no contra la que evaluaba, así que las tablas propias de Nebula fallaban y las compartidas coincidían por casualidad. Lo detecté precisamente mirando a mano 3 fallos y 3 aciertos. Arreglado (ejecuto contra la BD evaluada) y con test de regresión; los números de Nebula de arriba ya son los correctos (40% → 80%). **Moraleja, otra vez: un número sospechosamente malo casi siempre es la medición, no el sistema — pero solo lo ves si abres los casos.**
 
-Y los límites de siempre: golden set pequeño (25 + 15), un dominio, un modelo y **una sola tirada** (la generación no es determinista — se nota en que Arcadia sale 72/68/64 en un arnés y 68/68/68 en el otro). Son señales honestas para la presentación, no una evaluación estadística de tribunal.
+5. **El benchmark es amable con la baseline (nombres limpios y esquema que cabe).** Que "sin recuperación" compita en aciertos a 66 tablas no dice que abocar el esquema sea igual de bueno; dice que **mis BDs de prueba son demasiado limpias**. Los nombres son autoexplicativos (`customer`, `invoice`…) —solo hay UNA tabla opaca (`t_042`) de 66— y 5.748 tokens caben de sobra en la ventana de un modelo actual, así que el LLM elige bien las tablas aunque se lo den todo. Una BD de empresa real (200+ tablas, nombres crípticos o casi duplicados: `dades_client_x`/`dades_client_y`, copias `_v2`, staging, ERP) rompe esa amabilidad por dos lados que la execution accuracy de este golden set no mide: la **confusión entre tablas parecidas** (donde las descripciones + el grafo son la solución, mecanismo ya demostrado en pequeño: sin descripciones el vectorial cae 72%→44% y a `t_042` solo la rescata la FK) y el **coste** (el esquema entero de 200+ tablas son ~17-20k tokens POR consulta; el del GraphRAG se mantiene plano ~760). Por eso la comparación de aciertos a esta escala infravalora al GraphRAG, y el argumento medible y sólido es el económico + la robustez ante opacidad; la ventaja de aciertos en esquemas grandes y confusos queda como validación futura (una BD real o una Nebula "ofuscada").
+
+   *Actualización — el experimento de confusión (SPEC-21, `npm run evaluate:confusion`) puso a prueba este sesgo, en dos fases.* **Fase 1** (solo el nombre de tabla opaco, `t_ops_01..06`): la hipótesis "sin descripciones todo se hunde" quedó parcialmente refutada — el recall aguantó ~100% porque las **columnas delatan el propósito** (`purchase_date`, `balance`, `sender_id`…) y la vectorización las incluye. **Fase dura** (nombre Y columnas opacos, `c1..c5` en las seis tablas, el ERP legacy de verdad): la hipótesis se confirmó con contundencia. Sin descripciones colapsa TODO: el vectorial no encuentra nada (recall 8%), el rescate por FK solo no basta (GraphRAG 17% — la arista existe, pero la tabla opaca con score semántico nulo pierde el sitio del recorte de contexto frente a las vecinas), y **ni siquiera tener el esquema entero delante salva a la baseline** (17-33% de equivalencia: ve `t_ops_01(c1..c5)` y no puede saber qué contiene). Y el hallazgo más citable: **las descripciones solo funcionan CON recuperación** — GraphRAG+descripciones sube a 83% de equivalencia con recall 100%, mientras que el esquema entero con las MISMAS descripciones en el DDL se queda en 17%: la documentación ahogada entre 66 tablas no es usable; la recuperación es lo que la hace visible. (Red de seguridad adicional para dominios de coste alto: sin descripción, el Judge marca esas tablas como usadas "por suposición", SPEC-14 — el riesgo se declara, no se silencia.) Informe en [`docs/evaluacion/confusion.md`](../evaluacion/confusion.md).
+
+Y los límites de siempre: golden set pequeño (25 + 15), un dominio y un modelo. El límite de "una sola tirada" ya está mitigado: la prueba de escala se ejecutó **5 veces** y el agregado (media y rango, [`docs/evaluacion/escala-tiradas.md`](../evaluacion/escala-tiradas.md)) es la fuente citable: en Nebula, GraphRAG 72% justa (rango 67–80) vs esquema entero 68% (67–73) vs vectorial 60% (¡60–60, cinco de cinco!), y equivalencia 89% (73–100). El agregado además destapó el **cruce de escala** — de 17 a 66 tablas el esquema entero baja (73%→68%) y GraphRAG sube (67%→72%), la tendencia que predice la teoría, con la cautela de que los rangos se solapan — y que la mayoría de los casos que "fallan siempre" son artefactos de la métrica (referencias con `ROUND` que la candidata no aplica, empates en top-N), no SQL incorrecta: por eso la equivalencia les da ~90%.
 
 ## 11. Mejoras futuras
 

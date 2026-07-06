@@ -4,12 +4,12 @@ Evaluación completa (recall + execution accuracy + tamaño de contexto) sobre e
 
 | BD | Tablas | Casos | Modo | Schema-linking recall | Execution accuracy (justa) | Equivalencia semántica (LLM) | Execution accuracy (estricta) | Tokens de contexto |
 |----|--------|-------|------|-----------------------|----------------------------|------------------------------|-------------------------------|--------------------|
-| arcadia | 17 | 25 | Sin recuperación | 100% | 72% | 68% | 20% | 1498 |
-| arcadia | 17 | 25 | Solo vectorial | 93% | 68% | 72% | 20% | 481 |
-| arcadia | 17 | 25 | GraphRAG | 99% | 64% | 80% | 20% | 774 |
-| nebula | 66 | 15 | Sin recuperación | 100% | 67% | 87% | 13% | 5748 |
+| arcadia | 17 | 25 | Sin recuperación | 100% | 76% | 76% | 28% | 1498 |
+| arcadia | 17 | 25 | Solo vectorial | 93% | 64% | 64% | 24% | 481 |
+| arcadia | 17 | 25 | GraphRAG | 99% | 72% | 76% | 24% | 774 |
+| nebula | 66 | 15 | Sin recuperación | 100% | 73% | 87% | 13% | 5748 |
 | nebula | 66 | 15 | Solo vectorial | 80% | 60% | 60% | 27% | 457 |
-| nebula | 66 | 15 | GraphRAG | 100% | 73% | 87% | 33% | 759 |
+| nebula | 66 | 15 | GraphRAG | 100% | 73% | 93% | 27% | 759 |
 
 > El contexto de "sin recuperación" crece con el nº de tablas del esquema; el del GraphRAG se
 > mantiene acotado, con recall alto. La execution accuracy es de una sola tirada (la generación

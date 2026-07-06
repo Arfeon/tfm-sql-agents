@@ -1,0 +1,70 @@
+# =====================================================================
+# Golden set de CONFUSIÓN — Nebula ofuscada (SPEC-21, fase dura)
+# =====================================================================
+# Preguntas que SOLO se responden con las 6 tablas ofuscadas: nombre opaco
+# (t_ops_XX) Y COLUMNAS opacas (c1..c5, el mismo patrón en todas, como un ERP
+# legacy). Sin descripciones no habla NADA — ni el nombre ni las columnas —;
+# quedan los tipos de dato y las claves foráneas (estructura, que es lo que usa
+# el grafo). En la fase 1 (solo el nombre de tabla opaco) el recall aguantó
+# ~100% porque las columnas delataban el propósito: esta fase cierra esa vía.
+# La SQL de referencia usa los nombres ofuscados porque el experimento evalúa
+# la BD YA renombrada; el runner renombra al empezar y SIEMPRE revierte.
+# =====================================================================
+
+- id: C-01
+  question: "¿Cuánto dinero se ha gastado en compras de DLC en total?"
+  difficulty: easy
+  tables: [t_ops_01]
+  sql: |
+    SELECT SUM(c5) AS total_spent FROM t_ops_01;
+  note: "purchase ofuscada del todo (tabla + columnas). c5 = importe; sin descripción, solo el tipo numeric lo insinúa."
+
+- id: C-02
+  question: "¿Cuál es el importe total reembolsado y cuántas devoluciones ha habido?"
+  difficulty: medium
+  tables: [t_ops_02]
+  sql: |
+    SELECT SUM(c3) AS total_refunded, COUNT(*) AS refunds FROM t_ops_02;
+  note: "refund ofuscada. Mismo patrón c1..c5 que t_ops_01: hermanas indistinguibles sin descripción."
+
+- id: C-03
+  question: "¿Cuál es el saldo total pendiente en tarjetas regalo?"
+  difficulty: medium
+  tables: [t_ops_03]
+  sql: |
+    SELECT SUM(c3) AS total_balance FROM t_ops_03;
+  note: "gift_card ofuscada. Nada la distingue de t_ops_02 (ambas con c3 numeric)."
+
+- id: C-04
+  question: "¿Cuál es la puntuación media que dan los clientes a los juegos?"
+  difficulty: medium
+  tables: [t_ops_04]
+  sql: |
+    SELECT ROUND(AVG(c4), 2) AS avg_score FROM t_ops_04;
+  note: "rating ofuscada. Trampa extra: review (no renombrada) también huele a valoraciones."
+
+- id: C-05
+  question: "¿Qué 5 clientes han enviado más mensajes en los chats?"
+  difficulty: hard
+  tables: [t_ops_05, customer]
+  sql: |
+    SELECT c.username, COUNT(*) AS messages_sent
+    FROM t_ops_05 m
+    JOIN customer c ON c.customer_id = m.c3
+    GROUP BY c.username
+    ORDER BY messages_sent DESC
+    LIMIT 5;
+  note: "message ofuscada, multi-hop: la FK c3→customer sobrevive al rename (es estructura) y es el único rescate sin descripción — el mecanismo de t_042."
+
+- id: C-06
+  question: "¿Qué 5 juegos tienen más partidas guardadas?"
+  difficulty: hard
+  tables: [t_ops_06, game]
+  sql: |
+    SELECT g.title, COUNT(*) AS saves
+    FROM t_ops_06 s
+    JOIN game g ON g.game_id = s.c3
+    GROUP BY g.title
+    ORDER BY saves DESC
+    LIMIT 5;
+  note: "save_game ofuscada, multi-hop: rescate posible por la FK c3→game."

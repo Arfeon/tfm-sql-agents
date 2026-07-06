@@ -1,9 +1,10 @@
 /**
- * Tools del esquema para el agente.
+ * Tools del esquema para el agente conversacional (SPEC-01, hoy oculto del menú — D-12).
  *
  * Permiten que el agente escanee la BD objetivo e ingiera su esquema en Neo4j,
  * y que consulte el resumen de lo ingerido. La ingesta usa la primera BD del
- * catálogo (la del `.env`).
+ * catálogo (la del `.env`): el chat no elige BD — la selección de BD objetivo
+ * (SPEC-18) es del pipeline de consulta, no de estas tools.
  */
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'

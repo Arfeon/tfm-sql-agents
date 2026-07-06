@@ -27,7 +27,7 @@ import { loadGoldenSet } from '../graphsql/application/goldenSet'
 import { evaluateGoldenSet, makeEvaluationDependencies, type ModeReport } from '../graphsql/application/evaluateGoldenSet'
 
 const OUTPUT_DIR = '../docs/evaluacion'
-/** Caso de nombre opaco que solo se localiza por su descripción (D-03). */
+/** Caso de nombre opaco que solo se localiza por su descripción (la tabla trampa de Arcadia). */
 const OPAQUE_CASE_ID = 'G-25'
 
 /** Un modo evaluado con y sin descripciones. */

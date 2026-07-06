@@ -52,16 +52,19 @@ LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 EMBEDDING_PROVIDER=openai
 
-# Opción local (LM Studio): sin coste, necesitas LM Studio corriendo
-# con un modelo de chat Y uno de embeddings cargados a la vez
+# Opción local (LM Studio): sin coste ni API key, necesitas LM Studio corriendo
+# con un modelo de chat Y uno de embeddings cargados A LA VEZ (el CLI avisa si falta uno).
+# Estos son los modelos que hemos usado y validado nosotros:
 LLM_PROVIDER=local
 LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1
+LMSTUDIO_MODEL=qwen/qwen3.5-9b
 EMBEDDING_PROVIDER=local
+LMSTUDIO_EMBEDDING_MODEL=text-embedding-bge-m3
 ```
 
 Se pueden mezclar (p. ej. chat en OpenAI y embeddings locales, que es como está
-medida la evaluación). El `.env.example` documenta todas las variables, incluidos
-los modelos concretos de cada proveedor.
+medida la evaluación del proyecto). El `.env.example` documenta todas las variables,
+incluidos los modelos concretos de cada proveedor.
 
 ## 3. Levantar las bases de datos con Docker
 
