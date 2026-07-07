@@ -1,9 +1,6 @@
 /**
- * Descripciones opcionales de tablas para enriquecer la vectorización.
- *
- * El usuario deja en la carpeta `descriptions/` un fichero JSON con un array de
- * objetos `{ tableName, description }`. El fichero `*.example.json` es solo una
- * guía del formato y la detección lo ignora.
+ * Descripciones opcionales de tablas para enriquecer la vectorización: ficheros JSON
+ * `[{ tableName, description }]` en `descriptions/`; los `*.example.json` se ignoran.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -19,18 +16,15 @@ const descriptionsSchema = z.array(
   }),
 )
 
-/** Parsea el contenido JSON a un mapa `tabla → descripción`. */
 export function parseDescriptions(json: string): Map<string, string> {
   const entries = descriptionsSchema.parse(JSON.parse(json))
   return new Map(entries.map((entry) => [entry.tableName, entry.description]))
 }
 
-/** ¿Hay algún fichero de descripciones (ignorando el de ejemplo)? */
 export function hasDescriptionsFile(dir: string = DESCRIPTIONS_DIR): boolean {
   return findDescriptionFiles(dir).length > 0
 }
 
-/** Carga y combina todos los ficheros de descripciones de la carpeta. */
 export function loadDescriptions(dir: string = DESCRIPTIONS_DIR): Map<string, string> {
   const merged = new Map<string, string>()
   for (const file of findDescriptionFiles(dir)) {

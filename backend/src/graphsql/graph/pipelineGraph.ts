@@ -1,35 +1,8 @@
 /**
- * Pipeline NL→SQL con revisión humana (SPEC-08) y supervisor determinista (SPEC-10).
- *
- * Es un grafo determinista, distinto del grafo conversacional de SPEC-01: recorre
- * recuperación → generación → Judge → REVISIÓN HUMANA → ejecución. El grafo se
- * compila con `interrupt_before` en la revisión, de modo que LangGraph pausa y
- * persiste el estado (checkpointer en PostgreSQL) antes de ejecutar nada. Ninguna
- * SQL se ejecuta sin el visto bueno del humano.
- *
- * Al reanudar con la decisión del humano, enruto:
- *   - aprobar   → ejecutar (SPEC-07)
- *   - rechazar  → fin, no se ejecuta
- *   - modificar → la SQL editada vuelve al Judge
- *   - afinar    → vuelvo a la recuperación con la indicación del humano y las tablas
- *                 forzadas (`mustInclude`); regenero la SQL guiándome por ella (SPEC-15)
- *
- * La indicación y las tablas forzadas viven en el estado, así que se conservan y
- * acumulan entre afinados.
- *
- * Bucle automático Judge↔SQL (SPEC-10). Tras el Judge, si el veredicto no es
- * válido y quedan intentos (`attempts < MAX_JUDGE_ATTEMPTS`), vuelvo sin más al
- * SQL Agent con los errores del Judge, SIN pasar por Human Review ni rehacer la
- * recuperación (las tablas no cambian). El contador se reinicia en `retrieve`
- * (al empezar y al afinar): es un ciclo nuevo. Si la SQL viene de una
- * MODIFICACIÓN MANUAL (`decision.action === 'modify'`), el reintento automático
- * NO se aplica: el veredicto sobre una edición del humano siempre vuelve a Human
- * Review, gane o pierda, porque regenerarla a ciegas descartaría en silencio lo
- * que el humano acaba de escribir.
- *
- * Los colaboradores (recuperar, generar, juzgar, ejecutar) se inyectan con sus
- * implementaciones reales por defecto, para poder probar el enrutado con dobles y
- * un checkpointer en memoria, sin Docker ni LLM.
+ * Pipeline NL→SQL (SPEC-08/10/15): recuperar → generar ↔ Judge → revisión humana →
+ * ejecutar. El enrutado es por reglas sobre el estado, no lo decide un LLM, y el
+ * `interrupt_before` en la revisión persiste la pausa en PostgreSQL: nada se ejecuta
+ * sin visto bueno. Una SQL editada a mano nunca entra en el reintento automático.
  */
 import { StateGraph, Annotation, START, END, type BaseCheckpointSaver } from '@langchain/langgraph'
 import { retrieveSchemaContext } from '../application/schemaRetrieval'
@@ -45,21 +18,19 @@ import type { JudgeVerdict } from '../domain/sql/JudgeVerdict'
 import type { QueryResult } from '../domain/sql/QueryResult'
 import type { HumanDecision } from '../domain/sql/HumanDecision'
 
-/** El nodo que se pausa: la revisión humana. Se compila con `interrupt_before`. */
+/** El nodo que se pausa con `interrupt_before`. */
 export const HUMAN_REVIEW_NODE = 'human_review'
 
-/** Confianza mínima del juez LLM para dar la consulta por buena (SPEC-10). */
+/** Confianza mínima del juez LLM para dar la consulta por buena. */
 export const MIN_CONFIDENCE = 0.7
 
-/** Tope de intentos de generación por ciclo, contando el primero (SPEC-10). */
+/** Tope de intentos de generación por ciclo, contando el primero. */
 export const MAX_JUDGE_ATTEMPTS = 3
 
-/** Reducer de reemplazo (cada nodo sobrescribe el valor del canal). */
 function replace<T>(_current: T, update: T): T {
   return update
 }
 
-/** Añado `nuevas` a `existentes` sin duplicar, conservando el orden. */
 function mergeUnique(existentes: string[], nuevas: string[]): string[] {
   const resultado = [...existentes]
   for (const tabla of nuevas) {
@@ -71,10 +42,8 @@ function mergeUnique(existentes: string[], nuevas: string[]): string[] {
 }
 
 /**
- * Paso los problemas del Judge a texto para el reintento automático (SPEC-10): sus
- * errores y avisos como lista. Es lo que el SQL Agent recibe como "lo que hay que
- * ajustar". Vive aquí (no en `generateSql`) para que la generación no dependa del
- * `JudgeVerdict`: solo recibe una instrucción ya en texto, venga del Judge o del humano.
+ * Los problemas del Judge como texto plano, para que la generación no dependa del
+ * `JudgeVerdict`: recibe una instrucción en texto, venga del Judge o del humano.
  */
 function describeJudgeFeedback(verdict: JudgeVerdict): string {
   const problemas = [...verdict.errors, ...verdict.warnings]
@@ -84,40 +53,28 @@ function describeJudgeFeedback(verdict: JudgeVerdict): string {
   return problemas.map((problema) => `- ${problema}`).join('\n')
 }
 
-/** El estado que fluye por el pipeline y que el checkpointer persiste. */
 export const PipelineState = Annotation.Root({
-  /** La pregunta en lenguaje natural. */
   question: Annotation<string>(),
-  /** Dialecto del motor objetivo, para generar y juzgar la SQL. */
   dialect: Annotation<string>(),
-  /** Tablas fijadas por el humano; se conservan y acumulan entre afinados. */
+  /** Tablas fijadas por el humano; se acumulan entre afinados. */
   mustInclude: Annotation<string[]>({ reducer: replace, default: () => [] }),
-  /**
-   * Indicaciones del humano al afinar (SPEC-15), acumuladas. Alimentan la recuperación
-   * (para encontrar tablas nuevas) y guían al SQL Agent. Persisten entre afinados.
-   */
+  /** Indicaciones del humano al afinar, acumuladas: alimentan recuperación y generación. */
   refinements: Annotation<string[]>({ reducer: replace, default: () => [] }),
-  /** Contexto de esquema recuperado (SPEC-04). */
   schemaContext: Annotation<SchemaContext | null>({ reducer: replace, default: () => null }),
-  /** Tablas que el humano fijó pero no existen en el esquema (se ignoraron). */
+  /** Tablas fijadas que no existen en el esquema (se ignoran, con aviso en el CLI). */
   ignoredPinned: Annotation<string[]>({ reducer: replace, default: () => [] }),
-  /** La SQL generada (o editada a mano). */
   sql: Annotation<SqlStatement | null>({ reducer: replace, default: () => null }),
-  /** El veredicto del Judge (SPEC-06). */
   verdict: Annotation<JudgeVerdict | null>({ reducer: replace, default: () => null }),
-  /** La consulta no superó el Judge: se puede revisar, pero no aprobar para ejecutar. */
+  /** No superó el Judge: se puede revisar, pero no aprobar. */
   failed: Annotation<boolean>({ reducer: replace, default: () => false }),
-  /** La decisión del humano, que el CLI fija antes de reanudar. */
   decision: Annotation<HumanDecision | null>({ reducer: replace, default: () => null }),
-  /** El resultado de la ejecución, si se aprobó (SPEC-07). */
   result: Annotation<QueryResult | null>({ reducer: replace, default: () => null }),
-  /** Intentos de generación en el ciclo actual (SPEC-10); se reinicia en `retrieve`. */
+  /** Intentos de generación del ciclo actual; se reinicia en `retrieve`. */
   attempts: Annotation<number>({ reducer: replace, default: () => 0 }),
 })
 
 export type PipelineStateType = typeof PipelineState.State
 
-/** Lo que el pipeline necesita del resto del sistema (con implementación real por defecto). */
 export interface PipelineDependencies {
   retrieve(question: string, mustInclude: string[]): Promise<SchemaContext>
   generate(question: string, schemaContext: SchemaContext, dialect: string, revision?: Revision): Promise<SqlStatement>
@@ -136,9 +93,9 @@ export const defaultPipelineDependencies: PipelineDependencies = {
 
 /**
  * Dependencias reales apuntando a una BD objetivo CONCRETA (SPEC-18): el dry-run del
- * Judge y la ejecución conectan a `target`, no a la BD por defecto. Es la misma lección
- * del bug de la evaluación (SPEC-17): cuando hay una BD elegida, nada de `connectDefault`
- * implícito. La recuperación y la generación no cambian (leen el índice compartido).
+ * Judge y la ejecución conectan a `target`, no a la BD por defecto — cuando hay una BD
+ * elegida, ninguna pieza debe usar `connectDefault` implícito. La recuperación y la
+ * generación no cambian (leen el índice compartido).
  */
 export function makePipelineDependencies(target: TargetDatabaseConfig): PipelineDependencies {
   const judgingDeps = {
@@ -156,7 +113,6 @@ export function makePipelineDependencies(target: TargetDatabaseConfig): Pipeline
   }
 }
 
-/** Construyo y compilo el pipeline con la pausa de revisión humana. */
 export function createSqlPipelineGraph(
   checkpointer: BaseCheckpointSaver,
   deps: PipelineDependencies = defaultPipelineDependencies,
@@ -172,11 +128,8 @@ export function createSqlPipelineGraph(
     return { schemaContext, ignoredPinned, attempts: 0 }
   }
 
-  /**
-   * Genero la SQL. Si es el primer intento tras un afinado del humano, me guío por sus
-   * indicaciones (SPEC-15); si es un reintento automático del supervisor, por los
-   * problemas del Judge (SPEC-10). En ambos casos parto de la consulta anterior.
-   */
+  // Tras un afinado me guío por las indicaciones del humano; en un reintento automático,
+  // por los problemas del Judge. En ambos casos parto de la consulta anterior.
   async function generate(state: PipelineStateType) {
     const hasPreviousSql = state.sql !== null
     const judgeRejectedIt = state.verdict !== null && !state.verdict.valid
@@ -194,17 +147,18 @@ export function createSqlPipelineGraph(
     return { sql, attempts: state.attempts + 1 }
   }
 
+  // El Judge evalúa contra la pregunta MÁS los afinados: si solo viera la pregunta
+  // original, penalizaría justo lo que el humano acaba de pedir.
   async function judge(state: PipelineStateType) {
-    const verdict = await deps.judge(state.sql!, state.schemaContext!, state.question)
+    const question =
+      state.refinements.length === 0
+        ? state.question
+        : `${state.question}\nIndicaciones posteriores del usuario: ${state.refinements.join('; ')}`
+    const verdict = await deps.judge(state.sql!, state.schemaContext!, question)
     return { verdict, failed: !verdict.valid }
   }
 
-  /**
-   * Nodo de revisión. Con `interrupt_before` el grafo se pausa ANTES de este nodo,
-   * y solo llega aquí cuando reanudo con una decisión ya fijada en el estado. Si es
-   * modificar, aplico la SQL editada; si es afinar, acumulo la indicación y las
-   * tablas forzadas. El enrutado a partir de la decisión lo hace `routeAfterReview`.
-   */
+  // El grafo se pausa ANTES de este nodo; solo llega aquí al reanudar con una decisión.
   function humanReview(state: PipelineStateType) {
     const decision = state.decision
     if (decision?.action === 'modify') {
@@ -225,7 +179,6 @@ export function createSqlPipelineGraph(
     return { result }
   }
 
-  /** Enruto según la decisión del humano tras la revisión. */
   function routeAfterReview(state: PipelineStateType) {
     switch (state.decision?.action) {
       case 'approve':
@@ -239,13 +192,8 @@ export function createSqlPipelineGraph(
     }
   }
 
-  /**
-   * Supervisor (SPEC-10): decido qué pasa tras el Judge.
-   *   - Válida                                  → Human Review.
-   *   - SQL editada a mano (`modify` en curso)   → Human Review siempre (sin reintento automático).
-   *   - Inválida y quedan intentos               → vuelvo al SQL Agent con el error.
-   *   - Inválida y agotados los intentos         → Human Review, marcada fracasada.
-   */
+  // El supervisor: una SQL editada a mano va SIEMPRE a revisión (regenerarla a ciegas
+  // descartaría en silencio lo que el humano escribió); una inválida reintenta hasta el tope.
   function routeAfterJudge(state: PipelineStateType) {
     if (state.verdict?.valid) {
       return HUMAN_REVIEW_NODE

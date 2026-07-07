@@ -41,7 +41,7 @@
   tables: [t_ops_04]
   sql: |
     SELECT ROUND(AVG(c4), 2) AS avg_score FROM t_ops_04;
-  note: "rating ofuscada. Trampa extra: review (no renombrada) también huele a valoraciones."
+  note: "rating ofuscada. Ambigüedad añadida: review (no renombrada) también suena a valoraciones."
 
 - id: C-05
   question: "¿Qué 5 clientes han enviado más mensajes en los chats?"

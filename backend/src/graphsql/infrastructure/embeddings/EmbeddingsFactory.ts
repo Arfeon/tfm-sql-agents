@@ -1,18 +1,12 @@
 /**
- * Factory de embeddings.
- *
- * Elijo el proveedor (`EMBEDDING_PROVIDER`) y construyo el adaptador con su
- * config; igual que `ChatModelFactory`, solo creo el que se va a usar. OpenAI y
- * local comparten adaptador (API OpenAI-compatible) y solo cambian `baseUrl` y
- * si paso la dimensión al API.
+ * Factory de embeddings. OpenAI y local comparten adaptador (API OpenAI-compatible):
+ * solo cambian `baseUrl` y si paso la dimensión al API.
  */
 import type { IEmbeddings } from '../../domain/ports/IEmbeddings'
 import { EmbeddingProvider } from './EmbeddingProvider'
 import { OpenAICompatibleEmbeddings } from './OpenAICompatibleEmbeddings'
 
 export class EmbeddingsFactory {
-  // Config de embeddings por proveedor: el modelo y la dimensión dependen del
-  // proveedor, así la elección en runtime escoge la suya.
   static create(provider: EmbeddingProvider, env: NodeJS.ProcessEnv = process.env): IEmbeddings {
     switch (provider) {
       case EmbeddingProvider.OpenAI:
@@ -44,9 +38,8 @@ export class EmbeddingsFactory {
   }
 
   /**
-   * Reconstruyo el modelo con el que se indexó (proveedor + modelo + dimensión
-   * guardados en el índice), no el del `.env`: para consultar hay que estar en el
-   * mismo espacio vectorial con el que se vectorizó. Lo usa el retriever (SPEC-04).
+   * Reconstruyo el modelo con el que se indexó, no el del `.env`: para consultar
+   * hay que estar en el mismo espacio vectorial con el que se vectorizó (SPEC-04).
    */
   static forIndexedModel(
     indexed: { provider: string; model: string; dimensions: number },

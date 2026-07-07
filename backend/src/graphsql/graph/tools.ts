@@ -1,9 +1,6 @@
 /**
- * Tools de demostración para el primer grafo (SPEC-01).
- *
- * Solo necesito una acción sencilla y determinista para comprobar que el agente
- * es capaz de decidir llamar a una herramienta y usar su resultado. Los agentes
- * reales (escaneo de esquema, ejecución SQL…) llegan en specs posteriores.
+ * Tool de demostración del primer grafo (SPEC-01): una acción determinista para
+ * comprobar que el agente sabe llamar a una herramienta y usar su resultado.
  */
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'

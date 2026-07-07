@@ -38,6 +38,7 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}) {
     retrieveQueries: [] as string[],
     retrieveMustInclude: [] as string[][],
     judgeSql: [] as string[],
+    judgeQuestions: [] as string[],
     executed: [] as string[],
   }
   const deps: PipelineDependencies = {
@@ -48,8 +49,9 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}) {
       return contextFor(['customer', ...mustInclude])
     },
     generate: async () => ({ text: 'SELECT * FROM customer', dialect: 'PostgreSQL' }),
-    judge: async (sql) => {
+    judge: async (sql, _schemaContext, question) => {
       calls.judgeSql.push(sql.text)
+      calls.judgeQuestions.push(question)
       return validVerdict
     },
     execute: async (sql) => {
@@ -334,6 +336,23 @@ describe('afinado guiado por el humano (SPEC-15)', () => {
     expect(snapshot.next).toEqual(['human_review'])
   })
 
+  it('el Judge evalúa contra la pregunta más las indicaciones del afinado', async () => {
+    // Regresión: el Judge solo veía la pregunta original, así que penalizaba justo
+    // lo que el humano acababa de pedir al afinar (p. ej. un alias solicitado).
+    const { deps, calls } = makeDeps()
+    const graph = createSqlPipelineGraph(new MemorySaver(), deps)
+    const config = { configurable: { thread_id: 'afinar-judge' } }
+
+    await graph.invoke(START_STATE, config)
+    await graph.updateState(config, { decision: { action: 'refine', guidance: 'si no hay descripción dame el nombre' } })
+    await graph.invoke(null, config)
+
+    // Antes de afinar, la pregunta tal cual; después, la pregunta más la indicación.
+    expect(calls.judgeQuestions[0]).toBe('¿cuántos clientes?')
+    expect(calls.judgeQuestions[1]).toContain('¿cuántos clientes?')
+    expect(calls.judgeQuestions[1]).toContain('si no hay descripción dame el nombre')
+  })
+
   it('una indicación puede traer una tabla nueva por la recuperación, sin forzarla', async () => {
     const queries: string[] = []
     const { deps } = makeDeps({
@@ -390,8 +409,8 @@ describe('afinado guiado por el humano (SPEC-15)', () => {
   })
 
   it('makePipelineDependencies ejecuta y valida sintaxis contra la BD dada, no la de por defecto', async () => {
-    // Regresión (SPEC-18, prima del bug de la evaluación): con una BD elegida, el
-    // dry-run del Judge y la ejecución deben conectar a ESA BD, nunca a connectDefault.
+    // Regresión (SPEC-18): con una BD elegida, el dry-run del Judge y la ejecución
+    // deben conectar a ESA BD, nunca a connectDefault (la primera del catálogo).
     const nebula: TargetDatabaseConfig = {
       type: 'postgresql', name: 'nebula', host: 'h', port: 5432, user: 'u', password: 'p', schema: 'public',
     }

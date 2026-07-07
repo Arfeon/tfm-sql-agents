@@ -1,15 +1,7 @@
 /**
- * Agregado de varias tiradas de la prueba de escala (SPEC-17).
- *
- * La generación no es determinista, así que una sola tirada baila ±8pp. Este script
- * lee las tiradas guardadas en `docs/evaluacion/tiradas/escala-casos-run*.json`
- * (cada una es un `evaluate:scale` completo) y agrega por BD y modo: media y rango
- * (mín–máx) de la execution accuracy justa, la equivalencia semántica y el recall.
- * También mira la ESTABILIDAD por caso: qué preguntas aciertan siempre, cuáles
- * fallan siempre y cuáles bailan entre tiradas — el detalle que una media esconde.
- *
- * No llama a nada externo (ni BD ni LLM): solo lee los JSON y escribe el informe
- * en `docs/evaluacion/escala-tiradas.md`. Uso: npm run evaluate:aggregate
+ * Media y rango de las tiradas guardadas de la prueba de escala, con la estabilidad
+ * por caso. Lee docs/evaluacion/tiradas/escala-casos-run*.json y escribe
+ * docs/evaluacion/escala-tiradas.md. Uso: npm run evaluate:aggregate
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -24,7 +16,6 @@ const MODE_LABELS: Record<string, string> = {
   graphrag: 'GraphRAG',
 }
 
-/** Un caso tal y como lo guarda `evaluate:scale` en escala-casos.json. */
 interface RunCase {
   id: string
   difficulty: string
@@ -102,7 +93,6 @@ function main(): void {
   console.log(chalk.green(`\n✔ Informe agregado en docs/evaluacion/escala-tiradas.md\n`))
 }
 
-/** Leo todas las tiradas guardadas (escala-casos-run*.json), ordenadas por nombre. */
 function loadRuns(): Run[] {
   const files = readdirSync(RUNS_DIR)
     .filter((name) => name.startsWith('escala-casos-run') && name.endsWith('.json'))
@@ -110,12 +100,10 @@ function loadRuns(): Run[] {
   return files.map((name) => JSON.parse(readFileSync(join(RUNS_DIR, name), 'utf8')) as Run)
 }
 
-/** Nombres de BD presentes en las tiradas (en el orden de la primera). */
 function targetNames(runs: Run[]): string[] {
   return runs[0].map((target) => target.name)
 }
 
-/** Resumen de una tirada para una BD y un modo: fracciones de acierto y recall medio. */
 function summarizeRun(run: Run, targetName: string, mode: string): { recall: number; fair: number; semantic: number } {
   const cases = run.find((t) => t.name === targetName)?.modes.find((m) => m.mode === mode)?.cases ?? []
   if (cases.length === 0) {
@@ -128,7 +116,7 @@ function summarizeRun(run: Run, targetName: string, mode: string): { recall: num
   }
 }
 
-/** Clasifico cada caso por su estabilidad entre tiradas (con la métrica justa). */
+/** La estabilidad la juzgo con la métrica justa, no con la equivalencia LLM. */
 function caseStability(runs: Run[], targetName: string, mode: string): { always: string[]; never: string[]; unstable: string[] } {
   const hitsByCase = new Map<string, number>()
   for (const run of runs) {

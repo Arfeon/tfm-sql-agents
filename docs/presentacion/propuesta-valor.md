@@ -1,10 +1,11 @@
-# Propuesta de valor — GraphSQL
+# Propuesta de valor — GraphSQL (argumentario de la presentación)
 
-> Documento de **posicionamiento** (para la defensa y las slides). La lectura académica
-> neutra de los números vive en [`design/arquitectura.md` §10](design/arquitectura.md); aquí
-> cuento por qué el producto vale la pena. Todas las cifras son de mediciones reales sobre
-> el golden set de Arcadia (25 preguntas); los límites están al final, a la vista.
-> ¿Términos poco familiares (GraphRAG, schema-linking, ablation…)? En el [glosario](glosario.md).
+> **Material interno de la presentación**, no documentación pública del proyecto: es el
+> argumentario del que salen las slides y el guion del vídeo (ver [pauta-slides.md](pauta-slides.md)),
+> escrito en tono de venta a propósito. La lectura académica neutra de los números vive en
+> [`design/arquitectura.md` §10](../design/arquitectura.md); todas las cifras de aquí son de
+> mediciones reales (medias de 5 tiradas donde aplica) y los límites están al final, a la vista.
+> ¿Términos poco familiares (GraphRAG, schema-linking, ablation…)? En el [glosario](../glosario.md).
 
 ## 1. El problema
 
@@ -129,28 +130,30 @@ por tabla — no medida a esa escala todavía, ver §6.)*
 ## 6. Honestidad (lo que aún no probamos)
 
 - El golden set es pequeño (25 preguntas en Arcadia, 15 en Nebula), de un solo dominio y con un
-  solo modelo; los números de precisión de una tirada varían ~±8 puntos por la no-determinación
-  de la generación. Son **indicativos**, no decimales exactos.
-- La escala está medida a fondo (17 vs 66 tablas): contexto, recall **y** execution accuracy.
-  *Dentro* de Nebula (66 tablas), GraphRAG **supera** en aciertos tanto a "volcar el esquema entero"
-  (80% vs 67%) como a la búsqueda vectorial sola (60%), y encima con ~1/7 del contexto. A 17 tablas
-  las tres formas empataban; a 66 el GraphRAG despega. Con cautela: son 15 preguntas y una sola
-  tirada, así que es una **señal en la dirección esperada**, no una ventaja de tribunal. La accuracy
-  absoluta entre Arcadia y Nebula **no es comparable directa** (golden sets distintos); lo comparable
-  es entre modos dentro de cada BD.
+  solo modelo. La no-determinación de la generación está **medida y acotada**: la prueba de escala
+  se ejecutó **5 veces** y se reporta la media con su rango (`docs/evaluacion/escala-tiradas.md`).
+- La escala está medida a fondo (17 vs 66 tablas): contexto, recall **y** execution accuracy,
+  en media de 5 tiradas. *Dentro* de Nebula, GraphRAG queda **primero en aciertos** — 72%
+  (rango 67–80) vs 68% del esquema entero (67–73) vs 60% de la búsqueda vectorial sola (idéntico
+  en las cinco tiradas) — con ~1/7 del contexto y un 89% de equivalencia semántica. Y el **cruce de
+  escala**: de 17 a 66 tablas el esquema entero baja (73%→68%) y GraphRAG sube (67%→72%), la
+  tendencia que predice la teoría (los rangos se solapan: ventaja modesta y consistente, no
+  abismal). La accuracy absoluta entre Arcadia y Nebula **no es comparable directa** (golden
+  sets distintos); lo comparable es entre modos dentro de cada BD.
 - Lo que **sí** está medido y es sólido: contexto acotado con recall alto que se mantiene al
-  crecer el esquema (774 → 759 tokens, 99% → 100% de 17 a 66 tablas), que a esa escala GraphRAG
-  **saca ventaja de aciertos** gastando una fracción del contexto, y que las descripciones
-  aportan de forma clara.
+  crecer el esquema (774 → 759 tokens, 99% → 100% de 17 a 66 tablas), la inferioridad estable
+  del vector sin grafo, que las descripciones aportan de forma clara — y el caso extremo del
+  experimento de confusión (83% vs 17% cuando nada habla).
 - Rigor de la medición: los aciertos de Nebula pasaron por una corrección importante. Una primera
   versión daba 40% porque el arnés ejecutaba las consultas contra la BD por defecto (Arcadia) en vez
-  de contra Nebula; lo detecté revisando casos a mano, lo arreglé (con test de regresión) y el número
-  real es 80%. Lo cuento porque la honestidad de la evaluación es parte del valor: los números salen
-  de abrir los casos, no de fiarse del porcentaje.
+  de contra Nebula; lo detecté revisando casos a mano, lo arreglé (con test de regresión) y después
+  ejecuté 5 tiradas para reportar medias, no golpes de suerte. Lo cuento porque la honestidad de la
+  evaluación es parte del valor: los números salen de abrir los casos, no de fiarse del porcentaje.
 
 ## 7. En una frase
 
 > GraphSQL responde preguntas en lenguaje natural sobre bases de datos relacionales dando al
 > LLM **solo el trozo de esquema que hace falta** — no todo —, enriquecido con conocimiento del
-> negocio y bajo control humano. En pequeño empata en precisión gastando la mitad; en grande,
-> saca ventaja de aciertos (80% vs 67%) y es la diferencia entre que funcione y que no.
+> negocio y bajo control humano. En pequeño empata en precisión gastando la mitad; en grande
+> queda primero (72% vs 68%, media de 5 tiradas) gastando ~1/7; y cuando el esquema no se
+> entiende (el ERP legacy), es la diferencia entre el 83% y el 17%.

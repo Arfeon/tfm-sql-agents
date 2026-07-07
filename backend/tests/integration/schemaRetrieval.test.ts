@@ -1,13 +1,7 @@
 /**
- * Test de integración de la recuperación GraphRAG (SPEC-04).
- *
- * Recupera sobre la Arcadia real (pgvector + Neo4j), así que comprueba lo que los
- * unitarios no pueden: el mapeo multilingüe (español → esquema en inglés) y la
- * búsqueda por descripción de la tabla de nombre opaco `t_042`.
- *
- * Opt-in (`npm run test:integration`) y se salta si falta el proveedor de
- * embeddings. Requiere docker compose up -d y el esquema ya vectorizado
- * (con las descripciones incluidas).
+ * Recuperación GraphRAG sobre la Arcadia real: el mapeo multilingüe y la tabla opaca
+ * `t_042` por descripción — lo que los unitarios no pueden probar. Opt-in; requiere
+ * Docker y el esquema vectorizado con descripciones.
  */
 import { describe, it, expect } from 'vitest'
 import { retrieveSchemaContext } from '../../src/graphsql/application/schemaRetrieval'

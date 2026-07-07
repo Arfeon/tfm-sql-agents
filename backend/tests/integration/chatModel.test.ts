@@ -1,12 +1,6 @@
 /**
- * Test de integración del modelo LLM real (smoke test).
- *
- * Dispara una pregunta de verdad contra el proveedor configurado en `.env`
- * (OpenAI o LM Studio) para validar que la conexión funciona de punta a punta.
- *
- * Es opt-in: solo lo corre `npm run test:integration` y se salta si faltan las
- * credenciales del proveedor activo. Así `npm test` queda siempre verde, offline
- * y sin gastar API.
+ * Smoke test del LLM real. Opt-in (test:integration); se salta si faltan las
+ * credenciales, así `npm test` queda siempre offline y verde.
  */
 import { describe, it, expect } from 'vitest'
 import { ChatModelFactory } from '../../src/graphsql/infrastructure/llm/ChatModelFactory'

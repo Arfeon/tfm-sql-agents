@@ -1,10 +1,6 @@
 /**
- * Contexto de esquema: el resultado de la recuperación (SPEC-04).
- *
- * Son las tablas relevantes para una pregunta —las candidatas por significado más
- * sus vecinas por clave foránea— con sus columnas y claves, y un texto tipo DDL
- * listo para el prompt del SQL Agent. Expongo aparte solo los nombres elegidos,
- * porque es lo que mido en el schema-linking recall de la evaluación.
+ * Contexto de esquema: el resultado de la recuperación (SPEC-04), con un DDL listo
+ * para el prompt. `tableNames` va aparte porque es lo que mide el schema-linking recall.
  */
 import type { TableSchema } from './TableSchema'
 
@@ -14,7 +10,6 @@ export interface SchemaContext {
   ddl: string
 }
 
-/** Compongo el contexto a partir de las tablas relevantes ya recuperadas. */
 export function buildSchemaContext(tables: TableSchema[]): SchemaContext {
   return {
     tables,
@@ -23,7 +18,6 @@ export function buildSchemaContext(tables: TableSchema[]): SchemaContext {
   }
 }
 
-/** Renderizo las tablas como un DDL legible (solo esas tablas, con columnas y FKs). */
 export function renderSchemaDdl(tables: TableSchema[]): string {
   return tables.map(renderTableDdl).join('\n\n')
 }
@@ -40,8 +34,8 @@ function renderTableDdl(table: TableSchema): string {
       `  FOREIGN KEY (${foreignKey.column}) REFERENCES ${foreignKey.referencesTable}(${foreignKey.referencesColumn})`,
     )
   }
-  // Marco la descripción (o su ausencia) como comentario, para que el SQL Agent y el
-  // Judge sepan qué contiene la tabla y distingan lo documentado de lo supuesto (SPEC-14).
+  // La descripción (o su ausencia) va como comentario para que el SQL Agent y el
+  // Judge distingan lo documentado de lo supuesto (SPEC-14).
   const comment = table.description
     ? `-- ${table.name}: ${table.description}`
     : `-- ${table.name}: (sin descripción; propósito inferido del nombre y las columnas)`

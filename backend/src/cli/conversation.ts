@@ -1,9 +1,4 @@
-/**
- * Flujo de CLI: conversación directa con el modelo a través del grafo (SPEC-01).
- *
- * Elijo proveedor, abro un hilo y voy preguntando; el grafo puede completar acciones
- * con sus tools. "salir" vuelve al menú.
- */
+/** Flujo de CLI: conversación directa con el modelo a través del grafo. */
 import { randomUUID } from 'node:crypto'
 import chalk from 'chalk'
 import { select, input } from '@inquirer/prompts'
@@ -11,7 +6,6 @@ import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
 import { createConversationGraph, askGraph } from '../graphsql/graph/agentGraph'
 import { warnIfLocalModelMissing, withSpinner } from './ui'
 
-/** Submenú de proveedor: OpenAI (nube) o LM Studio (local). */
 function askProvider(): Promise<LlmProvider> {
   return select({
     message: 'Elige el proveedor del modelo',
@@ -22,7 +16,6 @@ function askProvider(): Promise<LlmProvider> {
   })
 }
 
-/** Bucle de conversación: elijo proveedor, pregunto, paso por el grafo y muestro la respuesta. */
 export async function runConversation(): Promise<void> {
   const provider = await askProvider()
   if (provider === LlmProvider.Local) {

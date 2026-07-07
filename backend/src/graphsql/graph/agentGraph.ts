@@ -1,10 +1,6 @@
 /**
- * Primer grafo de LangGraph (SPEC-01).
- *
- * Monta un grafo mínimo para validar la orquestación: un nodo de agente (modelo
- * + tools) y un nodo de tools, con un edge condicional que enruta a la tool
- * cuando el modelo la pide y vuelve al agente. El checkpointer en memoria guarda
- * el historial por hilo, así puedo mantener una conversación con estado.
+ * Grafo conversacional (SPEC-01): agente + tools con historial por hilo en memoria.
+ * Hoy no se expone en el menú del CLI (D-12); se conserva como base reutilizable.
  */
 import { StateGraph, MessagesAnnotation, START, MemorySaver } from '@langchain/langgraph'
 import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt'

@@ -1,10 +1,6 @@
 /**
- * Flujo de CLI: depurar la recuperación (SPEC-13).
- *
- * Pido una pregunta y pinto el circuito GraphRAG: el ranking semántico con scores
- * (marcando el corte top-K), las tablas que entran por expansión de FK con su score,
- * y el contexto final con el motivo de cada tabla. Así se ve si una tabla se recupera
- * por significado o la arrastra el grafo.
+ * Flujo de CLI: depurar la recuperación. Pinta el circuito GraphRAG (ranking
+ * semántico, expansión por FK y contexto final con el motivo de cada tabla).
  */
 import boxen from 'boxen'
 import chalk from 'chalk'
@@ -31,7 +27,6 @@ export async function runRetrievalDebug(): Promise<void> {
   }
 }
 
-/** Traduzco el motivo de inclusión a una etiqueta legible. */
 function reasonLabel(reason: RetrievalTrace['finalContext'][number]['reason']): string {
   switch (reason) {
     case 'semantic':
@@ -43,7 +38,6 @@ function reasonLabel(reason: RetrievalTrace['finalContext'][number]['reason']): 
   }
 }
 
-/** Pinto la traza del circuito en tres tablas: ranking, expansión y contexto final. */
 function presentTrace(trace: RetrievalTrace): void {
   console.log(
     boxen(

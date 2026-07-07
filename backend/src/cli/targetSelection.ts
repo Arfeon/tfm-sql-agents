@@ -1,15 +1,7 @@
 /**
- * Selección de la BD objetivo para el flujo de consulta (SPEC-18).
- *
- * Neo4j y pgvector son de un solo inquilino: el índice contiene el esquema de la
- * ÚLTIMA BD escaneada. Elegir una BD cuyo esquema no está indexado haría que la
- * recuperación devolviera tablas de OTRA BD, así que aquí está el guardián:
- *
- *  - Con una sola BD en el catálogo no pregunto nada (comportamiento de siempre).
- *  - Con varias, dejo elegir marcando cuál está indexada.
- *  - Si la elegida no es la indexada, aviso y ofrezco escanearla ahí mismo
- *    (ingesta + vectorización con el mismo modelo del índice, como la prueba de
- *    escala) o cancelar. Nunca sigo con el índice de otra BD sin avisar.
+ * Selección de la BD objetivo al consultar (SPEC-18). Neo4j/pgvector son de un solo
+ * inquilino (el índice es de la última BD escaneada), así que si eliges una no
+ * indexada aviso y ofrezco escanearla ahí mismo — nunca sigo con el índice de otra BD.
  */
 import chalk from 'chalk'
 import { select, confirm } from '@inquirer/prompts'
@@ -21,10 +13,7 @@ import { EmbeddingsFactory } from '../graphsql/infrastructure/embeddings/Embeddi
 import { hasDescriptionsFile, loadDescriptions } from '../graphsql/infrastructure/config/descriptions'
 import { withSpinner } from './ui'
 
-/**
- * Elijo la BD objetivo a consultar. Devuelvo la elegida con su esquema ya indexado,
- * o null si el usuario cancela (o el índice no está listo): quien llama vuelve al menú.
- */
+/** `null` = cancelado o índice sin preparar: quien llama vuelve al menú. */
 export async function chooseTargetForQuery(): Promise<TargetDatabaseConfig | null> {
   const targets = loadTargetDatabases()
   if (targets.length === 1) {

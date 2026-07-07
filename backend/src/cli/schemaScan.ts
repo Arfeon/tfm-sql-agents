@@ -1,9 +1,6 @@
 /**
- * Flujo de CLI: escanear el esquema de la BD objetivo.
- *
- * Primero pregunto todo (BD objetivo, descripciones y confirmación con su aviso de
- * coste) y luego reconstruyo Neo4j y pgvector JUNTOS, con la misma decisión de
- * descripciones, para que los dos almacenes nunca queden desincronizados.
+ * Flujo de CLI: escanear el esquema de la BD objetivo. Reconstruye Neo4j y pgvector
+ * juntos, con la misma decisión de descripciones, para que no queden desincronizados.
  */
 import chalk from 'chalk'
 import { select, confirm } from '@inquirer/prompts'
@@ -20,7 +17,6 @@ import { warnIfLocalModelMissing, withSpinner } from './ui'
 export async function runSchemaScan(): Promise<void> {
   const targets = loadTargetDatabases()
 
-  // --- Fase 1: preguntar todo ---
   const target = await select({
     message: 'Elige la base de datos objetivo a escanear',
     choices: targets.map((t) => ({ name: targetDatabaseLabel(t), value: t })),
@@ -29,17 +25,12 @@ export async function runSchemaScan(): Promise<void> {
   const embeddingProvider = await askEmbeddingProvider()
   const embeddings = EmbeddingsFactory.create(embeddingProvider)
 
-  // Un escaneo reconstruye Neo4j Y pgvector JUNTOS, con la misma decisión de
-  // descripciones: así los dos almacenes nunca quedan desincronizados. La
-  // confirmación (con su aviso de coste) gatea el escaneo completo; si no la doy,
-  // no se toca nada.
   const confirmed = await confirmScan(embeddingProvider, embeddings)
   if (!confirmed) {
     console.log(chalk.dim('\nEscaneo cancelado: no se ha tocado ni Neo4j ni el índice vectorial.\n'))
     return
   }
 
-  // --- Fase 2: reconstruir ambos almacenes con la misma decisión de descripciones ---
   try {
     const summary = await withSpinner(`Escaneando "${targetDatabaseLabel(target)}" e ingiriendo en Neo4j…`, () =>
       ingestSchema(target, descriptions),
@@ -65,7 +56,6 @@ export async function runSchemaScan(): Promise<void> {
   }
 }
 
-/** Si hay un fichero de descripciones (no el de ejemplo), pregunto si incluirlas. */
 async function askDescriptions(): Promise<Map<string, string> | undefined> {
   if (!hasDescriptionsFile()) {
     return undefined
@@ -77,7 +67,6 @@ async function askDescriptions(): Promise<Map<string, string> | undefined> {
   return include ? loadDescriptions() : undefined
 }
 
-/** Submenú de proveedor de embeddings: con cuál vectorizar el esquema. */
 function askEmbeddingProvider(): Promise<EmbeddingProvider> {
   return select({
     message: '¿Con qué proveedor de embeddings vectorizar?',
@@ -88,17 +77,12 @@ function askEmbeddingProvider(): Promise<EmbeddingProvider> {
   })
 }
 
-/**
- * Aviso de mismatch de modelo + coste/tiempo y confirmación del escaneo COMPLETO.
- * Como el escaneo reconstruye Neo4j y pgvector a la vez, esta confirmación gatea todo
- * el proceso (no solo la vectorización), para que ambos almacenes vayan siempre juntos.
- */
+/** Esta confirmación gatea el escaneo completo (Neo4j y pgvector van siempre juntos). */
 async function confirmScan(provider: EmbeddingProvider, embeddings: IEmbeddings): Promise<boolean> {
   if (provider === EmbeddingProvider.Local) {
     await warnIfLocalModelMissing('embeddings', embeddings.model)
   }
 
-  // Si ya hay un índice con otro modelo/dimensión, aviso de que lo reemplazaré.
   const indexed = await getIndexedModel()
   if (indexed && (indexed.model !== embeddings.model || indexed.dimensions !== embeddings.dimensions)) {
     console.log(
@@ -117,7 +101,6 @@ async function confirmScan(provider: EmbeddingProvider, embeddings: IEmbeddings)
   return confirm({ message: '¿Escanear ahora? (reconstruye Neo4j y el índice vectorial a la vez)', default: true })
 }
 
-/** Ejecuta la vectorización ya confirmada y muestra el resultado. Devuelve si tuvo éxito. */
 async function executeVectorization(
   target: TargetDatabaseConfig,
   provider: EmbeddingProvider,

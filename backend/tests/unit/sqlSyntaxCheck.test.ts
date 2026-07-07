@@ -1,10 +1,6 @@
 /**
- * Tests de la comprobación de sintaxis del Judge (SPEC-06).
- *
- * Doblo la conexión (`connectDatabase` → un `ITargetDatabase` falso): si el `dryRun`
- * valida, la sintaxis es correcta; si lanza, devuelvo el error de la BD. Cómo hace
- * el dry-run cada motor (EXPLAIN en Postgres…) es cosa del adaptador; aquí solo
- * dependo del puerto. La comprobación real sobre Arcadia se prueba en integración.
+ * Comprobación de sintaxis con la conexión doblada: el dry-run decide. La
+ * comprobación real contra la BD se prueba en integración.
  */
 import { describe, it, expect } from 'vitest'
 import { checkSqlSyntax, type SqlSyntaxCheckDependencies } from '../../src/graphsql/application/sqlSyntaxCheck'

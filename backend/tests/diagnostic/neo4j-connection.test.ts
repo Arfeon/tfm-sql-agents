@@ -1,9 +1,4 @@
-/**
- * Test de diagnóstico: compruebo que la instancia de Neo4j está levantada
- * y responde.
- *
- * Requisito: docker compose up -d (ver docs/instalacion.md)
- */
+/** Diagnóstico: Neo4j está levantado y responde. Requiere docker compose up -d. */
 import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 import { Neo4jConnection } from '../../src/graphsql/infrastructure/neo4j/Neo4jConnection'
 

@@ -1,11 +1,6 @@
 /**
- * Test de diagnóstico: compruebo que, tras ingerir el esquema de Arcadia, una
- * tabla queda convertida en su nodo de Neo4j con sus columnas y relaciones.
- *
- * Ojo: este test MUTA Neo4j (limpia y reconstruye el grafo del esquema), que es
- * justo el estado que quiero dejar listo.
- *
- * Requisito: docker compose up -d (ver docs/instalacion.md)
+ * Diagnóstico: la ingesta deja cada tabla como nodo de Neo4j con columnas y relaciones.
+ * Ojo: MUTA Neo4j (reconstruye el grafo) — justo el estado que quiero dejar listo.
  */
 import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 import { Neo4jConnection } from '../../src/graphsql/infrastructure/neo4j/Neo4jConnection'

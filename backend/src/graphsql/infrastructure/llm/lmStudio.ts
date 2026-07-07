@@ -1,12 +1,7 @@
 /**
- * Utilidades del servidor local (LM Studio), API OpenAI-compatible.
- *
- * En local necesito tener cargados a la vez el modelo de chat y el de
- * embeddings. Esto consulta qué modelos están cargados para poder avisar antes
- * de usar uno que no esté disponible.
+ * Consulta qué modelos tiene cargados LM Studio, para avisar antes de usar uno
+ * que no esté disponible (en local hacen falta chat y embeddings a la vez).
  */
-
-/** Lista los identificadores de los modelos cargados en el servidor (GET /v1/models). */
 export async function listLoadedModels(baseUrl: string): Promise<string[]> {
   const url = `${baseUrl.replace(/\/$/, '')}/models`
   const response = await fetch(url)

@@ -1,9 +1,6 @@
 /**
- * Adaptador del puerto `IChatModel` para la API de OpenAI.
- *
- * Envuelve `ChatOpenAI` de LangChain, que es el cliente que reutilizaré al
- * orquestar con LangGraph. Si `temperature` es `undefined`, no se envía y el
- * modelo usa su valor por defecto (la familia gpt-5 solo acepta ese).
+ * Adaptador de `IChatModel` para la API de OpenAI, sobre `ChatOpenAI` de LangChain.
+ * Si `temperature` es `undefined` no se envía (la familia gpt-5 solo acepta el valor por defecto).
  */
 import { ChatOpenAI } from '@langchain/openai'
 import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
@@ -18,7 +15,6 @@ export class OpenAIChatModel implements IChatModel {
     this.client = new ChatOpenAI({ apiKey, model, temperature, maxRetries: 1 })
   }
 
-  /** Creo el adaptador leyendo la configuración de OpenAI del entorno. */
   static fromEnv(): OpenAIChatModel {
     const apiKey = process.env.OPENAI_API_KEY ?? ''
     const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'

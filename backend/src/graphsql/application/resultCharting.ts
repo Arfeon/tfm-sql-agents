@@ -1,34 +1,24 @@
 /**
- * Gráfico de resultados en consola (SPEC-19), como funciones puras.
- *
- * La detección de si un resultado es graficable NO es cosa del LLM: la forma del
- * resultado ya lo dice (una columna de etiqueta + una numérica, pocas filas), y una
- * función pura es gratis, instantánea y testeable — el mismo criterio que el Judge:
- * determinista donde se puede, LLM solo donde hace falta.
- *
- * El render devuelve texto plano (sin ANSI): el color es cosa de la capa CLI.
+ * Gráfico de resultados en consola (SPEC-19), como funciones puras. La detección de
+ * si un resultado es graficable es determinista, no cosa del LLM (mismo criterio que
+ * el Judge). El render devuelve texto plano sin ANSI: el color es de la capa CLI.
  */
 import type { QueryResult } from '../domain/sql/QueryResult'
 
-/** Qué columnas usar para el gráfico de barras: la etiqueta y el valor. */
 export interface BarChartPlan {
   labelColumn: string
   valueColumn: string
 }
 
-/** Máximo de filas graficables: por encima, la tabla se lee mejor que las barras. */
+/** Por encima de esto, la tabla se lee mejor que las barras. */
 export const MAX_CHART_ROWS = 30
 
-/** Anchura máxima de la barra más larga, en caracteres. */
 const MAX_BAR_WIDTH = 40
 
 /**
- * ¿Este resultado tiene forma de "categoría → valor"? Si sí, devuelvo el plan del
- * gráfico; si no, null (y el CLI muestra la tabla directamente).
- *
- * Reglas: entre 2 y MAX_CHART_ROWS filas; la etiqueta es la PRIMERA columna no
- * numérica; el valor, la ÚLTIMA columna numérica (en una consulta generada el
- * agregado suele ir al final: `id, nombre, total` — graficar el `id` no tiene sentido).
+ * `null` si el resultado no tiene forma de "categoría → valor". El valor es la ÚLTIMA
+ * columna numérica: en una consulta generada el agregado suele ir al final
+ * (`id, nombre, total`) y graficar el `id` no tiene sentido.
  */
 export function detectChart(result: QueryResult): BarChartPlan | null {
   if (result.rows.length < 2 || result.rows.length > MAX_CHART_ROWS) {
@@ -43,10 +33,8 @@ export function detectChart(result: QueryResult): BarChartPlan | null {
 }
 
 /**
- * Dibujo el gráfico de barras horizontales: etiquetas alineadas, barras de bloques
- * proporcionales al valor (la mayor ocupa MAX_BAR_WIDTH) y el número al final.
- * Un valor cero, negativo o nulo se muestra sin barra pero CON su número (un 0 es
- * información, no una fila a esconder — misma lógica que D-13).
+ * Un valor cero, negativo o nulo se muestra sin barra pero CON su número: un 0 es
+ * información, no una fila a esconder (misma lógica que D-13).
  */
 export function renderBarChart(result: QueryResult, plan: BarChartPlan): string {
   const labels = result.rows.map((row) => formatLabel(row[plan.labelColumn]))
@@ -67,7 +55,6 @@ export function renderBarChart(result: QueryResult, plan: BarChartPlan): string 
     .join('\n')
 }
 
-/** La barra proporcional de un valor; vacía si no es positivo o no hay máximo. */
 function barFor(value: number, maxValue: number): string {
   if (value <= 0 || maxValue <= 0) {
     return ''
@@ -77,7 +64,7 @@ function barFor(value: number, maxValue: number): string {
   return '█'.repeat(width)
 }
 
-/** ¿Todos los valores no nulos de la columna son numéricos? (pg devuelve numéricos como texto.) */
+/** pg devuelve los numéricos como texto, de ahí el toNumber. */
 function isNumericColumn(rows: Array<Record<string, unknown>>, column: string): boolean {
   const values = rows.map((row) => row[column]).filter((value) => value !== null && value !== undefined)
   if (values.length === 0) {
@@ -86,7 +73,6 @@ function isNumericColumn(rows: Array<Record<string, unknown>>, column: string): 
   return values.every((value) => toNumber(value) !== null)
 }
 
-/** El valor como número, o null si no lo es (o es nulo). */
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) {
     return null
@@ -102,12 +88,10 @@ function toNumber(value: unknown): number | null {
   return Number.isNaN(asNumber) ? null : asNumber
 }
 
-/** La etiqueta como texto; un nulo se marca como ∅. */
 function formatLabel(value: unknown): string {
   return value === null || value === undefined ? '∅' : String(value)
 }
 
-/** El valor numérico legible: entero tal cual, decimal con dos cifras. */
 function formatValue(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }

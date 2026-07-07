@@ -133,7 +133,7 @@
     GROUP BY g.title
     ORDER BY peak_concurrent DESC
     LIMIT 10;
-  note: "Métrica estrella tipo 'espectadores simultáneos'."
+  note: "Métrica tipo 'espectadores simultáneos': MAX sobre telemetría."
 
 - id: G-12
   question: "¿Cuál es la duración media de sesión por plataforma?"

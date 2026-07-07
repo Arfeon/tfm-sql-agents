@@ -1,10 +1,6 @@
 /**
- * Tests unitarios de la traza de recuperación (SPEC-13).
- *
- * Con dobles del ranking y la expansión (sin pgvector ni Neo4j) compruebo que la
- * traza refleja el circuito: distingue candidatas (top-K) de tablas expandidas por
- * FK, muestra el score bajo de las expandidas, marca el motivo de cada tabla del
- * contexto (semántica / expansión / fijada) y respeta el corte top-K y el recorte.
+ * La traza de recuperación con dobles: candidatas vs expandidas por FK, el motivo
+ * de cada tabla y los cortes (top-K y recorte del contexto).
  */
 import { describe, it, expect } from 'vitest'
 import { explainSchemaRetrieval } from '../../src/graphsql/application/schemaRetrieval'

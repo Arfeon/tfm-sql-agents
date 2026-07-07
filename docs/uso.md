@@ -78,7 +78,9 @@ propuesta`) o rojo si no lo pasó (`❌ Consulta SQL (no superó el Judge)`).
 
 ### La caja del Judge (cómo leerla)
 
-- **✅ Válida / ❌ No válida · confianza NN%** — el veredicto y su confianza.
+- **✅ Válida / ❌ No válida · confianza NN%** — el veredicto y su confianza. La confianza mide
+  si la consulta **responde a mi pregunta** con datos reales, no solo si es SQL correcto; si al
+  afinar di indicaciones, el Judge evalúa contra la pregunta más esas indicaciones.
 - **Por qué** — una o dos frases justificando la nota.
 - **Propósito de las tablas usadas** — qué cree el Judge que contiene cada tabla y de dónde lo
   sabe: *según descripción*, *por el nombre*, *por las columnas*. Si una tabla es opaca y sin
@@ -246,8 +248,7 @@ el LLM) y guarda informes reproducibles en [`docs/evaluacion/`](evaluacion/).
 
 La lectura neutra de los resultados —y los **sesgos conocidos de las métricas** (columna de más,
 `INNER` vs `LEFT JOIN`, interpretación de la referencia única)— está en
-[`arquitectura.md` §10](design/arquitectura.md); la orientada a producto, en
-[`propuesta-valor.md`](propuesta-valor.md).
+[`arquitectura.md` §10](design/arquitectura.md).
 
 ---
 

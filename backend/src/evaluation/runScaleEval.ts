@@ -1,16 +1,7 @@
 /**
- * Prueba de escala (SPEC-17): ¿cómo cambian recuperación y aciertos al crecer el
- * esquema? Comparo Arcadia (17 tablas) con Nebula (66 tablas) corriendo la evaluación
- * COMPLETA (recall + tamaño de contexto + execution accuracy) en los tres modos de
- * recuperación (sin recuperación / solo vectorial / GraphRAG).
- *
- * Neo4j y pgvector son de un solo inquilín, así que para medir cada BD ingiero y
- * vectorizo su esquema (sustituyendo el índice compartido). Al terminar RESTAURO
- * Arcadia (con sus descripciones) en `try/finally`, para no dejar el índice degradado.
- *
- * Opt-in (`npm run evaluate:scale`): requiere Docker (Postgres+Neo4j con ambas BDs
- * pobladas), el proveedor de embeddings y el LLM. Es la capa más externa: orquesto y
- * presento; la lógica vive en `evaluateGoldenSet`.
+ * Prueba de escala: la evaluación completa sobre Arcadia (17 tablas) y Nebula (66)
+ * en los tres modos de recuperación. Restaura Arcadia en el índice al final.
+ * Opt-in (npm run evaluate:scale): requiere Docker, embeddings y LLM.
  */
 import { config } from 'dotenv'
 config({ path: '../.env' })
@@ -59,7 +50,7 @@ async function main(): Promise<void> {
       if (target.public) {
         console.log(chalk.yellow(`⚠ ${target.name} es una BD pública: el LLM puede haberla visto en su entrenamiento (posible contaminación).`))
       }
-      // Descripciones solo para Arcadia (Nebula se mide con esquema puro).
+      // Descripciones solo para Arcadia: Nebula se mide con esquema puro.
       const descriptions = target.name === arcadia.name ? arcadiaDescriptions : undefined
       console.log(chalk.cyan(`▶ Preparando "${target.name}" (ingesta + vectorización)…`))
       await ingestSchema(target, descriptions)
@@ -76,7 +67,6 @@ async function main(): Promise<void> {
   }
 }
 
-/** Evaluación completa (recall + contexto + execution accuracy) por modo sobre una BD. */
 async function measureTarget(target: TargetDatabaseConfig): Promise<TargetReport> {
   const dialect = sqlDialectFor(target)
   const cases = loadGoldenSet(goldenSetPathFor(target.name))
@@ -87,13 +77,12 @@ async function measureTarget(target: TargetDatabaseConfig): Promise<TargetReport
     console.log(chalk.dim(`    ${target.name} · ${MODE_LABELS[mode]}…`))
     reports.push(await evaluateGoldenSet(cases, mode, dialect, deps))
   }
-  // El modo "sin recuperación" trae el esquema entero: su nº de tablas es el del esquema.
+  // El modo "sin recuperación" trae el esquema entero, así que su nº de tablas es el del esquema.
   const noneReport = reports.find((r) => r.mode === 'none')
   const tableCount = Math.round(noneReport?.summary.meanContextTables ?? 0)
   return { name: target.name, tableCount, cases: cases.length, reports }
 }
 
-/** Tabla comparativa: por BD y modo, recall, execution accuracy y tamaño de contexto. */
 function printComparison(measures: TargetReport[]): void {
   console.log(chalk.bold('\nEscala — recall, aciertos y contexto por BD y modo:\n'))
   console.log(chalk.dim('  BD (tablas)        Modo               Recall   Exec.justa   Exec.equiv   Tokens ctx'))
@@ -118,7 +107,6 @@ function printComparison(measures: TargetReport[]): void {
   )
 }
 
-/** Guardo la comparación de escala en Markdown para la memoria/slides. */
 function writeReport(measures: TargetReport[]): void {
   mkdirSync(OUTPUT_DIR, { recursive: true })
   const lines: string[] = [
@@ -155,7 +143,6 @@ function writeReport(measures: TargetReport[]): void {
   console.log(chalk.green(`\n✔ Informe guardado en ${OUTPUT_DIR}/escala.md (+ escala-casos.json)`))
 }
 
-/** Guardo el detalle por caso (SQL generada, aciertos y motivo del juez) para poder inspeccionarlo. */
 function writeCaseDetails(measures: TargetReport[]): void {
   const detail = measures.map((target) => ({
     name: target.name,

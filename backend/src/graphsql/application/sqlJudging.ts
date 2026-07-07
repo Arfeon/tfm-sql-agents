@@ -1,19 +1,7 @@
 /**
- * Caso de uso: el Judge (SPEC-06). Valida que una SQL es segura y correcta antes
- * de ejecutarla.
- *
- * El Judge hace siempre una comprobación de seguridad (que la consulta sea de solo
- * lectura, sin patrones peligrosos). Sobre eso, según lo que se pida, puede sumar
- * una comprobación de sintaxis contra la base de datos (`EXPLAIN`, la autoridad
- * objetiva de si la consulta es válida) y una revisión del juez LLM.
- *
- * Quien decide si la consulta se da por inválida son las comprobaciones automáticas
- * (seguridad y sintaxis). El juez LLM solo aconseja: aporta confianza, avisos y
- * sugerencias, pero no invalida la consulta por sí solo, porque puede ser demasiado
- * estricto y dar falsos positivos.
- *
- * Recibo el `IChatModel` y la comprobación de sintaxis inyectados (reales por
- * defecto), para probarlo con dobles sin tocar red ni BD.
+ * El Judge (SPEC-06): seguridad (siempre) + sintaxis contra la BD + juez LLM. Solo
+ * las comprobaciones deterministas invalidan; el juez LLM aconseja pero no bloquea,
+ * porque da falsos positivos (D-07).
  */
 import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
 import type { IChatModel } from '../domain/ports/IChatModel'
@@ -36,26 +24,18 @@ export interface SqlJudgingDependencies {
   checkSyntax(sql: SqlStatement): Promise<SqlSyntaxCheck>
 }
 
-/** Implementación real: el modelo del entorno (`LLM_PROVIDER`) y el EXPLAIN contra la BD. */
 export const defaultSqlJudgingDependencies: SqlJudgingDependencies = {
   createChatModel: () => ChatModelFactory.fromEnv(),
   checkSyntax: (sql) => checkSqlSyntax(sql),
 }
 
 export interface SqlJudgingOptions {
-  /** Si está activo, compruebo la sintaxis contra la BD con un EXPLAIN. */
   useDbCheck?: boolean
-  /** Si está activo, consulto también al juez LLM. */
   useLlmJudge?: boolean
-  /**
-   * Confianza mínima (0..1) para dar por buena la consulta. Si el juez LLM
-   * responde con menos, la marco inválida. Es una palanca opcional del operador,
-   * no la opinión del LLM. Si no se indica, no aplico umbral.
-   */
+  /** Umbral opcional del operador (0..1): por debajo, marco la consulta inválida. */
   minConfidence?: number
 }
 
-/** Mensaje de sistema del juez LLM: criterios de evaluación y formato de salida. */
 export function buildJudgeSystemPrompt(dialect: string): string {
   return [
     `Eres un experto revisor de consultas SQL para ${dialect}. Evalúas si una consulta es correcta, segura y responde a la pregunta del usuario.`,
@@ -68,6 +48,8 @@ export function buildJudgeSystemPrompt(dialect: string): string {
     '5. Optimización: ¿podría ser más eficiente? ¿falta un LIMIT cuando la pregunta lo pide?',
     '',
     'Cuando algo esté mal, di EXACTAMENTE qué y cómo corregirlo (p. ej. "la columna c.name no puede ir en GROUP BY; usa una subconsulta").',
+    '',
+    'IMPORTANTE: "valid" y "confidence" miden si la consulta RESPONDE a la pregunta con datos reales del esquema, no solo si su sintaxis es correcta. Una consulta que en vez de datos devuelve un texto literal (p. ej. SELECT \'no se puede responder...\' AS mensaje) NO responde a la pregunta aunque sea sintácticamente válida: márcala con "valid": false y "confidence" 0.2 como máximo, y explica en "errors" qué falta en el esquema para responderla.',
     '',
     'Además, por CADA tabla que use la consulta, evalúa si SABES qué contiene, con la evidencia del esquema (su comentario/descripción, su nombre y sus columnas):',
     '- Si la tabla tiene descripción en el esquema, su propósito está DOCUMENTADO ("source": "description").',
@@ -83,11 +65,7 @@ export function buildJudgeSystemPrompt(dialect: string): string {
   ].join('\n')
 }
 
-/**
- * Interpreto la respuesta del juez como `JudgeVerdict`. Si no es un JSON con al
- * menos el campo booleano `valid`, lanzo `JudgeResponseError` (la decisión de qué
- * hacer es de quien combina las capas).
- */
+/** Lanza `JudgeResponseError` si la respuesta no trae un JSON con `valid` booleano. */
 export function parseJudgeVerdict(raw: string): JudgeVerdict {
   const jsonText = raw.match(/\{[\s\S]*\}/)
   if (!jsonText) {
@@ -151,7 +129,6 @@ function toTablePurposes(value: unknown): TablePurpose[] {
     if (typeof fields.table !== 'string') {
       continue
     }
-    // Una fuente que no reconozco la trato como "assumed" (conservador).
     const isKnownSource = PURPOSE_SOURCES.includes(fields.source as PurposeSource)
     const source: PurposeSource = isKnownSource ? (fields.source as PurposeSource) : 'assumed'
     purposes.push({
@@ -163,12 +140,10 @@ function toTablePurposes(value: unknown): TablePurpose[] {
   return purposes
 }
 
-/** Me quedo con las cadenas de un array; cualquier otra cosa se ignora. */
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
-/** Confianza válida (número entre 0 y 1); si no lo es, la dejo ausente. */
 function toConfidence(value: unknown): number | undefined {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return undefined
@@ -176,7 +151,6 @@ function toConfidence(value: unknown): number | undefined {
   return Math.min(1, Math.max(0, value))
 }
 
-/** Solo la revisión del juez LLM: le pregunto y devuelvo su veredicto. */
 export async function judgeSqlWithLlm(
   sql: SqlStatement,
   schemaContext: SchemaContext,
@@ -198,12 +172,6 @@ export async function judgeSqlWithLlm(
   return parseJudgeVerdict(reply)
 }
 
-/**
- * Comprueba la seguridad (siempre); si falla, se acabó. Si se pide, valida la
- * sintaxis contra la BD; si la BD la rechaza, se acabó. Si se pide, añade la
- * revisión del juez LLM, que solo aconseja (no invalida) y cuya respuesta ilegible
- * no rompe el flujo.
- */
 export async function judgeSql(
   sql: SqlStatement,
   schemaContext: SchemaContext,
@@ -247,11 +215,7 @@ export async function judgeSql(
   }
 }
 
-/**
- * El juez LLM solo aconseja: paso sus "errores" a avisos y dejo el veredicto como
- * válido, conservando confianza, avisos y sugerencias. Quien invalida una consulta
- * son las comprobaciones automáticas (seguridad y sintaxis), no el LLM.
- */
+/** El juez LLM solo aconseja: sus "errores" pasan a avisos y el veredicto queda válido. */
 function asAdvisory(llm: JudgeVerdict): JudgeVerdict {
   return {
     valid: true,
@@ -265,7 +229,6 @@ function asAdvisory(llm: JudgeVerdict): JudgeVerdict {
   }
 }
 
-/** Si hay umbral y la confianza queda por debajo, marco la consulta inválida. */
 function applyConfidenceThreshold(verdict: JudgeVerdict, minConfidence?: number): JudgeVerdict {
   if (minConfidence === undefined || verdict.confidence === undefined || verdict.confidence >= minConfidence) {
     return verdict

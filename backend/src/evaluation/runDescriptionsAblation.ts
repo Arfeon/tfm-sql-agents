@@ -1,17 +1,7 @@
 /**
- * Ablation de las descripciones (SPEC-11): ¿cuánto aportan las descripciones de las
- * tablas frente a no tenerlas? Es lo más propio del enfoque, así que lo mido aparte.
- *
- * Comparo un 2×2: modos {solo vectorial, GraphRAG} × descripciones {con, sin}. La
- * condición "sin" exige un índice vectorizado SIN descripciones (afecta al ranking de
- * recuperación) y un DDL sin el comentario de propósito (afecta a la generación); por
- * eso RE-VECTORIZO el índice a mitad y lo RESTAURO al final (try/finally), para no
- * dejar el índice degradado. Neo4j no se toca (las descripciones del DDL se quitan en
- * código). Caso estrella: `t_042` (G-25), la tabla de nombre opaco.
- *
- * Opt-in (`npm run evaluate:descriptions`): requiere Docker (Postgres+Neo4j), el
- * esquema ya escaneado, el proveedor de embeddings disponible (para re-vectorizar) y
- * el LLM. Es la capa más externa: orquesto y presento; la lógica vive en los casos de uso.
+ * Ablation de descripciones: 2×2 (vectorial/GraphRAG × con/sin descripciones).
+ * Re-vectoriza el índice a mitad y SIEMPRE lo restaura con descripciones al final.
+ * Opt-in (npm run evaluate:descriptions): requiere Docker, embeddings y LLM.
  */
 import { config } from 'dotenv'
 config({ path: '../.env' })
@@ -27,10 +17,9 @@ import { loadGoldenSet } from '../graphsql/application/goldenSet'
 import { evaluateGoldenSet, makeEvaluationDependencies, type ModeReport } from '../graphsql/application/evaluateGoldenSet'
 
 const OUTPUT_DIR = '../docs/evaluacion'
-/** Caso de nombre opaco que solo se localiza por su descripción (la tabla trampa de Arcadia). */
+/** Caso de nombre opaco que solo se localiza por su descripción (t_042, la lista de deseos). */
 const OPAQUE_CASE_ID = 'G-25'
 
-/** Un modo evaluado con y sin descripciones. */
 interface Condition {
   mode: 'vector' | 'graphrag'
   descriptions: boolean
@@ -55,7 +44,6 @@ async function main(): Promise<void> {
   console.log(chalk.bold(`\nAblation de descripciones sobre ${targetDatabaseLabel(target)} — ${cases.length} casos.\n`))
 
   const conditions: Condition[] = []
-  // Garantizo el estado CON descripciones antes de la fase "con".
   console.log(chalk.dim('Vectorizando CON descripciones...'))
   await vectorizeSchema(target, indexed.provider, embeddings, descriptions)
   try {
@@ -78,7 +66,6 @@ async function main(): Promise<void> {
   }
 }
 
-/** Tabla 2×2 (modo × descripciones) y el foco sobre la tabla opaca. */
 function printComparison(conditions: Condition[]): void {
   console.log(chalk.bold('\nDescripciones — comparativa 2×2:\n'))
   console.log(chalk.dim('  Modo       Descripciones   Recall   Exec.justa'))
@@ -101,7 +88,6 @@ function printComparison(conditions: Condition[]): void {
   }
 }
 
-/** Guardo la comparación en Markdown para la memoria/slides. */
 function writeReport(conditions: Condition[], target: TargetDatabaseConfig): void {
   mkdirSync(OUTPUT_DIR, { recursive: true })
   const rows = conditions

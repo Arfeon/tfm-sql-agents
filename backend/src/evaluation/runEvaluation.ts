@@ -1,13 +1,7 @@
 /**
- * Runner de la evaluación experimental (ablation) del golden set (SPEC-11).
- *
- * Opt-in (`npm run evaluate`): requiere docker compose up -d (Postgres + Neo4j con el
- * esquema ya escaneado y vectorizado) y el LLM configurado. Corre el golden set en los
- * tres modos de recuperación (sin recuperación / solo vectorial / GraphRAG), imprime
- * una tabla comparativa y guarda el informe en `docs/evaluacion/` para las slides.
- *
- * Es la capa más externa (composición): carga el entorno, arma las dependencias reales
- * y delega la lógica en el caso de uso `evaluateGoldenSet`; aquí solo oriento y presento.
+ * Corre el golden set en los tres modos de recuperación y guarda el informe en
+ * docs/evaluacion/. Opt-in (npm run evaluate): requiere Docker con el esquema
+ * escaneado/vectorizado y el LLM configurado.
  */
 import { config } from 'dotenv'
 config({ path: '../.env' })
@@ -25,14 +19,12 @@ import {
   type RetrievalMode,
 } from '../graphsql/application/evaluateGoldenSet'
 
-/** Etiqueta legible de cada modo, para la tabla y el informe. */
 const MODE_LABELS: Record<RetrievalMode, string> = {
   none: 'Sin recuperación',
   vector: 'Solo vectorial',
   graphrag: 'GraphRAG',
 }
 
-/** Carpeta donde guardo el informe reproducible (relativa a backend/). */
 const OUTPUT_DIR = '../docs/evaluacion'
 
 async function main(): Promise<void> {
@@ -58,7 +50,6 @@ async function main(): Promise<void> {
   writeReport(reports, target)
 }
 
-/** Tabla comparativa por modo con las métricas clave. */
 function printComparison(reports: ModeReport[]): void {
   console.log(chalk.bold('\nComparativa por modo:\n'))
   console.log(chalk.dim('  Modo               Recall   Exec.justa   Exec.equiv   Exec.estricta   Tablas ctx   Tokens ctx'))
@@ -83,7 +74,6 @@ function printComparison(reports: ModeReport[]): void {
   )
 }
 
-/** Guardo el informe completo (JSON) y un resumen legible (Markdown) para la memoria/slides. */
 function writeReport(reports: ModeReport[], target: TargetDatabaseConfig): void {
   mkdirSync(OUTPUT_DIR, { recursive: true })
 
@@ -125,7 +115,6 @@ function writeReport(reports: ModeReport[], target: TargetDatabaseConfig): void 
   console.log(chalk.green(`\n✔ Informe guardado en ${OUTPUT_DIR}/ (resultados.json + resumen.md)\n`))
 }
 
-/** Formateo una fracción 0..1 como porcentaje entero. */
 function pct(fraction: number): string {
   return `${Math.round(fraction * 100)}%`
 }

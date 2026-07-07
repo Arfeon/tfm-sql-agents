@@ -1,14 +1,8 @@
 /**
- * Adaptador de embeddings sobre la API OpenAI-compatible (OpenAI y LM Studio).
- *
- * Llamo directamente a `/v1/embeddings` con `encoding_format: "float"`. NO uso el
- * cliente de embeddings de LangChain a propósito: con LM Studio devolvía vectores
- * de ceros (por cómo el SDK maneja base64); pidiendo floats explícitos obtengo el
- * vector real. Sirve para los dos proveedores: solo cambia el `baseUrl`.
- *
- * `dimensions` solo se envía si el proveedor lo admite (familia text-embedding-3);
- * un modelo local usa su dimensión nativa. Para no guardar basura en silencio,
- * compruebo que la respuesta tenga la dimensión esperada y no sea un vector de ceros.
+ * Adaptador de embeddings sobre la API OpenAI-compatible (OpenAI y LM Studio; solo
+ * cambia el `baseUrl`). Llamo a `/v1/embeddings` con `encoding_format: "float"` y NO
+ * uso el cliente de LangChain a propósito: con LM Studio devolvía vectores de ceros
+ * (por cómo el SDK maneja base64); pidiendo floats explícitos obtengo el vector real.
  */
 import type { IEmbeddings } from '../../domain/ports/IEmbeddings'
 

@@ -1,15 +1,7 @@
 /**
- * Caso de uso: recuperar el contexto de esquema para una pregunta (GraphRAG, SPEC-04).
- *
- * Tres pasos: ordeno las tablas por significado (vectores en pgvector), tomo las
- * top-K como candidatas y las expando por claves foráneas en el grafo (Neo4j) para
- * traer las vecinas que hacen falta en los JOIN. Después ACOTO: ordeno el conjunto
- * expandido por similitud y me quedo con un máximo de tablas, para no arrastrar
+ * Recuperación GraphRAG del contexto de esquema (SPEC-04): top-K por significado,
+ * expansión por FK en el grafo y acotación final por similitud, para no arrastrar
  * todas las vecinas de una tabla muy conectada (p. ej. `customer`).
- *
- * Recibo como dependencias el ranking y la expansión (con implementación real por
- * defecto), para probar la orquestación con dobles. El ranking consulta con el
- * MISMO modelo de embeddings con el que se indexó (lo lee del propio índice).
  */
 import { TableEmbeddingsStore } from '../infrastructure/postgres/TableEmbeddingsStore'
 import { EmbeddingsFactory } from '../infrastructure/embeddings/EmbeddingsFactory'
@@ -20,32 +12,26 @@ import type { TableSchema } from '../domain/schema/TableSchema'
 import type { TableMatch } from '../domain/ports/IEmbeddingsStore'
 import type { RetrievalTrace, RankedTable, ExpandedTable, ContextTable, InclusionReason } from '../domain/schema/RetrievalTrace'
 
-/** Cuántas tablas candidatas por significado tomo antes de expandir por FK. */
+/** Candidatas por significado antes de expandir por FK. */
 export const SEMANTIC_TOP_K = 5
 
-/** Tope de tablas en el contexto final (las mejores tras expandir). Debe ser ≥ SEMANTIC_TOP_K. */
+/** Tope del contexto final. Debe ser ≥ SEMANTIC_TOP_K. */
 export const MAX_CONTEXT_TABLES = 8
 
 export interface SchemaRetrievalOptions {
   topK?: number
   maxTables?: number
-  /**
-   * Tablas que el humano fija a mano (SPEC-08): entran en el contexto sí o sí,
-   * aunque el ranking no las traiga, siempre que existan en el esquema. Las que
-   * no existen se ignoran (no fijo un fantasma).
-   */
+  /** Tablas fijadas a mano (SPEC-08): entran sí o sí si existen; las inexistentes se ignoran. */
   mustInclude?: string[]
 }
 
-/** Lo que necesita la recuperación del mundo exterior. */
 export interface SchemaRetrievalDependencies {
-  /** Todas las tablas ordenadas por similitud a la pregunta (con su score). */
+  /** Devuelve TODAS las tablas ordenadas por similitud, no solo las top-K. */
   rankTablesBySimilarity(question: string): Promise<TableMatch[]>
-  /** Dadas unas tablas, devuelve esas + sus vecinas por FK, con columnas y claves. */
+  /** Devuelve las tablas dadas + sus vecinas por FK. */
   expandByForeignKeys(tableNames: string[]): Promise<TableSchema[]>
 }
 
-/** Implementación real: pgvector para puntuar, Neo4j para expandir. */
 export const defaultSchemaRetrievalDependencies: SchemaRetrievalDependencies = {
   async rankTablesBySimilarity(question) {
     const store = await TableEmbeddingsStore.fromEnv()
@@ -75,7 +61,6 @@ export const defaultSchemaRetrievalDependencies: SchemaRetrievalDependencies = {
   },
 }
 
-/** Lo que produce el circuito de recuperación, con los pasos intermedios a la vista. */
 interface RetrievalInternals {
   topK: number
   maxTables: number
@@ -88,15 +73,13 @@ interface RetrievalInternals {
   limited: TableSchema[]
 }
 
-/** Concateno dos listas de nombres y quito duplicados, conservando el orden. */
 function uniqueNames(first: string[], second: string[]): string[] {
   return Array.from(new Set(first.concat(second)))
 }
 
 /**
- * El circuito de recuperación en un único sitio (lo comparten `retrieveSchemaContext`
- * y `explainSchemaRetrieval`, para que la explicación sea exactamente la misma
- * recuperación que usa el pipeline, no una réplica que se pueda desviar).
+ * Circuito único compartido por `retrieveSchemaContext` y `explainSchemaRetrieval`:
+ * la explicación es exactamente la recuperación del pipeline, no una réplica.
  */
 async function runRetrieval(
   question: string,
@@ -106,19 +89,16 @@ async function runRetrieval(
   const topK = options.topK ?? SEMANTIC_TOP_K
   const maxTables = options.maxTables ?? MAX_CONTEXT_TABLES
 
-  // 1. Ordeno todas las tablas por similitud a la pregunta.
   const ranked = await deps.rankTablesBySimilarity(question)
   const scoreByName = new Map(ranked.map((match) => [match.tableName, match.score]))
 
-  // Tablas fijadas por el humano que existen de verdad (las demás se ignoran).
   const pinned = (options.mustInclude ?? []).filter((name) => scoreByName.has(name))
 
-  // 2. Las candidatas son las top-K por significado más las fijadas; expando por FK.
   const topKNames = ranked.slice(0, topK).map((match) => match.tableName)
   const candidateNames = uniqueNames(pinned, topKNames)
   const expanded = await deps.expandByForeignKeys(candidateNames)
 
-  // 3. Acoto por similitud, pero las fijadas nunca se caen del contexto.
+  // Acoto por similitud, pero las fijadas nunca se caen del contexto.
   const pinnedSet = new Set(pinned)
   const scoreOf = (table: TableSchema) => scoreByName.get(table.name) ?? 0
   const byScoreDescending = (a: TableSchema, b: TableSchema) => scoreOf(b) - scoreOf(a)
@@ -129,7 +109,6 @@ async function runRetrieval(
   return { topK, maxTables, ranked, scoreByName, pinned, topKNames, candidateNames, expanded, limited }
 }
 
-/** Recupero el contexto de esquema relevante para una pregunta. */
 export async function retrieveSchemaContext(
   question: string,
   deps: SchemaRetrievalDependencies = defaultSchemaRetrievalDependencies,
@@ -140,10 +119,8 @@ export async function retrieveSchemaContext(
 }
 
 /**
- * Igual que `retrieveSchemaContext`, pero además devuelvo la traza del circuito
- * (SPEC-13): el ranking semántico con scores, las candidatas (top-K), las tablas que
- * entraron por expansión de FK con su score, y el contexto final con el motivo de
- * cada tabla. No altera la recuperación: compone la traza sobre los mismos pasos.
+ * Igual que `retrieveSchemaContext`, pero con la traza del circuito (SPEC-13).
+ * No altera la recuperación: compone la traza sobre los mismos pasos.
  */
 export async function explainSchemaRetrieval(
   question: string,

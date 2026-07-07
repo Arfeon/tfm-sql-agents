@@ -1,18 +1,8 @@
 /**
- * Experimento de confusión (SPEC-21): ¿quién sobrevive cuando el nombre no dice nada?
- *
- * El benchmark normal es amable con la baseline (sesgo #5 de arquitectura §10): los
- * nombres son autoexplicativos. Aquí renombro 6 tablas de Nebula al MISMO patrón opaco
- * (t_ops_01..t_ops_06) — compras, devoluciones, tarjetas regalo, valoraciones, mensajes
- * y partidas guardadas quedan indistinguibles por nombre — y evalúo un mini golden set
- * que solo se responde con ellas, en 2×3 condiciones: descripciones {con, sin} × modo
- * {sin recuperación, solo vectorial, GraphRAG}.
- *
- * El renombrado es REVERSIBLE: `ALTER TABLE … RENAME` al empezar y SIEMPRE se revierte
- * al terminar (try/finally), y Arcadia se restaura en el índice, como en la prueba de
- * escala. Las 15 preguntas del golden set normal de Nebula no tocan estas tablas.
- *
- * Opt-in (`npm run evaluate:confusion`): requiere Docker, embeddings y LLM.
+ * Experimento de confusión: renombra 6 tablas de Nebula (y sus columnas) a nombres
+ * opacos y evalúa un mini golden set en 2×3 condiciones (descripciones × modo).
+ * Renombra y SIEMPRE revierte al terminar; restaura Arcadia en el índice.
+ * Opt-in (npm run evaluate:confusion): requiere Docker, embeddings y LLM.
  */
 import { config } from 'dotenv'
 config({ path: '../.env' })
@@ -39,13 +29,8 @@ const MODE_LABELS: Record<RetrievalMode, string> = {
 }
 
 /**
- * Las 6 tablas ofuscadas: nombre opaco Y COLUMNAS opacas (fase dura). En la fase 1
- * solo se renombraba la tabla y las columnas delataban el propósito (`purchase_date`,
- * `balance`…): el recall aguantó ~100% sin descripciones. Aquí las columnas pasan a
- * c1..c5 (el mismo patrón en todas, como un ERP legacy): sin descripciones no habla
- * NADA — ni nombre, ni columnas —; solo quedan los tipos, y las FKs para el grafo.
- * La descripción (condición "con") mapea las columnas, como documentaría un data
- * steward una tabla legacy real.
+ * Nombre Y columnas opacas: con solo el nombre de tabla ofuscado las columnas
+ * delataban el propósito y el recall aguantaba ~100% sin descripciones.
  */
 const RENAMES = [
   {
@@ -115,7 +100,6 @@ const RENAMES = [
   },
 ]
 
-/** Una condición del 2×3: con/sin descripciones × modo. */
 interface Condition {
   descriptions: boolean
   report: ModeReport
@@ -167,16 +151,12 @@ async function main(): Promise<void> {
   }
 }
 
-/** Conexión de ESCRITURA a nebula para los ALTER (la evaluación sigue siendo de solo lectura). */
+/** Conexión de escritura solo para los ALTER; la evaluación sigue siendo de solo lectura. */
 function writeClientFor(target: TargetDatabaseConfig): Client {
   return new Client({ host: target.host, port: target.port, database: target.name, user: target.user, password: target.password })
 }
 
-/**
- * Aplico los renombres (tabla Y columnas), con guardas para poder relanzar tras un
- * fallo a medias: lo ya renombrado se salta; si no existe ni el original ni el opaco,
- * algo raro pasa y me paro con un error claro.
- */
+/** Tolerante a fallos a medias para poder relanzar: lo ya renombrado se salta. */
 async function applyRenames(target: TargetDatabaseConfig): Promise<void> {
   const client = writeClientFor(target)
   await client.connect()
@@ -189,7 +169,6 @@ async function applyRenames(target: TargetDatabaseConfig): Promise<void> {
       if (state === 'original') {
         await client.query(`ALTER TABLE ${original} RENAME TO ${confusing}`)
       }
-      // Columnas: renombro las que sigan con su nombre original (tolerante a medias).
       for (const { from, to } of columns) {
         if (await columnExists(client, confusing, from)) {
           await client.query(`ALTER TABLE ${confusing} RENAME COLUMN ${from} TO ${to}`)
@@ -202,14 +181,13 @@ async function applyRenames(target: TargetDatabaseConfig): Promise<void> {
   }
 }
 
-/** Deshago los renombres, columnas y tabla (los que estén hechos; tolerante a fallos a medias). */
+/** Tolerante a fallos a medias: revierte solo lo que esté renombrado. */
 async function revertRenames(target: TargetDatabaseConfig): Promise<void> {
   const client = writeClientFor(target)
   await client.connect()
   try {
     for (const { original, confusing, columns } of RENAMES) {
       const state = await tableState(client, original, confusing)
-      // El nombre actual de la tabla, esté como esté, para poder revertir sus columnas.
       const currentName = state === 'renamed' ? confusing : original
       for (const { from, to } of columns) {
         if (await columnExists(client, currentName, to)) {
@@ -225,7 +203,6 @@ async function revertRenames(target: TargetDatabaseConfig): Promise<void> {
   }
 }
 
-/** ¿La tabla tiene una columna con ese nombre? */
 async function columnExists(client: Client, table: string, column: string): Promise<boolean> {
   const result = await client.query(
     `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
@@ -234,7 +211,6 @@ async function columnExists(client: Client, table: string, column: string): Prom
   return result.rows.length > 0
 }
 
-/** ¿La tabla está con su nombre original, ya renombrada, o no existe ninguna de las dos? */
 async function tableState(client: Client, original: string, confusing: string): Promise<'original' | 'renamed' | 'missing'> {
   const result = await client.query<{ table_name: string }>(
     `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)`,
@@ -247,7 +223,6 @@ async function tableState(client: Client, original: string, confusing: string): 
   return names.includes(original) ? 'original' : 'missing'
 }
 
-/** Matriz 2×3 en consola + detalle por caso (con tan pocos casos, el detalle es el informe). */
 function printComparison(conditions: Condition[]): void {
   console.log(chalk.bold('\nConfusión — descripciones × modo (sobre las preguntas de tablas ofuscadas):\n'))
   console.log(chalk.dim('  Descripciones   Modo               Recall   Exec.justa   Exec.equiv'))
@@ -274,7 +249,6 @@ function printComparison(conditions: Condition[]): void {
   console.log(chalk.dim('\n  Por caso: "sí/no" = la tabla ofuscada apareció en el contexto; ✓/✗ = execution accuracy justa.'))
 }
 
-/** Informe reproducible para la memoria/slides. */
 function writeReport(conditions: Condition[]): void {
   mkdirSync(OUTPUT_DIR, { recursive: true })
   const lines: string[] = [

@@ -1,19 +1,12 @@
 /**
  * Métricas de la evaluación experimental (SPEC-11), como funciones puras.
- *
- * - `schemaLinkingRecall`: de las tablas que la SQL correcta debe tocar, cuántas
- *   trae la recuperación. Aísla la recuperación de si el LLM acierta la SQL.
- * - `resultsMatch`: si dos resultados de ejecución son equivalentes. Es la
- *   "execution accuracy": comparo el RESULTADO, no el texto de la SQL.
- * - `estimateTokens`: proxy rústico del coste en tokens del DDL del contexto.
+ * La execution accuracy compara el RESULTADO de ejecutar, no el texto de la SQL.
  */
 
-/** Una fila de resultado: columnas → valores. */
 export type ResultRow = Record<string, unknown>
 
-/** De las tablas `gold`, la fracción que aparece en las recuperadas (0..1). */
 export function schemaLinkingRecall(goldTables: string[], retrievedTables: string[]): number {
-  // Sin tablas que recuperar, el recall es perfecto por convención.
+  // Sin tablas gold, recall = 1 por convención.
   if (goldTables.length === 0) {
     return 1
   }
@@ -23,12 +16,8 @@ export function schemaLinkingRecall(goldTables: string[], retrievedTables: strin
 }
 
 /**
- * ¿Dos resultados son equivalentes? Los comparo como MULTICONJUNTO de filas, sin
- * importar el orden de las filas ni el nombre/orden de las columnas: cada fila se
- * reduce a sus valores normalizados y ordenados. Es la comparación lenient habitual
- * en execution accuracy; suficiente para el golden set (agregados y top-N). Nota:
- * al ignorar el nombre de columna puede dar falsos positivos si dos columnas
- * permutan valores; lo asumo como límite conocido de la métrica.
+ * Comparo como multiconjunto de filas, ignorando orden de filas y nombre/orden de
+ * columnas. Límite conocido: puede dar falsos positivos si dos columnas permutan valores.
  */
 export function resultsMatch(expected: ResultRow[], actual: ResultRow[]): boolean {
   if (expected.length !== actual.length) {
@@ -40,12 +29,8 @@ export function resultsMatch(expected: ResultRow[], actual: ResultRow[]): boolea
 }
 
 /**
- * ¿El resultado `actual` CONTIENE al de referencia? Es la versión justa de la execution
- * accuracy: como la pregunta en lenguaje natural no fija qué columnas devolver, una SQL
- * correcta que además trae columnas de más (p. ej. el `id` junto al nombre) sigue siendo
- * correcta. Exijo el mismo número de filas y que cada fila de referencia esté contenida
- * (sus valores, como multiconjunto) en una fila distinta de `actual`. No cuenta como
- * acierto un resultado con filas o valores distintos: solo "correcto o más rico".
+ * Versión justa: la pregunta en lenguaje natural no fija qué columnas devolver, así que
+ * acepto columnas de más pero nunca filas o valores distintos ("correcto o más rico").
  */
 export function resultsContain(expected: ResultRow[], actual: ResultRow[]): boolean {
   if (expected.length !== actual.length) {
@@ -62,7 +47,6 @@ export function resultsContain(expected: ResultRow[], actual: ResultRow[]): bool
   return true
 }
 
-/** ¿La fila `actual` contiene todos los valores de `expected` (como multiconjunto)? */
 function rowContains(actualRow: ResultRow, expectedRow: ResultRow): boolean {
   const pool = Object.values(actualRow).map(normalizeValue)
   for (const value of Object.values(expectedRow).map(normalizeValue)) {
@@ -75,12 +59,11 @@ function rowContains(actualRow: ResultRow, expectedRow: ResultRow): boolean {
   return true
 }
 
-/** Reduzco una fila a un texto canónico de sus valores (ordenados), sin el nombre de columna. */
 function normalizeRow(row: ResultRow): string {
   return Object.values(row).map(normalizeValue).sort().join('|')
 }
 
-/** Normalizo un valor a texto; los numéricos se comparan por su número (320 == "320"). */
+/** Los numéricos se comparan por su número (320 == "320"). */
 function normalizeValue(value: unknown): string {
   if (value === null || value === undefined) {
     return '∅'
@@ -93,7 +76,7 @@ function normalizeValue(value: unknown): string {
   return asText
 }
 
-/** Estimación rústica de tokens del DDL (~4 caracteres por token). Es un proxy, no exacto. */
+/** Proxy rústico: ~4 caracteres por token. */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4)
 }

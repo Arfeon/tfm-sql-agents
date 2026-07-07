@@ -21,8 +21,12 @@ El problema concreto que aborda: las bases de datos relacionales son el reposito
 | O2 | Funcionar sobre bases de datos grandes sin conocimiento previo del esquema |
 | O3 | Soportar consultas multilingüe (español → esquema en inglés) |
 | O4 | Garantizar seguridad: solo operaciones de lectura, con aprobación humana |
-| O5 | Reutilizar consultas pasadas validadas como ejemplos *few-shot* |
-| O6 | Minimizar el coste en llamadas a LLM mediante una arquitectura eficiente |
+| O5 | Minimizar el coste en llamadas a LLM mediante una arquitectura eficiente |
+
+> Hubo un sexto objetivo — reutilizar consultas pasadas validadas como ejemplos *few-shot* (el
+> Memory Agent) — que quedó **fuera del MVP** por una decisión deliberada de alcance: está
+> especificado por completo (SPEC-09, con su metodología de medición) y es la primera línea
+> de trabajo futuro.
 
 ## 3. Cómo funciona (idea)
 
@@ -43,17 +47,9 @@ flowchart TD
     E --> R[Resultados]
 ```
 
-Flujo de una consulta:
-
-```mermaid
-flowchart LR
-    U[Pregunta en<br/>lenguaje natural] --> S[Localizar tablas<br/>relevantes]
-    S --> G[Generar SQL]
-    G --> V[Validar<br/>seguridad]
-    V --> H[Aprobacion<br/>humana]
-    H --> E[Ejecutar<br/>solo lectura]
-    E --> R[Mostrar<br/>resultados]
-```
+> Es la visión simplificada: el flujo real añade el bucle automático Judge↔SQL y las cuatro
+> decisiones de la revisión (aprobar / rechazar / modificar / afinar). El grafo completo, tal
+> cual está implementado, está en [`arquitectura.md` §3](docs/design/arquitectura.md).
 
 ## 4. Tecnologías (visión general)
 
@@ -103,6 +99,14 @@ La primera vez, en el menú elige **"Escanear el esquema"** antes de consultar (
 el grafo en Neo4j y el índice vectorial). Después, **"Consultar en lenguaje natural"** y a
 preguntar. Cómo usar cada función: [guía de uso](docs/uso.md).
 
+> **Sobre el despliegue.** GraphSQL es una aplicación CLI cuyo despliegue objetivo es
+> **on-premise**: se conecta a la base de datos corporativa y maneja su esquema y sus datos,
+> así que su sitio es dentro del perímetro de la organización (por eso existe el modo LLM
+> local, para que nada salga de la red). No hay instancia en nube pública a propósito; la
+> entrega es esta instalación reproducible con Docker Compose, que además es la base directa
+> de un despliegue productivo en Kubernetes sobre servidores propios. El razonamiento
+> completo está en la decisión D-14 ([arquitectura.md §7](docs/design/arquitectura.md)).
+
 ## 7. Estado actual
 
 Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medida que valido cada pieza. Lo que ya funciona:
@@ -116,22 +120,23 @@ Voy construyendo el sistema por fases (*spec-first*); esta sección crece a medi
 - ✅ **Vectorización del esquema en pgvector** — cada tabla se embebe (con OpenAI o un modelo local de LM Studio, a elegir) y se guarda para la búsqueda semántica; descripciones opcionales sincronizadas en Neo4j y pgvector.
 - ✅ **Recuperación GraphRAG (Schema Agent)** — dada una pregunta, encuentra las tablas relevantes combinando la búsqueda semántica en pgvector con la expansión por claves foráneas en Neo4j; expuesta como *tool* de schema-linking. Encuentra incluso tablas de nombre opaco por su descripción.
 - ✅ **SQL Agent (NL→SQL)** — a partir de la pregunta y el contexto recuperado, genera la consulta SQL en el dialecto de la BD objetivo (inyectado en el prompt); expuesto como *tool* `generar_sql`.
-- ✅ **Judge (validación de seguridad y corrección)** — antes de ejecutar nada, una barrera por capas comprueba la SQL: una **Capa 1** pura y determinista (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección), una **Capa 2** que valida la sintaxis real contra la BD con `EXPLAIN` (sin ejecutar), y un **juez LLM** opcional que aporta confianza, avisos y sugerencias. Bloquean solo las capas deterministas (1 y 2); el juez LLM no bloquea por sí solo, para que un falso positivo no tumbe una consulta válida. El veredicto se muestra junto a la SQL en la revisión humana del CLI.
+- ✅ **Judge (validación de seguridad y corrección)** — antes de ejecutar nada, una barrera por capas comprueba la SQL: una **Capa 1** pura y determinista (debe empezar por `SELECT`/`WITH`, sin palabras de escritura ni patrones de inyección), una **Capa 2** que valida la sintaxis real contra la BD con `EXPLAIN` (sin ejecutar), y un **juez LLM** opcional que aporta confianza, avisos y sugerencias; su confianza mide si la consulta **responde a la pregunta con datos reales**, no solo si es sintácticamente válida (una consulta que solo devuelve un mensaje literal puntúa bajo y dispara el reintento automático). Bloquean solo las capas deterministas (1 y 2); el juez LLM no bloquea por sí solo, para que un falso positivo no tumbe una consulta válida. El veredicto se muestra junto a la SQL en la revisión humana del CLI.
 
 - ✅ **Ejecución segura (solo lectura)** — ejecuta una consulta ya validada contra la BD objetivo y devuelve las filas. Antes de tocar la BD vuelve a comprobar la seguridad (última barrera, lanza error si no es de solo lectura); la sesión es de solo lectura; aplica un tope de filas (marcando si se trunca) y un `statement_timeout`.
 - ✅ **Revisión humana (aprobación con *interrupt*)** — un pipeline propio (recuperación → SQL → Judge → **revisión** → ejecución) que se **para** antes de ejecutar: LangGraph pausa con `interrupt_before` y persiste el estado en PostgreSQL (recuperable por `thread_id`). Desde el CLI veo la consulta y el veredicto del Judge en cajas con color y decido: **aprobar** (ejecuta), **rechazar** (termina), **modificar** la SQL a mano (vuelve al Judge) o **afinar** (ver abajo). Ninguna SQL se ejecuta sin mi visto bueno.
-- ✅ **Afinar la consulta con indicaciones** — en la revisión, en vez de rechazar y reescribir de cero, le digo en lenguaje natural qué ajustar ("añade también la popularidad por wishlist") y/o fuerzo tablas concretas; el sistema rehace la recuperación (la indicación ayuda a encontrar tablas nuevas) y regenera la SQL partiendo de la anterior, y vuelve a la revisión. Puedo afinar varias veces seguidas. Forzar tablas sigue siendo determinista; la consulta afinada pasa de nuevo por el Judge con su reintento automático.
+- ✅ **Afinar la consulta con indicaciones** — en la revisión, en vez de rechazar y reescribir de cero, le digo en lenguaje natural qué ajustar ("añade también la popularidad por wishlist") y/o fuerzo tablas concretas; el sistema rehace la recuperación (la indicación ayuda a encontrar tablas nuevas) y regenera la SQL partiendo de la anterior, y vuelve a la revisión. Puedo afinar varias veces seguidas. Forzar tablas sigue siendo determinista; la consulta afinada pasa de nuevo por el Judge —que evalúa contra la pregunta más mis indicaciones, para no penalizar lo que acabo de pedir— con su reintento automático.
 - ✅ **Supervisor (reintento automático Judge↔SQL)** — antes de llegar a la revisión, si el Judge no da la consulta por buena (falla o su confianza queda por debajo del mínimo exigido), el pipeline vuelve solo al SQL Agent con los errores del Judge para que los corrija, hasta un tope de intentos; si los agota sin éxito, la consulta llega igual a la revisión, marcada como fracasada. Una SQL editada a mano nunca entra en este reintento automático: su veredicto siempre vuelve a la revisión, para no descartar en silencio lo que decido yo.
 - ✅ **Explicabilidad de la recuperación (modo depuración)** — una opción del CLI que, dada una pregunta, muestra el circuito GraphRAG en tablas: el ranking semántico con su score (marcando las candidatas top-K), las tablas que entran por **expansión de FK** con su score, y el contexto final con el **motivo** de cada tabla (semántica / expansión / fijada). Deja ver de un vistazo si una tabla se recuperó por significado o la arrastró el grafo — clave para no dar por buena una recuperación a ciegas y para el análisis del *ablation*.
 - ✅ **El Judge evalúa el propósito de las tablas** — además de seguridad y sintaxis, el Judge juzga si *sabe* qué contiene cada tabla que usa la consulta: si tiene descripción (o su nombre/columnas lo dejan claro) informa del mapeo (`t_042 → "lista de deseos", según descripción`); si es de **nombre opaco y sin descripción**, avisa de que se usa **por suposición** y hay que verificarla (no bloquea, solo advierte). Así una tabla opaca que entra por el grafo no se da por sabida sin más. Para esto, la descripción de cada tabla viaja ya en el contexto (DDL).
 
-- ✅ **Evaluación experimental (ablation)** — un arnés (`npm run evaluate`) lanza el golden set (25 casos) en tres modos de recuperación (sin recuperación / solo vectorial / GraphRAG) y mide **schema-linking recall**, **tamaño de contexto** (tablas y tokens) y **execution accuracy** (la SQL generada, ejecutada, ¿da el mismo resultado que la de referencia?). Resultado sobre Arcadia: GraphRAG recupera el **99% de las tablas correctas con la mitad del contexto** (774 vs 1498 tokens) que volcar el esquema entero, con precisión equivalente; y las descripciones son las que rescatan tablas de nombre opaco. Un segundo arnés (`npm run evaluate:descriptions`) mide el aporte de las descripciones (2×2). Como métrica **complementaria** de la execution accuracy, un LLM juez decide si la SQL generada responde a la **misma pregunta** que la de referencia (captura aciertos equivalentes que la comparación de filas descarta, y a la vez caza diferencias reales que esa comparación no ve); se reporta al lado, nunca en lugar de la métrica objetiva. Informes en `docs/evaluacion/`; lectura de negocio en [`docs/propuesta-valor.md`](docs/propuesta-valor.md).
-- ✅ **Prueba de escala (17 vs 66 tablas)** — un tercer arnés (`npm run evaluate:scale`) repite la evaluación completa sobre *Nebula* (66 tablas). Resultado: el contexto del GraphRAG **se mantiene plano** al crecer el esquema (774 → 759 tokens, mientras "volcar el esquema entero" se dispara 1498 → 5748) con recall 100%, y en aciertos **supera** tanto al esquema entero (80% vs 67%) como a la búsqueda vectorial sola (60%) — a 17 tablas empataban; a 66 el GraphRAG despunta. Con su asterisco declarado: 15 preguntas y una sola tirada, señal consistente, no ventaja estadística de tribunal. Los sesgos conocidos de las métricas (columna de más, `INNER` vs `LEFT JOIN`, juez LLM falible) están documentados en [`arquitectura.md` §10](docs/design/arquitectura.md).
+- ✅ **Evaluación experimental (ablation)** — un arnés (`npm run evaluate`) lanza el golden set (25 casos) en tres modos de recuperación (sin recuperación / solo vectorial / GraphRAG) y mide **schema-linking recall**, **tamaño de contexto** (tablas y tokens) y **execution accuracy** (la SQL generada, ejecutada, ¿da el mismo resultado que la de referencia?). Resultado sobre Arcadia: GraphRAG recupera el **99% de las tablas correctas con la mitad del contexto** (774 vs 1498 tokens) que volcar el esquema entero, con precisión equivalente; y las descripciones son las que rescatan tablas de nombre opaco. Un segundo arnés (`npm run evaluate:descriptions`) mide el aporte de las descripciones (2×2). Como métrica **complementaria** de la execution accuracy, un LLM juez decide si la SQL generada responde a la **misma pregunta** que la de referencia (captura aciertos equivalentes que la comparación de filas descarta, y a la vez caza diferencias reales que esa comparación no ve); se reporta al lado, nunca en lugar de la métrica objetiva. Informes en `docs/evaluacion/`.
+- ✅ **Prueba de escala (17 vs 66 tablas), media de 5 tiradas** — un tercer arnés (`npm run evaluate:scale`, agregado con `evaluate:aggregate`) repite la evaluación completa sobre *Nebula* (66 tablas). Resultado: el contexto del GraphRAG **se mantiene plano** al crecer el esquema (774 → 759 tokens, mientras "volcar el esquema entero" se dispara 1498 → 5748) con recall 100%, y en aciertos queda **primero** — 72% (rango 67–80) frente al 68% del esquema entero y el 60% clavado de la búsqueda vectorial sola — con un 89% de equivalencia semántica. De 17 a 66 tablas el esquema entero baja y GraphRAG sube: la tendencia de escala, medida. Los sesgos conocidos de las métricas (columna de más, `INNER` vs `LEFT JOIN`, juez LLM falible, benchmark de nombres limpios) están documentados en [`arquitectura.md` §10](docs/design/arquitectura.md).
+- ✅ **Experimento de confusión (tablas y columnas opacas)** — seis tablas de Nebula renombradas a `t_ops_XX(c1..c5)` (nada habla, como un ERP legacy): sin descripciones colapsa todo — **incluida la baseline con el esquema entero delante** (17-33% de equivalencia); con descripciones documentadas, GraphSQL llega al **83%** mientras el esquema entero con las mismas descripciones se queda en el 17%. La conclusión: **la recuperación es lo que hace la documentación usable**. Renombrado reversible, informe en `docs/evaluacion/confusion.md`.
 
 - ✅ **Selección de la BD objetivo al consultar** — con más de una BD en el catálogo, el flujo de consulta deja elegir sobre cuál preguntar, marcando la que está **indexada** (Neo4j/pgvector guardan un esquema a la vez, y el índice ahora registra de cuál es). Si eliges otra, avisa y ofrece escanearla ahí mismo; el dry-run del Judge y la ejecución apuntan siempre a la BD elegida.
 - ✅ **Resultados como gráfico de barras** — si el resultado tiene forma "categoría → valor" (una columna de texto + una numérica, pocas filas), el CLI ofrece verlo como **tabla, gráfico de barras en la terminal, o ambas**. La detección es una función pura sobre la forma del resultado (determinista y testeada), no una decisión del LLM.
 
-Lo siguiente (opcional) es el seguimiento conversacional (SPEC-16), la gestión de hilos (SPEC-12), el índice multi-inquilino para tener varias BDs indexadas a la vez (SPEC-20) y confirmar la ventaja de precisión con más tiradas o una BD pública grande. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
+Lo siguiente (opcional) es el **Memory Agent** (SPEC-09: reutilizar consultas aprobadas como ejemplos *few-shot* — el sexto objetivo original, ya especificado con su metodología de medición), el seguimiento conversacional (SPEC-16), la gestión de hilos (SPEC-12), el índice multi-inquilino para tener varias BDs indexadas a la vez (SPEC-20) y confirmar la ventaja de precisión con una BD real grande. El detalle del plan está en [`docs/design/SPEC.md`](docs/design/SPEC.md).
 
 ## Documentación del proyecto
 
@@ -139,7 +144,6 @@ Lo siguiente (opcional) es el seguimiento conversacional (SPEC-16), la gestión 
 - [`docs/uso.md`](docs/uso.md) — guía de uso paso a paso: consultar, escanear, depurar y evaluar.
 - [`docs/design/arquitectura.md`](docs/design/arquitectura.md) — diseño detallado (incremental, se completa por fases).
 - [`docs/design/SPEC.md`](docs/design/SPEC.md) — especificación e historial de componentes (SDD).
-- [`docs/propuesta-valor.md`](docs/propuesta-valor.md) — para qué sirve y por qué vale la pena (posicionamiento).
 - [`docs/glosario.md`](docs/glosario.md) — términos que uso (ablation, GraphRAG, schema-linking, embedding…) explicados en el sentido del proyecto.
 
 

@@ -1,13 +1,4 @@
-/**
- * Punto de entrada del CLI de GraphSQL.
- *
- * Es la capa más externa (composición): carga el entorno, muestra la cabecera y
- * enruta el menú principal a cada flujo. Cada flujo vive en su propio módulo
- * (`schemaScan`, `sqlPipeline`, `retrievalDebug`, `conversation`), para que este
- * fichero se quede fino y con una sola responsabilidad: arrancar y enrutar.
- *
- * Arrancar con: npm start
- */
+/** Punto de entrada del CLI: carga el entorno y enruta el menú a cada flujo. Arrancar con: npm start */
 import { config } from 'dotenv'
 config({ path: '../.env' })
 
@@ -20,13 +11,9 @@ import { runRetrievalDebug } from './retrievalDebug'
 import { runConversation } from './conversation'
 
 /**
- * Menú principal: elijo qué hacer.
- *
- * La conversación libre (chat) queda OCULTA del menú a propósito: el pipeline
- * "Consultar en lenguaje natural" cubre el caso de uso real. No la borro: conservo
- * el grafo conversacional (`agentGraph`) y sus tools (`schemaTools`, `sqlTools`) como
- * base reutilizable para un futuro servidor MCP o backends específicos. Reactivarla es
- * volver a añadir aquí su opción de menú.
+ * El chat queda oculto del menú a propósito: el pipeline cubre el caso de uso real.
+ * Conservo el grafo conversacional y sus tools como base para un futuro servidor MCP;
+ * reactivarlo es volver a añadir aquí su opción de menú.
  */
 function askMainAction(): Promise<'chat' | 'query' | 'scan' | 'debug' | 'exit'> {
   return select({

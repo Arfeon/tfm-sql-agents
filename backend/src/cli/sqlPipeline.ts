@@ -1,10 +1,6 @@
 /**
- * Flujo de CLI: consulta NL→SQL con revisión humana (SPEC-08) y supervisor (SPEC-10).
- *
- * Lanza el pipeline (recuperación → SQL ↔ Judge, con reintento automático → revisión),
- * que se PARA en la revisión antes de ejecutar nada. Presento la consulta y el veredicto
- * del Judge en cajas, recojo mi decisión y reanudo el grafo por su `thread_id` hasta que
- * apruebo (y se ejecuta), rechazo, o el bucle de afinar/modificar me devuelve a la revisión.
+ * Flujo de CLI: consulta NL→SQL con revisión humana. El grafo se para antes de
+ * ejecutar nada; recojo la decisión y lo reanudo por su thread_id.
  */
 import { randomUUID } from 'node:crypto'
 import boxen from 'boxen'
@@ -23,14 +19,13 @@ import type { HumanDecision } from '../graphsql/domain/sql/HumanDecision'
 import type { QueryResult } from '../graphsql/domain/sql/QueryResult'
 
 export async function runSqlPipeline(): Promise<void> {
-  // Elijo sobre qué BD pregunto (SPEC-18); null = cancelado o índice sin preparar.
+  // null = cancelado o índice sin preparar.
   const target = await chooseTargetForQuery()
   if (!target) {
     return
   }
   const dialect = sqlDialectFor(target)
   const question = await input({ message: chalk.green('Tu pregunta (o "salir" para volver):') })
-  // Vacío o una palabra de salida: vuelvo al menú sin tratarla como consulta.
   if (isExitRequest(question)) {
     return
   }
@@ -46,7 +41,7 @@ export async function runSqlPipeline(): Promise<void> {
     return
   }
 
-  // El dry-run del Judge y la ejecución apuntan a la BD elegida, no a la de por defecto (SPEC-18).
+  // El dry-run del Judge y la ejecución apuntan a la BD elegida, no a la de por defecto.
   const graph = createSqlPipelineGraph(checkpointer, makePipelineDependencies(target))
   const config = { configurable: { thread_id: randomUUID() } }
 
@@ -55,7 +50,6 @@ export async function runSqlPipeline(): Promise<void> {
       graph.invoke({ question, dialect, mustInclude: [] }, config),
     )
 
-    // Bucle de revisión: mientras el grafo siga parado antes de la revisión.
     while (true) {
       const snapshot = await graph.getState(config)
       if (!snapshot.next.includes(HUMAN_REVIEW_NODE)) {
@@ -83,13 +77,12 @@ export async function runSqlPipeline(): Promise<void> {
   }
 }
 
-/** Presento la consulta y la evaluación del Judge en dos cajas separadas. */
 function presentReview(state: PipelineStateType): void {
   const tables = state.schemaContext?.tableNames ?? []
   const queryText = state.sql ? highlight(state.sql.text, { language: 'sql', ignoreIllegals: true }) : chalk.dim('(sin consulta)')
   const tablesLine = chalk.dim(`Tablas usadas: ${tables.join(', ') || '(ninguna)'}`)
   const bodyLines = [queryText, '', tablesLine]
-  // Solo muestro los intentos si hubo reintento automático (SPEC-10): con 1 no aporta nada.
+  // Solo muestro los intentos si hubo reintento automático: con 1 no aporta nada.
   if (state.attempts > 1) {
     bodyLines.push('', chalk.dim(`Intentos del SQL Agent: ${state.attempts}/${MAX_JUDGE_ATTEMPTS} (el Judge no dio por buenos los anteriores)`))
   }
@@ -111,7 +104,6 @@ function presentReview(state: PipelineStateType): void {
   }
 }
 
-/** Etiqueta legible de la fuente del propósito de una tabla (SPEC-14). */
 function purposeSourceLabel(source: PurposeSource): string {
   switch (source) {
     case 'description':
@@ -125,7 +117,6 @@ function purposeSourceLabel(source: PurposeSource): string {
   }
 }
 
-/** La evaluación del Judge en su propia caja, con color según el veredicto. */
 function renderJudgeBox(verdict: JudgeVerdict): string {
   const color = verdict.valid ? 'green' : 'red'
   const confidence = verdict.confidence !== undefined ? ` · confianza ${Math.round(verdict.confidence * 100)}%` : ''
@@ -133,8 +124,7 @@ function renderJudgeBox(verdict: JudgeVerdict): string {
   if (verdict.explanation) {
     lines.push('', chalk.dim(verdict.explanation))
   }
-  // Propósito de las tablas cuyo significado el Judge conoce (documentado/evidente);
-  // las "supuestas" no van aquí: aparecen como aviso en la sección de cautelas (SPEC-14).
+  // Los propósitos "supuestos" no van aquí: aparecen como aviso en la sección de cautelas.
   const knownPurposes = (verdict.tablePurposes ?? []).filter((purpose) => purpose.source !== 'assumed')
   if (knownPurposes.length > 0) {
     lines.push(
@@ -161,7 +151,7 @@ function renderJudgeBox(verdict: JudgeVerdict): string {
   })
 }
 
-/** Pido la decisión. Una consulta fracasada (no superó el Judge) no se puede aprobar. */
+/** Una consulta que no superó el Judge no se puede aprobar. */
 async function askHumanDecision(state: PipelineStateType): Promise<HumanDecision> {
   const choices = [
     ...(state.failed ? [] : [{ name: 'Aprobar y ejecutar', value: 'approve' as const }]),
@@ -181,7 +171,6 @@ async function askHumanDecision(state: PipelineStateType): Promise<HumanDecision
   return { action } // approve | reject
 }
 
-/** Texto del spinner mientras el grafo procesa mi decisión. */
 function spinnerLabelFor(decision: HumanDecision): string {
   switch (decision.action) {
     case 'approve':
@@ -195,11 +184,7 @@ function spinnerLabelFor(decision: HumanDecision): string {
   }
 }
 
-/**
- * Recojo el afinado (SPEC-15) con dos sub-preguntas guiadas: la indicación en
- * lenguaje natural (la principal) y, opcional, tablas a forzar. Exijo al menos una;
- * si las dos van vacías, vuelvo a las opciones de la revisión sin relanzar.
- */
+/** Exijo indicación o tablas; si las dos van vacías, vuelvo a la revisión sin relanzar. */
 async function askRefine(state: PipelineStateType): Promise<HumanDecision> {
   const guidance = (
     await input({ message: '¿Qué quieres ajustar? (p. ej. «añade la popularidad por wishlist» · Enter para omitir)' })
@@ -218,10 +203,7 @@ async function askRefine(state: PipelineStateType): Promise<HumanDecision> {
   }
 }
 
-/**
- * Muestro el resultado de la ejecución. Si tiene forma de "categoría → valor"
- * (SPEC-19), pregunto cómo verlo: tabla, gráfico de barras o ambas; si no, tabla.
- */
+/** Si el resultado tiene forma de "categoría → valor", ofrezco verlo como gráfico. */
 async function presentResult(result: QueryResult): Promise<void> {
   const suffix = result.truncated ? chalk.yellow(' (truncado al tope de filas)') : ''
   console.log(chalk.green(`\n✔ ${result.rowCount} fila(s) devueltas${suffix}.`))
@@ -252,7 +234,7 @@ async function presentResult(result: QueryResult): Promise<void> {
   }
 }
 
-/** La tabla clásica con columnas alineadas (máximo 50 filas en pantalla). */
+/** Máximo 50 filas en pantalla. */
 function printResultTable(result: QueryResult): void {
   const table = new Table({ head: result.columns, style: { head: ['cyan'] } })
   for (const row of result.rows.slice(0, 50)) {
@@ -262,7 +244,7 @@ function printResultTable(result: QueryResult): void {
   console.log('')
 }
 
-/** El gráfico de barras: el render es puro (sin ANSI); aquí le doy el color. */
+/** El render devuelve texto sin ANSI; el color se lo doy aquí. */
 function printResultChart(result: QueryResult, plan: BarChartPlan): void {
   const colored = renderBarChart(result, plan)
     .split('\n')
@@ -271,7 +253,7 @@ function printResultChart(result: QueryResult, plan: BarChartPlan): void {
   console.log(`\n${colored}\n`)
 }
 
-/** Un valor de celda como texto; el nulo lo marco en gris para que se distinga del vacío. */
+/** El nulo va en gris para que se distinga del vacío. */
 function formatCell(value: unknown): string {
   return value === null || value === undefined ? chalk.dim('∅') : String(value)
 }

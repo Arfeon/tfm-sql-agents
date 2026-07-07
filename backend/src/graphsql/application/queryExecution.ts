@@ -1,19 +1,7 @@
 /**
- * Caso de uso: ejecutar una consulta ya validada contra la BD objetivo (SPEC-07).
- *
- * Lo importante no es solo ejecutar, sino hacerlo sin poder hacer daño:
- *
- *  - Antes de tocar la BD, vuelvo a comprobar la seguridad (que sea de solo lectura).
- *    Si no lo es, lanzo `UnsafeQueryError` y no ejecuto. Es la última barrera: aunque
- *    algo se saltara las comprobaciones previas, una consulta peligrosa no llega a correr.
- *  - La sesión es de solo lectura (la abre así el adaptador de Postgres), de modo que
- *    una escritura fallaría en la propia BD.
- *  - Aplico un tope de filas (envuelvo la consulta y pido una fila de más para saber
- *    si había más y marcar el resultado como truncado) y un `statement_timeout`, para
- *    no traerme una tabla entera ni quedarme colgado en una consulta lenta.
- *
- * Recibo la ejecución contra la BD inyectada (real por defecto), para probar el caso
- * de uso con un doble sin tocar la BD.
+ * Ejecuta una consulta ya validada contra la BD objetivo (SPEC-07). Aquí vive la
+ * última barrera de seguridad: re-compruebo que sea de solo lectura antes de tocar
+ * la BD, además la sesión es read-only y hay tope de filas y statement_timeout.
  */
 import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
 import { checkSqlSafety } from '../domain/sql/SqlSafetyPolicy'
@@ -22,9 +10,8 @@ import type { ITargetDatabase } from '../domain/ports/ITargetDatabase'
 import type { SqlStatement } from '../domain/sql/SqlStatement'
 import type { QueryResult } from '../domain/sql/QueryResult'
 
-/** Filas máximas que devuelvo; por encima, marco el resultado como truncado. */
+/** Por encima de este tope, el resultado se marca como truncado. */
 export const MAX_RESULT_ROWS = 1000
-/** Tiempo máximo de una consulta antes de cortarla, en milisegundos. */
 export const STATEMENT_TIMEOUT_MS = 15_000
 
 export interface QueryExecutionOptions {
@@ -33,16 +20,14 @@ export interface QueryExecutionOptions {
 }
 
 export interface QueryExecutionDependencies {
-  /** Abre una conexión de solo lectura a la BD objetivo con el límite de tiempo dado. */
+  /** La conexión que abre es de solo lectura. */
   connectDatabase(options: { statementTimeoutMs: number }): Promise<ITargetDatabase>
 }
 
-/** Implementación real: conecta con la BD objetivo a través del factory. */
 export const defaultQueryExecutionDependencies: QueryExecutionDependencies = {
   connectDatabase: (options) => TargetDatabaseFactory.connectDefault(options),
 }
 
-/** Ejecuto la consulta validada y devuelvo el resultado (columnas, filas, si se truncó). */
 export async function executeQuery(
   sql: SqlStatement,
   options: QueryExecutionOptions = {},
@@ -59,7 +44,6 @@ export async function executeQuery(
 
   const db = await deps.connectDatabase({ statementTimeoutMs: timeoutMs })
   try {
-    // El adaptador limita las filas de forma eficiente y me dice si se truncó.
     const { rows, truncated } = await db.fetchCapped(sql.text, maxRows)
     return {
       columns: rows.length > 0 ? Object.keys(rows[0]) : [],

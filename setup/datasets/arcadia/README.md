@@ -22,9 +22,9 @@ puntuales de DLC y telemetría de uso.
 - **Rico en métricas.** Ingresos (MRR de suscripción + DLC), jugadores
   concurrentes, playtime, valoraciones, churn y retención → preguntas variadas.
 - **Multilingüe.** Esquema en inglés, preguntas en español (caso del TFM).
-- **Una tabla trampa.** `t_042` (la lista de deseos) tiene nombre **opaco** a
-  propósito: solo se localiza por su descripción o por sus claves foráneas, no por
-  el nombre. Es el caso de prueba estrella del schema-linking por descripción.
+- **Una tabla deliberadamente opaca.** `t_042` (la lista de deseos) tiene un nombre
+  que no dice nada a propósito: solo se localiza por su descripción o por sus claves
+  foráneas. Es el caso de prueba del schema-linking por descripción.
 
 ## Esquema (17 tablas)
 

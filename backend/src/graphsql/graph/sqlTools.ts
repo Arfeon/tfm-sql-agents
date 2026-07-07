@@ -1,16 +1,7 @@
 /**
- * Tool de generación de SQL para el agente (SPEC-05 + SPEC-06).
- *
- * Dada una pregunta, recupera las tablas relevantes (SPEC-04), genera la SQL en
- * el dialecto de la BD objetivo (SPEC-05) y la pasa por el Judge (SPEC-06) para
- * acompañarla de su veredicto (validez, confianza, avisos, sugerencias). Así el
- * usuario ve siempre la "opinión" del Judge junto a la consulta. Ejecutarla es
- * SPEC-07; el bucle determinista de reintento será el supervisor (SPEC-10).
- *
- * Devuelvo el resultado en markdown (texto plano) a propósito: esta salida pasa por
- * el agente conversacional, que no admite colores ni cajas ANSI. La presentación
- * con color y cajas (chalk/boxen) vive en el CLI integrado del pipeline (SPEC-08/11),
- * donde pinto yo directamente sin LLM de por medio.
+ * Tool de generación de SQL para el agente conversacional: recupera tablas, genera
+ * la SQL y adjunta el veredicto del Judge. La salida es markdown plano a propósito:
+ * pasa por el LLM del chat, que no admite ANSI.
  */
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
@@ -21,12 +12,7 @@ import type { JudgeVerdict } from '../domain/sql/JudgeVerdict'
 import { loadTargetDatabases, sqlDialectFor } from '../infrastructure/config/targetDatabases'
 import { NO_RELEVANT_TABLES_MESSAGE } from './schemaTools'
 
-/**
- * Formateo el veredicto del Judge como una sección propia, separada de la consulta
- * y claramente atribuida al Judge: el veredicto y la confianza, el porqué, qué le
- * resta confianza y las sugerencias. Así el usuario distingue la consulta de su
- * evaluación.
- */
+/** El veredicto como sección propia, atribuida al Judge: que no se confunda con la consulta. */
 export function renderJudgeVerdict(verdict: JudgeVerdict): string {
   const confidence = verdict.confidence !== undefined ? ` · confianza ${Math.round(verdict.confidence * 100)}%` : ''
   const lines = ['## Evaluación del Judge', '', `${verdict.valid ? '✅ Válida' : '❌ No válida'}${confidence}`]

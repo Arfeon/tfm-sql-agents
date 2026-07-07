@@ -1,22 +1,17 @@
 /**
- * Factory de la base de datos objetivo.
- *
- * Es el único sitio que sabe qué adaptador usar para cada motor y cómo conectarse.
- * Devuelve un `ITargetDatabase` ya conectado (en solo lectura), de modo que los
- * casos de uso dependen solo de la abstracción y no construyen clientes a mano ni
- * discriminan el tipo de motor. Mismo patrón que `ChatModelFactory` o `EmbeddingsFactory`.
+ * Factory de la BD objetivo: el único sitio que elige adaptador por motor. Devuelve
+ * un `ITargetDatabase` ya conectado en solo lectura.
  */
 import { PostgresTargetDatabase } from '../postgres/PostgresTargetDatabase'
 import { loadTargetDatabases, type TargetDatabaseConfig } from '../config/targetDatabases'
 import type { ITargetDatabase } from '../../domain/ports/ITargetDatabase'
 
 export interface TargetDatabaseSessionOptions {
-  /** Límite de tiempo por consulta, en ms; lo aplica el adaptador a su sesión. */
+  /** Límite de tiempo por consulta, en ms. */
   statementTimeoutMs?: number
 }
 
 export const TargetDatabaseFactory = {
-  /** Conecta con una BD objetivo concreta, eligiendo el adaptador según su tipo. */
   async connect(
     target: TargetDatabaseConfig,
     options: TargetDatabaseSessionOptions = {},

@@ -1,12 +1,6 @@
 /**
- * Caso de uso: vectorizar el esquema de una BD objetivo en pgvector.
- *
- * Leo el esquema, compongo un texto por tabla (nombre + columnas, y descripción
- * si se aporta), lo embebo con el modelo configurado y lo guardo en pgvector
- * junto al modelo y la dimensión usados. Reconstruyo el índice entero.
- *
- * Recibo como dependencias el lector de esquema y el almacén (con implementación
- * real por defecto), para poder probar la orquestación con dobles.
+ * Vectoriza el esquema de una BD objetivo en pgvector. Reconstruye el índice entero
+ * y guarda el modelo y la dimensión usados junto a los vectores.
  */
 import { TableEmbeddingsStore } from '../infrastructure/postgres/TableEmbeddingsStore'
 import { readTargetSchema } from './readTargetSchema'
@@ -22,19 +16,17 @@ export interface VectorizationSummary {
   dimensions: number
 }
 
-/** Lo que necesita la vectorización del mundo exterior. */
 export interface SchemaVectorizationDependencies {
   readSchema(target: TargetDatabaseConfig): Promise<TableSchema[]>
   openEmbeddingsStore(): Promise<IEmbeddingsStore>
 }
 
-/** Implementación real: Postgres para leer el esquema, pgvector para guardar. */
 export const defaultSchemaVectorizationDependencies: SchemaVectorizationDependencies = {
   readSchema: readTargetSchema,
   openEmbeddingsStore: () => TableEmbeddingsStore.fromEnv(),
 }
 
-/** Texto que represento de cada tabla para la búsqueda semántica. */
+/** El texto que representa a cada tabla en la búsqueda semántica. */
 export function composeSearchText(table: TableSchema, description?: string): string {
   const columns = table.columns.map((column) => column.name).join(', ')
   const parts = [`Tabla: ${table.name}`]
@@ -52,14 +44,12 @@ export async function vectorizeSchema(
   descriptions?: Map<string, string>,
   deps: SchemaVectorizationDependencies = defaultSchemaVectorizationDependencies,
 ): Promise<VectorizationSummary> {
-  // 1. Leer el esquema de la BD objetivo.
   const tables = await deps.readSchema(target)
 
-  // 2. Componer los textos y embeberlos (una sola llamada).
   const texts = tables.map((table) => composeSearchText(table, descriptions?.get(table.name)))
   const vectors = await embeddings.embedMany(texts)
 
-  // 3. Reconstruir el índice (anotando de qué BD es, SPEC-18) y guardar cada tabla con su vector.
+  // El índice queda anotado con la BD de la que viene (SPEC-18).
   const store = await deps.openEmbeddingsStore()
   try {
     await store.prepare(embeddings.dimensions, target.name)

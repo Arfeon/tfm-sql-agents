@@ -1,11 +1,6 @@
 /**
- * Test de integración de la vectorización del esquema (SPEC-03).
- *
- * Vectoriza el esquema de Arcadia con el proveedor de embeddings configurado y
- * comprueba que pgvector queda con un vector por tabla y el modelo correcto.
- *
- * Opt-in (`npm run test:integration`) y se salta si faltan las credenciales del
- * proveedor de embeddings activo. Requiere docker compose up -d.
+ * Vectoriza Arcadia de verdad y comprueba que pgvector queda con un vector por tabla
+ * y el modelo correcto. Opt-in; se salta si falta el proveedor de embeddings.
  */
 import { describe, it, expect } from 'vitest'
 import { vectorizeSchema } from '../../src/graphsql/application/schemaVectorization'

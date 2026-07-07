@@ -1,10 +1,6 @@
 /**
- * Factory del lector de esquema.
- *
- * Es el único sitio que sabe qué lector de esquema usar para cada motor (las
- * consultas a `information_schema` difieren entre PostgreSQL, MySQL…). Devuelve un
- * `ISchemaReader`, así los casos de uso no construyen un lector concreto. Mismo
- * patrón que `TargetDatabaseFactory`.
+ * Factory del lector de esquema: el único sitio que sabe qué lector usar por motor
+ * (las consultas a `information_schema` difieren entre PostgreSQL, MySQL…).
  */
 import { PostgresSchemaReader } from '../postgres/PostgresSchemaReader'
 import type { TargetDatabaseConfig } from '../config/targetDatabases'
@@ -12,7 +8,6 @@ import type { ITargetDatabase } from '../../domain/ports/ITargetDatabase'
 import type { ISchemaReader } from '../../domain/ports/ISchemaReader'
 
 export const SchemaReaderFactory = {
-  /** Crea el lector de esquema adecuado para el motor de la BD objetivo. */
   create(target: TargetDatabaseConfig, db: ITargetDatabase): ISchemaReader {
     switch (target.type) {
       case 'postgresql':

@@ -1,11 +1,6 @@
 /**
- * Test de integración del SQL Agent (SPEC-05).
- *
- * De punta a punta: recupera el contexto real (SPEC-04) y genera la SQL con el LLM
- * real, en el dialecto de la BD objetivo. Comprueba que sale un SELECT/WITH.
- *
- * Opt-in (`npm run test:integration`) y se salta si falta el proveedor LLM.
- * Requiere docker compose up -d y el esquema ya vectorizado.
+ * SQL Agent de punta a punta con el LLM real: recupera contexto y genera un
+ * SELECT/WITH. Opt-in; requiere Docker y el esquema vectorizado.
  */
 import { describe, it, expect } from 'vitest'
 import { retrieveSchemaContext } from '../../src/graphsql/application/schemaRetrieval'

@@ -1,26 +1,16 @@
 /**
- * Puerto del almacén de vectores de tablas.
- *
- * Es lo que necesita la vectorización para guardar el esquema: reconstruir el
- * índice, meter cada tabla con su vector, contar y cerrar. Detrás está pgvector
- * (`TableEmbeddingsStore`), pero el caso de uso solo conoce esta interfaz, así
- * que en los tests le puedo pasar un doble en memoria. Igual que `ITargetDatabase`
- * o `IEmbeddings`.
+ * Puerto del almacén de vectores de tablas (detrás está pgvector).
  */
-/** Una tabla candidata devuelta por la búsqueda semántica, con su similitud. */
+/** Tabla candidata de la búsqueda semántica, con su similitud. */
 export interface TableMatch {
   tableName: string
   score: number
 }
 
 export interface IEmbeddingsStore {
-  /**
-   * Reconstruye la tabla de embeddings con la dimensión indicada, registrando de qué
-   * BD objetivo es el índice (el almacén es de un solo inquilino, SPEC-18).
-   */
+  /** Reconstruye la tabla entera: el almacén es de un solo inquilino (SPEC-18). */
   prepare(dimensions: number, targetName: string): Promise<void>
 
-  /** Guarda (o reemplaza) una tabla con su texto de búsqueda, su vector y el modelo usado. */
   upsertTable(
     tableName: string,
     fullName: string,
@@ -32,12 +22,10 @@ export interface IEmbeddingsStore {
     dimensions: number,
   ): Promise<void>
 
-  /** Las `limit` tablas más parecidas a un vector de consulta (por similitud coseno, descendente). */
+  /** Por similitud coseno, descendente. */
   searchSimilar(embedding: number[], limit: number): Promise<TableMatch[]>
 
-  /** Número de tablas guardadas. */
   count(): Promise<number>
 
-  /** Cierra la conexión. */
   close(): Promise<void>
 }

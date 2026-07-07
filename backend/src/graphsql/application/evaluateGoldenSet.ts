@@ -1,24 +1,8 @@
 /**
- * Caso de uso: evaluación experimental (ablation) sobre el golden set (SPEC-11).
- *
- * Por cada pregunta y cada MODO de recuperación mido:
- *   - schema-linking recall: cuántas de las tablas correctas trae la recuperación,
- *   - tamaño de contexto: cuántas tablas (y tokens estimados) se le pasan al SQL Agent,
- *   - execution accuracy: la SQL generada, ejecutada, ¿da el mismo resultado que la de
- *     referencia? (solo la ejecuto si pasa la comprobación de seguridad),
- *   - equivalencia semántica (métrica COMPLEMENTARIA, D-11): un LLM juez decide si la SQL
- *     candidata responde a la MISMA pregunta que la de referencia, con la ejecución de la
- *     candidata como precondición. Captura aciertos que la comparación de resultados
- *     descarta (columnas de más, empates, agregaciones equivalentes), a costa de fiarme
- *     de un LLM; por eso va al lado de la execution accuracy, no en su lugar.
- *
- * Los tres modos (la variable independiente del ablation):
- *   - `none`:     el contexto es el esquema ENTERO (baseline que revienta el contexto).
- *   - `vector`:   las top-K por significado, SIN expandir por claves foráneas.
- *   - `graphrag`: top-K + expansión por FK en el grafo (lo actual).
- *
- * Recibo los colaboradores inyectados (recuperar/generar/ejecutar) con implementación
- * real por defecto, para poder probar la orquestación con dobles sin Docker ni LLM.
+ * Evaluación experimental (ablation) sobre el golden set (SPEC-11). La variable
+ * independiente es el modo de recuperación (none = esquema entero, vector = top-K sin
+ * expandir, graphrag = top-K + expansión por FK). La equivalencia semántica (D-11) es
+ * complementaria a la execution accuracy, nunca la sustituye.
  */
 import { checkSqlSafety } from '../domain/sql/SqlSafetyPolicy'
 import { schemaLinkingRecall, resultsMatch, resultsContain, estimateTokens, type ResultRow } from './evaluationMetrics'
@@ -34,12 +18,10 @@ import { SchemaGraphManager } from '../infrastructure/neo4j/SchemaGraphManager'
 import { sqlDialectFor, type TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
 import type { GoldenCase, GoldenDifficulty } from './goldenSet'
 
-/** Los tres niveles de recuperación que compara el ablation. */
 export type RetrievalMode = 'none' | 'vector' | 'graphrag'
 
 export const RETRIEVAL_MODES: readonly RetrievalMode[] = ['none', 'vector', 'graphrag']
 
-/** Resultado de evaluar un caso en un modo. */
 export interface CaseResult {
   id: string
   difficulty: GoldenDifficulty
@@ -50,26 +32,22 @@ export interface CaseResult {
   contextTokenEstimate: number
   generatedSql: string
   safe: boolean
-  /** Execution accuracy estricta: mismo resultado exacto (cota inferior). */
+  /** Estricta: mismo resultado exacto (cota inferior). */
   executionMatchStrict: boolean
-  /** Execution accuracy justa: la candidata contiene el resultado de referencia (correcto o más rico). */
+  /** Justa: la candidata contiene el resultado de referencia (correcto o más rico). */
   executionMatchFair: boolean
-  /** Equivalencia semántica (D-11): un LLM juzga si candidata y referencia responden a lo mismo. Complementaria. */
+  /** Equivalencia semántica según el juez LLM (D-11). Complementaria. */
   executionMatchSemantic: boolean
-  /** Motivo del juez de equivalencia (por qué las consideró equivalentes o no). */
   equivalenceReason?: string
-  /** Motivo si algo falló (SQL insegura, error de ejecución, fallo de recuperación). */
   error?: string
 }
 
-/** Agregado por dificultad. */
 export interface DifficultyBreakdown {
   count: number
   meanRecall: number
   executionAccuracyFair: number
 }
 
-/** Informe de un modo: los casos y sus agregados. */
 export interface ModeReport {
   mode: RetrievalMode
   cases: CaseResult[]
@@ -78,26 +56,24 @@ export interface ModeReport {
     meanRecall: number
     meanContextTables: number
     meanContextTokens: number
-    /** Execution accuracy estricta (cota inferior). */
+    /** Estricta (cota inferior). */
     executionAccuracyStrict: number
-    /** Execution accuracy justa (referencia contenida en la candidata). Es el titular objetivo. */
+    /** Justa: es el titular objetivo. */
     executionAccuracyFair: number
-    /** Equivalencia semántica media (juez LLM). Complementaria: la reporto al lado, no en lugar de la justa. */
+    /** Semántica (juez LLM), complementaria: la reporto al lado de la justa, no en su lugar. */
     executionAccuracySemantic: number
   }
   byDifficulty: Record<GoldenDifficulty, DifficultyBreakdown>
 }
 
-/** Lo que la evaluación necesita del mundo exterior. */
 export interface EvaluationDependencies {
   retrieve(question: string, mode: RetrievalMode): Promise<SchemaContext>
   generate(question: string, context: SchemaContext, dialect: string): Promise<{ text: string; dialect: string }>
   runQuery(sqlText: string): Promise<ResultRow[]>
-  /** Juez de equivalencia (D-11): ¿candidata y referencia responden a la misma pregunta? */
   judgeEquivalence(question: string, referenceSql: string, candidateSql: string): Promise<{ equivalent: boolean; reason: string }>
 }
 
-/** Evalúo un caso en un modo: recupero, genero, y (si es segura) comparo la ejecución. */
+/** La SQL generada solo se ejecuta si pasa la comprobación de seguridad. */
 export async function evaluateCase(
   goldenCase: GoldenCase,
   mode: RetrievalMode,
@@ -132,8 +108,7 @@ export async function evaluateCase(
       const actual = await deps.runQuery(sql.text)
       result.executionMatchStrict = resultsMatch(expected, actual)
       result.executionMatchFair = resultsContain(expected, actual)
-      // La candidata se ejecutó sin error (precondición de la equivalencia): pregunto al
-      // juez LLM si responde a la misma pregunta que la de referencia (D-11).
+      // Que la candidata se haya ejecutado sin error es precondición del juez (D-11).
       const equivalence = await deps.judgeEquivalence(goldenCase.question, goldenCase.sql, sql.text)
       result.executionMatchSemantic = equivalence.equivalent
       result.equivalenceReason = equivalence.reason
@@ -159,7 +134,6 @@ export async function evaluateCase(
   }
 }
 
-/** Evalúo todo el golden set en un modo y agrego los resultados. */
 export async function evaluateGoldenSet(
   cases: GoldenCase[],
   mode: RetrievalMode,
@@ -173,7 +147,6 @@ export async function evaluateGoldenSet(
   return summarize(mode, results)
 }
 
-/** Compongo el informe agregado (medias globales y desglose por dificultad). */
 function summarize(mode: RetrievalMode, cases: CaseResult[]): ModeReport {
   return {
     mode,
@@ -204,7 +177,7 @@ function breakdownFor(cases: CaseResult[], difficulty: GoldenDifficulty): Diffic
   }
 }
 
-/** Media de una lista; 0 si está vacía (evito NaN en el informe). */
+/** 0 si la lista está vacía, para evitar NaN en el informe. */
 function mean(values: number[]): number {
   if (values.length === 0) {
     return 0
@@ -212,9 +185,9 @@ function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
-// --- Implementación real por defecto (wiring de infraestructura) -----------------
+// --- Implementación real por defecto -----------------
 
-/** Recuperación "solo vectorial": las candidatas por significado, sin expandir por FK. */
+/** Modo `vector`: candidatas por significado, sin expandir por FK. */
 const vectorOnlyRetrievalDependencies: SchemaRetrievalDependencies = {
   rankTablesBySimilarity: defaultSchemaRetrievalDependencies.rankTablesBySimilarity,
   async expandByForeignKeys(tableNames) {
@@ -227,10 +200,8 @@ const vectorOnlyRetrievalDependencies: SchemaRetrievalDependencies = {
   },
 }
 
-/** Construyo el contexto de esquema según el modo del ablation. */
 async function retrieveRawForMode(question: string, mode: RetrievalMode, target: TargetDatabaseConfig): Promise<SchemaContext> {
   if (mode === 'none') {
-    // Sin recuperación: el esquema entero como contexto.
     const tables = await readTargetSchema(target)
     return buildSchemaContext(tables)
   }
@@ -241,9 +212,7 @@ async function retrieveRawForMode(question: string, mode: RetrievalMode, target:
 }
 
 /**
- * El contexto del modo, quitando la descripción si el ablation de descripciones la
- * apaga (SPEC-11): reconstruyo el contexto sin `description`, así el DDL que ve el SQL
- * Agent no lleva el comentario de propósito. El efecto de las descripciones sobre el
+ * Quitar aquí la descripción solo afecta al DDL que ve el SQL Agent; su efecto sobre el
  * ranking de recuperación lo controla aparte el índice (vectorizado con/sin descripción).
  */
 async function retrieveForMode(
@@ -259,17 +228,11 @@ async function retrieveForMode(
   return buildSchemaContext(context.tables.map((table) => ({ ...table, description: null })))
 }
 
-/** Opciones del wiring real (para el ablation de descripciones, SPEC-11). */
 export interface EvaluationDependencyOptions {
-  /** Si es `false`, quito las descripciones del contexto. Por defecto se incluyen. */
+  /** `false` quita las descripciones del contexto; por defecto se incluyen. */
   includeDescriptions?: boolean
 }
 
-/**
- * Dependencias reales para la BD objetivo dada: recuperación por modo, generación con
- * el LLM configurado, y ejecución de solo lectura contra la BD. El runner la construye
- * con la BD del catálogo; los tests inyectan dobles en su lugar.
- */
 export function makeEvaluationDependencies(
   target: TargetDatabaseConfig,
   options: EvaluationDependencyOptions = {},
@@ -279,9 +242,8 @@ export function makeEvaluationDependencies(
   return {
     retrieve: (question, mode) => retrieveForMode(question, mode, target, stripDescriptions),
     generate: (question, context) => generateSql(question, context, dialect),
-    // Ejecuto contra la BD que estoy evaluando (no la de por defecto): al evaluar Nebula,
-    // executeQuery conectaba a Arcadia (`connectDefault`) y las consultas a tablas propias de
-    // Nebula fallaban con "relation does not exist". Le inyecto la conexión al `target` correcto.
+    // El default de `executeQuery` conecta a la primera BD del catálogo; aquí el
+    // `target` puede ser otra, así que le inyecto su conexión.
     runQuery: async (sqlText) =>
       (
         await executeQuery(

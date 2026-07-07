@@ -1,23 +1,11 @@
 /**
- * Caso de uso: juez de equivalencia semántica entre dos consultas SQL (SPEC-11, D-11).
- *
- * La execution accuracy compara el RESULTADO (mismo conjunto de filas). Es objetiva y
- * reproducible, pero castiga respuestas que son correctas y solo difieren en cosas que
- * no cambian la respuesta a la pregunta: empates en un top-N, orden de filas, una columna
- * descriptiva de más, una agregación equivalente escrita distinto. Y como el LLM no es
- * determinista, exigir un resultado casi idéntico infravalora los aciertos.
- *
- * Aquí pregunto a un SEGUNDO LLM si la consulta candidata responde a la MISMA pregunta que
- * la de referencia. Es una métrica COMPLEMENTARIA, no la titular: un LLM también se equivoca
- * juzgando equivalencia (la equivalencia de consultas es indecidible en general), así que la
- * reporto al lado de la execution accuracy, nunca en su lugar.
- *
- * Recibo el `IChatModel` inyectado (real por defecto) para probarlo con dobles sin red.
+ * Juez LLM de equivalencia semántica entre dos SQL (SPEC-11, D-11). Es una métrica
+ * COMPLEMENTARIA a la execution accuracy, nunca la titular: un LLM también se equivoca
+ * juzgando equivalencia, así que la reporto al lado, no en su lugar.
  */
 import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
 import type { IChatModel } from '../domain/ports/IChatModel'
 
-/** Veredicto del juez de equivalencia: si responden a la misma pregunta y por qué. */
 export interface EquivalenceVerdict {
   equivalent: boolean
   reason: string
@@ -27,12 +15,10 @@ export interface SqlEquivalenceDependencies {
   createChatModel(): IChatModel
 }
 
-/** Implementación real: el modelo del entorno (`LLM_PROVIDER`). */
 export const defaultSqlEquivalenceDependencies: SqlEquivalenceDependencies = {
   createChatModel: () => ChatModelFactory.fromEnv(),
 }
 
-/** Mensaje de sistema: qué es "equivalente" y qué diferencias hay que ignorar. */
 export function buildEquivalenceSystemPrompt(dialect: string): string {
   return [
     `Eres un evaluador experto de consultas ${dialect}. Te doy una pregunta en lenguaje natural y DOS consultas SQL: una de REFERENCIA (correcta) y una CANDIDATA.`,
@@ -54,11 +40,7 @@ export function buildEquivalenceSystemPrompt(dialect: string): string {
   ].join('\n')
 }
 
-/**
- * Interpreto la respuesta del juez como `EquivalenceVerdict`. Si no es un JSON con al
- * menos el booleano `equivalent`, doy el veredicto por NO equivalente (conservador: una
- * respuesta ilegible no debe inflar los aciertos), dejando constancia en `reason`.
- */
+/** Una respuesta ilegible cuenta como NO equivalente (conservador: no inflar aciertos). */
 export function parseEquivalenceVerdict(raw: string): EquivalenceVerdict {
   const jsonText = raw.match(/\{[\s\S]*\}/)
   if (!jsonText) {
@@ -89,11 +71,7 @@ function notInterpretable(): EquivalenceVerdict {
   return { equivalent: false, reason: 'No se pudo interpretar el veredicto de equivalencia del LLM.' }
 }
 
-/**
- * Pregunto al LLM si la candidata responde a la misma pregunta que la de referencia.
- * La ejecutabilidad de la candidata es una precondición del que llama (aquí solo comparo
- * la intención de las dos consultas), tal y como pide la métrica de SPEC-11.
- */
+/** La ejecutabilidad de la candidata es precondición del que llama (SPEC-11). */
 export async function judgeQueryEquivalence(
   question: string,
   referenceSql: string,

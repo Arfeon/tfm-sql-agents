@@ -1,10 +1,6 @@
 /**
- * Adaptador del puerto `IChatModel` para un modelo local servido por LM Studio.
- *
- * LM Studio expone una API compatible con OpenAI, así que reutilizo el mismo
- * `ChatOpenAI` apuntando su `baseURL` al servidor local. La `apiKey` es un valor
- * de relleno (LM Studio no la valida). Lo mantengo como clase separada de
- * `OpenAIChatModel` para que el factory deje explícito el patrón.
+ * Adaptador de `IChatModel` para un modelo local de LM Studio: mismo `ChatOpenAI`
+ * (API OpenAI-compatible) con la `baseURL` local. La `apiKey` es de relleno (no se valida).
  */
 import { ChatOpenAI } from '@langchain/openai'
 import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
@@ -19,7 +15,6 @@ export class LocalChatModel implements IChatModel {
     this.client = new ChatOpenAI({ apiKey, model, temperature, maxRetries: 1, configuration: { baseURL: baseUrl } })
   }
 
-  /** Creo el adaptador leyendo la configuración de LM Studio del entorno. */
   static fromEnv(): LocalChatModel {
     const baseUrl = process.env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234/v1'
     const apiKey = process.env.LMSTUDIO_API_KEY ?? 'lm-studio'

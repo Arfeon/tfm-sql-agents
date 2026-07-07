@@ -1,10 +1,6 @@
 /**
- * Test de integración del primer grafo LangGraph (SPEC-01).
- *
- * Invoca el grafo con una pregunta que debería disparar la tool de estado y
- * comprueba que la conversación completa y responde. Es opt-in (solo
- * `npm run test:integration`) y se salta si faltan las credenciales del
- * proveedor activo, igual que el smoke test del modelo.
+ * El grafo conversacional con el LLM real: la pregunta dispara la tool y responde.
+ * Opt-in; se salta si faltan credenciales.
  */
 import { describe, it, expect } from 'vitest'
 import { createConversationGraph, askGraph } from '../../src/graphsql/graph/agentGraph'

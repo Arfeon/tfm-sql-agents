@@ -1,9 +1,6 @@
 /**
- * Factory del modelo LLM.
- *
- * Elijo el proveedor (ver `LlmProvider`) y creo solo ese adaptador; cada uno lee
- * su propia configuración del entorno. Así no construyo modelos que no voy a
- * usar. Los agentes piden un `IChatModel` y no saben qué hay por debajo.
+ * Factory del modelo LLM: construye solo el adaptador del proveedor elegido,
+ * y cada adaptador lee su propia configuración del entorno.
  */
 import type { ChatOpenAI } from '@langchain/openai'
 import type { IChatModel } from '../../domain/ports/IChatModel'
@@ -12,27 +9,20 @@ import { OpenAIChatModel } from './OpenAIChatModel'
 import { LocalChatModel } from './LocalChatModel'
 
 export class ChatModelFactory {
-  /** Creo el adaptador del proveedor indicado. */
   static create(provider: LlmProvider): IChatModel {
     return ChatModelFactory.buildAdapter(provider)
   }
 
-  /** Creo el adaptador del proveedor configurado en `LLM_PROVIDER`. */
   static fromEnv(): IChatModel {
     const provider = (process.env.LLM_PROVIDER ?? LlmProvider.OpenAI) as LlmProvider
     return ChatModelFactory.create(provider)
   }
 
-  /**
-   * Devuelvo el modelo LangChain del proveedor, para los grafos/agentes que
-   * necesitan tool-calling y mensajes con estado (el puerto `IChatModel` solo
-   * da texto). Reutilizo la misma selección y config de entorno.
-   */
+  /** Para los grafos/agentes que necesitan tool-calling: el puerto `IChatModel` solo da texto. */
   static createLangChainModel(provider: LlmProvider): ChatOpenAI {
     return ChatModelFactory.buildAdapter(provider).langChainModel
   }
 
-  /** Elige y construye solo el adaptador del proveedor indicado (sin inicializar los demás). */
   private static buildAdapter(provider: LlmProvider): OpenAIChatModel | LocalChatModel {
     switch (provider) {
       case LlmProvider.OpenAI:
