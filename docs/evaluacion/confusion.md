@@ -32,3 +32,10 @@ con y sin descripciones (la descripción mapea las columnas, como documentaría 
 > descripciones, cuánto rescatan las descripciones, y si el grafo salva las multi-hop (C-05, C-06)
 > por la clave foránea, como hizo con t_042. En "sin recuperación" el esquema entero viaja igual;
 > lo que cambia es si el DDL lleva el comentario de descripción.
+>
+> Reproducido con el modelo local (Qwen2.5-Coder-14B, 100% offline): el patrón es idéntico y aún
+> más marcado. El recall es el mismo (la recuperación no depende del modelo: con descripciones
+> 100%/83%/100%, sin ellas 100%/8%/17%), GraphRAG+descripciones vuelve a dar 83% de equivalencia,
+> y el esquema entero se queda en 0% incluso CON descripciones (frente al 17% de gpt-5-mini): cuanto
+> más pequeño el modelo, más depende de la recuperación + descripciones para no ahogarse. La
+> conclusión —la recuperación es lo que hace usable la documentación— se sostiene en los dos modelos.

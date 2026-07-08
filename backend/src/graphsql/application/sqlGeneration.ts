@@ -3,6 +3,7 @@
  * se inyecta en el prompt para que la sintaxis salga en el motor que toque.
  */
 import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
+import { loadAgentPrompt } from '../infrastructure/config/agentPrompts'
 import type { IChatModel } from '../domain/ports/IChatModel'
 import type { SchemaContext } from '../domain/schema/SchemaContext'
 import type { SqlStatement } from '../domain/sql/SqlStatement'
@@ -25,16 +26,7 @@ export interface Revision {
 }
 
 export function buildSqlSystemPrompt(dialect: string): string {
-  return [
-    `Eres un experto en SQL para ${dialect}. Generas una única consulta de SOLO LECTURA que responde a la pregunta, usando solo el esquema que se te da.`,
-    'Reglas:',
-    '- Usa exactamente los nombres de tablas y columnas del esquema; no inventes ni traduzcas identificadores.',
-    `- Escribe la consulta en la sintaxis de ${dialect}.`,
-    '- Solo lectura: la sentencia empieza por SELECT o WITH; nunca INSERT, UPDATE, DELETE ni DDL.',
-    '- GROUP BY coherente con lo que agregas; añade el límite del dialecto (LIMIT/TOP) cuando la pregunta pida un "top N".',
-    '- Si la pregunta no se puede responder con esas tablas, dilo en vez de inventar columnas.',
-    'Devuelve solo la sentencia SQL, sin explicaciones ni vallas de código.',
-  ].join('\n')
+  return loadAgentPrompt('sql-generator', { dialect })
 }
 
 export function cleanSql(raw: string): string {

@@ -76,6 +76,17 @@ function normalizeValue(value: unknown): string {
   return asText
 }
 
+/**
+ * Criterio único de equivalencia: la métrica objetiva manda. El juez LLM SOLO puede
+ * RESCATAR un caso que la comparación de datos descarta por un artefacto (redondeo,
+ * columna de más), nunca DESCARTAR uno que la ejecución ya da por bueno. Así la escala
+ * queda monótona (estricta ⊆ justa ⊆ equivalente) y el juez, que a veces alucina una
+ * divergencia inexistente, no puede bajar la métrica por debajo de la evidencia real.
+ */
+export function isSemanticPass(matchFair: boolean, judgeEquivalent: boolean): boolean {
+  return matchFair || judgeEquivalent
+}
+
 /** Proxy rústico: ~4 caracteres por token. */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4)

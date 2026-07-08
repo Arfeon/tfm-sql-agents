@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import {
   judgeQueryEquivalence,
   parseEquivalenceVerdict,
+  formatResultForJudge,
   type SqlEquivalenceDependencies,
 } from '../../src/graphsql/application/sqlEquivalence'
 import type { ChatMessage } from '../../src/graphsql/domain/ports/IChatModel'
@@ -51,6 +52,7 @@ describe('judgeQueryEquivalence', () => {
       'SELECT COUNT(*) FROM game',
       'SELECT COUNT(*) AS total FROM game',
       'PostgreSQL',
+      undefined,
       modelReturning('{"equivalent": true, "reason": "misma cuenta"}'),
     )
     expect(verdict.equivalent).toBe(true)
@@ -63,6 +65,7 @@ describe('judgeQueryEquivalence', () => {
       'SELECT r.name, COUNT(*) FROM customer c JOIN region r USING (region_id) GROUP BY r.name',
       'SELECT region_id, COUNT(*) FROM customer GROUP BY region_id',
       'PostgreSQL',
+      undefined,
       modelReturning('{"equivalent": false, "reason": "una agrupa por nombre y la otra por id"}', (m) => (seen = m)),
     )
     const userContent = seen.find((m) => m.role === 'user')?.content ?? ''
@@ -70,5 +73,36 @@ describe('judgeQueryEquivalence', () => {
     expect(userContent).toMatch(/REFERENCIA/)
     expect(userContent).toMatch(/CANDIDATA/)
     expect(userContent).toMatch(/region_id/)
+  })
+
+  it('le pasa al modelo los resultados ejecutados cuando se los doy', async () => {
+    let seen: ChatMessage[] = []
+    await judgeQueryEquivalence(
+      '¿cuántos juegos?',
+      'SELECT COUNT(*) FROM game',
+      'SELECT COUNT(*) AS total FROM game',
+      'PostgreSQL',
+      { reference: [{ count: 42 }], candidate: [{ total: 42 }] },
+      modelReturning('{"equivalent": true, "reason": "mismo resultado"}', (m) => (seen = m)),
+    )
+    const userContent = seen.find((m) => m.role === 'user')?.content ?? ''
+    expect(userContent).toMatch(/Resultado ejecutado de la REFERENCIA/)
+    expect(userContent).toMatch(/Resultado ejecutado de la CANDIDATA/)
+    expect(userContent).toMatch(/42/)
+  })
+})
+
+describe('formatResultForJudge', () => {
+  it('muestra el conteo total y recorta a las filas de muestra', () => {
+    const rows = Array.from({ length: 25 }, (_, i) => ({ id: i }))
+    const formatted = formatResultForJudge('CANDIDATA', rows)
+    expect(formatted).toMatch(/primeras 20 de 25 filas/)
+    expect(formatted).not.toMatch(/"id":24/)
+  })
+
+  it('con pocas filas indica el total sin recortar', () => {
+    const formatted = formatResultForJudge('REFERENCIA', [{ id: 1 }])
+    expect(formatted).toMatch(/1 filas in total|1 filas en total/)
+    expect(formatted).toMatch(/"id":1/)
   })
 })

@@ -1,0 +1,1364 @@
+[
+  {
+    "name": "arcadia",
+    "tableCount": 17,
+    "modes": [
+      {
+        "mode": "none",
+        "cases": [
+          {
+            "id": "G-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT COUNT(*) AS total_games FROM game;\n",
+            "generatedSql": "SELECT COUNT(*) FROM game;"
+          },
+          {
+            "id": "G-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT name, monthly_price\nFROM subscription_plan\nORDER BY monthly_price;\n",
+            "generatedSql": "SELECT name, monthly_price \nFROM subscription_plan;"
+          },
+          {
+            "id": "G-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name AS region, COUNT(c.customer_id) AS customers\nFROM region r\nLEFT JOIN customer c ON c.region_id = r.region_id\nGROUP BY r.name\nORDER BY customers DESC;\n",
+            "generatedSql": "SELECT region.name, COUNT(customer.customer_id) AS customer_count\nFROM customer\nJOIN region ON customer.region_id = region.region_id\nGROUP BY region.name;"
+          },
+          {
+            "id": "G-05",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title\nFROM game\nWHERE age_rating = 'M'\nORDER BY title;\n",
+            "generatedSql": "SELECT title FROM game WHERE age_rating = 'M';"
+          },
+          {
+            "id": "G-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_minutes\nFROM play_session ps\nJOIN game g ON g.game_id = ps.game_id\nGROUP BY g.title\nORDER BY total_minutes DESC\nLIMIT 10;\n",
+            "generatedSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_playtime\nFROM play_session ps\nJOIN game g ON ps.game_id = g.game_id\nGROUP BY g.game_id, g.title\nORDER BY total_playtime DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-07",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "error": "column g.name does not exist",
+            "referenceSql": "SELECT ge.name AS genre, ROUND(AVG(r.score), 2) AS avg_score\nFROM genre ge\nLEFT JOIN game_genre gg ON gg.genre_id = ge.genre_id\nLEFT JOIN rating r ON r.game_id = gg.game_id\nGROUP BY ge.name\nORDER BY avg_score DESC NULLS LAST;\n",
+            "generatedSql": "SELECT g.name AS genre_name, AVG(r.score) AS average_rating\nFROM rating r\nJOIN game g ON r.game_id = g.game_id\nJOIN game_genre gg ON g.game_id = gg.game_id\nJOIN genre gg2 ON gg.genre_id = gg2.genre_id\nGROUP BY g.name;"
+          },
+          {
+            "id": "G-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT SUM(amount) AS dlc_revenue_2025\nFROM purchase\nWHERE purchase_date >= DATE '2025-01-01'\n  AND purchase_date <  DATE '2026-01-01';\n",
+            "generatedSql": "SELECT SUM(amount) AS total_revenue\nFROM purchase\nWHERE EXTRACT(YEAR FROM purchase_date) = 2025;"
+          },
+          {
+            "id": "G-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT sp.name AS plan, COUNT(s.plan_id) AS active_subscriptions\nFROM subscription_plan sp\nLEFT JOIN subscription s ON s.plan_id = sp.plan_id AND s.status = 'active'\nGROUP BY sp.name\nORDER BY active_subscriptions DESC;\n",
+            "generatedSql": "SELECT sp.name AS plan_name, COUNT(s.subscription_id) AS active_subscriptions\nFROM subscription s\nJOIN subscription_plan sp ON s.plan_id = sp.plan_id\nWHERE s.status = 'active'\nGROUP BY sp.plan_id, sp.name;"
+          },
+          {
+            "id": "G-10",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.name AS developer, COUNT(*) AS games_developed\nFROM game g\nJOIN company c ON c.company_id = g.developer_company_id\nGROUP BY c.name\nORDER BY games_developed DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT c.name AS developer_name, COUNT(g.game_id) AS games_count\nFROM company c\nJOIN game g ON c.company_id = g.developer_company_id\nGROUP BY c.company_id, c.name\nORDER BY games_count DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, MAX(cs.concurrent_players) AS peak_concurrent\nFROM concurrent_snapshot cs\nJOIN game g ON g.game_id = cs.game_id\nGROUP BY g.title\nORDER BY peak_concurrent DESC\nLIMIT 10;\n",
+            "generatedSql": "SELECT g.title AS game_title, MAX(cs.concurrent_players) AS max_concurrent_players\nFROM game g\nJOIN concurrent_snapshot cs ON g.game_id = cs.game_id\nGROUP BY g.game_id\nORDER BY max_concurrent_players DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-12",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT p.name AS platform, ROUND(AVG(ps.duration_minutes), 1) AS avg_minutes\nFROM platform p\nLEFT JOIN play_session ps ON ps.platform_id = p.platform_id\nGROUP BY p.name\nORDER BY avg_minutes DESC NULLS LAST;\n",
+            "generatedSql": "SELECT platform.name AS platform_name, AVG(play_session.duration_minutes) AS average_duration\nFROM play_session\nJOIN platform ON play_session.platform_id = platform.platform_id\nGROUP BY platform.name;"
+          },
+          {
+            "id": "G-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title,\n       dev.name AS developer,\n       pub.name AS publisher\nFROM game g\nJOIN company dev ON dev.company_id = g.developer_company_id\nJOIN company pub ON pub.company_id = g.publisher_company_id\nWHERE g.developer_company_id <> g.publisher_company_id\nORDER BY g.title;\n",
+            "generatedSql": "SELECT g.title \nFROM game g\nJOIN company d ON g.developer_company_id = d.company_id\nJOIN company p ON g.publisher_company_id = p.company_id\nWHERE d.name <> p.name;"
+          },
+          {
+            "id": "G-14",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT c.name\nFROM company c\nJOIN game gp ON gp.publisher_company_id = c.company_id\nWHERE c.company_id NOT IN (\n    SELECT developer_company_id FROM game\n)\nORDER BY c.name;\n",
+            "generatedSql": "SELECT c.name\nFROM company c\nJOIN game g ON c.company_id = g.publisher_company_id\nLEFT JOIN game d ON c.company_id = d.developer_company_id\nWHERE d.game_id IS NULL;"
+          },
+          {
+            "id": "G-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT SUM(monthly_price) AS mrr\nFROM subscription\nWHERE status = 'active';\n",
+            "generatedSql": "SELECT SUM(monthly_price) AS current_mrr\nFROM subscription\nWHERE status = 'active';"
+          },
+          {
+            "id": "G-16",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT f.name AS franchise, SUM(p.amount) AS dlc_revenue\nFROM purchase p\nJOIN dlc d ON d.dlc_id = p.dlc_id\nJOIN game g ON g.game_id = d.game_id\nJOIN franchise f ON f.franchise_id = g.franchise_id\nGROUP BY f.name\nORDER BY dlc_revenue DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT f.name AS franchise_name, SUM(p.amount) AS total_revenue\nFROM franchise f\nJOIN game g ON f.franchise_id = g.franchise_id\nJOIN dlc d ON g.game_id = d.game_id\nJOIN purchase p ON d.dlc_id = p.dlc_id\nGROUP BY f.franchise_id, f.name\nORDER BY total_revenue DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-17",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "error": "operator does not exist: integer < interval",
+            "referenceSql": "SELECT DISTINCT c.customer_id, c.username\nFROM subscription s\nJOIN customer c ON c.customer_id = s.customer_id\nWHERE s.status = 'cancelled'\n  AND s.end_date IS NOT NULL\n  AND (s.end_date - s.start_date) < 30\nORDER BY c.customer_id;\n",
+            "generatedSql": "SELECT c.username\nFROM customer c\nJOIN subscription s ON c.customer_id = s.customer_id\nWHERE s.status = 'Cancelled'\nAND (s.end_date - c.signup_date) < INTERVAL '30 days';"
+          },
+          {
+            "id": "G-18",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.name AS developer, COUNT(DISTINCT gg.genre_id) AS distinct_genres\nFROM game g\nJOIN company c ON c.company_id = g.developer_company_id\nJOIN game_genre gg ON gg.game_id = g.game_id\nGROUP BY c.name\nHAVING COUNT(DISTINCT gg.genre_id) > 3\nORDER BY distinct_genres DESC;\n",
+            "generatedSql": "SELECT c.name AS developer_name\nFROM company c\nJOIN game g ON c.company_id = g.developer_company_id\nJOIN game_genre gg ON g.game_id = gg.game_id\nGROUP BY c.name\nHAVING COUNT(DISTINCT gg.genre_id) > 3;"
+          },
+          {
+            "id": "G-19",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT f.name AS franchise,\n       ROUND(AVG(r.score), 2) AS avg_score,\n       COUNT(*) AS n_ratings\nFROM rating r\nJOIN game g ON g.game_id = r.game_id\nJOIN franchise f ON f.franchise_id = g.franchise_id\nGROUP BY f.name\nHAVING COUNT(*) >= 50\nORDER BY avg_score DESC\nLIMIT 5;\n",
+            "generatedSql": "WITH avg_rating AS (\n    SELECT \n        f.franchise_id,\n        AVG(r.score) AS average_score,\n        COUNT(*) AS rating_count\n    FROM \n        franchise f\n    JOIN \n        game g ON f.franchise_id = g.franchise_id\n    JOIN \n        rating r ON g.game_id = r.game_id\n    GROUP BY \n        f.franchise_id\n    HAVING \n        COUNT(*) >= 50\n)\nSELECT \n    avg_rating.average_score,\n    f.name AS franchise_name\nFROM \n    avg_rating\nJOIN \n    franchise f ON avg_rating.franchise_id = f.franchise_id\nORDER BY \n    avg_rating.average_score DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-20",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name AS region, COALESCE(SUM(p.amount), 0) AS dlc_revenue\nFROM region r\nLEFT JOIN customer c ON c.region_id = r.region_id\nLEFT JOIN purchase p ON p.customer_id = c.customer_id\nGROUP BY r.name\nORDER BY dlc_revenue DESC;\n",
+            "generatedSql": "SELECT \n    r.name AS region_name,\n    SUM(p.amount) AS total_revenue\nFROM \n    purchase p\nJOIN \n    customer c ON p.customer_id = c.customer_id\nJOIN \n    region r ON c.region_id = r.region_id\nGROUP BY \n    r.region_id, r.name;"
+          },
+          {
+            "id": "G-21",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "error": "column g.name does not exist",
+            "referenceSql": "SELECT ge.name AS genre, MAX(cs.concurrent_players) AS peak_concurrent\nFROM concurrent_snapshot cs\nJOIN game g ON g.game_id = cs.game_id\nJOIN game_genre gg ON gg.game_id = g.game_id\nJOIN genre ge ON ge.genre_id = gg.genre_id\nGROUP BY ge.name\nORDER BY peak_concurrent DESC\nLIMIT 1;\n",
+            "generatedSql": "SELECT g.name AS genre_name, MAX(cs.concurrent_players) AS max_concurrent_players\nFROM concurrent_snapshot cs\nJOIN game g ON cs.game_id = g.game_id\nJOIN game_genre gg ON g.game_id = gg.game_id\nGROUP BY g.name\nORDER BY max_concurrent_players DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-22",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, COUNT(*) AS dlc_count\nFROM dlc d\nJOIN game g ON g.game_id = d.game_id\nGROUP BY g.title\nORDER BY dlc_count DESC\nLIMIT 1;\n",
+            "generatedSql": "SELECT g.title \nFROM game g\nJOIN dlc d ON g.game_id = d.game_id\nGROUP BY g.game_id, g.title\nORDER BY COUNT(d.dlc_id) DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-23",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'active') / COUNT(*), 1)\n         AS active_pct_2024\nFROM subscription\nWHERE start_date >= DATE '2024-01-01'\n  AND start_date <  DATE '2025-01-01';\n",
+            "generatedSql": "SELECT \n    (SUM(CASE WHEN end_date IS NULL THEN 1 ELSE 0 END) * 100.0 / COUNT(*)) AS percentage_active_subscriptions\nFROM \n    subscription\nWHERE \n    EXTRACT(YEAR FROM start_date) = 2024;"
+          },
+          {
+            "id": "G-24",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title\nFROM game g\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM game_platform gp\n    JOIN platform p ON p.platform_id = gp.platform_id\n    WHERE gp.game_id = g.game_id\n      AND p.kind = 'console'\n)\nORDER BY g.title;\n",
+            "generatedSql": "SELECT title \nFROM game \nWHERE game_id NOT IN (\n    SELECT game_id \n    FROM game_platform\n);"
+          },
+          {
+            "id": "G-25",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.customer_id, c.username, COUNT(*) AS wishlist_games\nFROM t_042 w\nJOIN customer c ON c.customer_id = w.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY wishlist_games DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT \n    c.username, \n    COUNT(t.id) AS favorite_game_count\nFROM \n    t_042 t\nJOIN \n    customer c ON t.customer_id = c.customer_id\nGROUP BY \n    c.username\nORDER BY \n    favorite_game_count DESC\nLIMIT 5;"
+          }
+        ]
+      },
+      {
+        "mode": "vector",
+        "cases": [
+          {
+            "id": "G-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT COUNT(*) AS total_games FROM game;\n",
+            "generatedSql": "SELECT COUNT(*) FROM game;"
+          },
+          {
+            "id": "G-02",
+            "difficulty": "easy",
+            "recall": 0,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT title\nFROM game\nJOIN (\n    SELECT game_id, MAX(price) AS max_price\n    FROM dlc\n    GROUP BY game_id\n) d ON game.game_id = d.game_id\nORDER BY d.max_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT name, monthly_price\nFROM subscription_plan\nORDER BY monthly_price;\n",
+            "generatedSql": "SELECT name, monthly_price FROM subscription_plan;"
+          },
+          {
+            "id": "G-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name AS region, COUNT(c.customer_id) AS customers\nFROM region r\nLEFT JOIN customer c ON c.region_id = r.region_id\nGROUP BY r.name\nORDER BY customers DESC;\n",
+            "generatedSql": "SELECT r.name AS region_name, COUNT(c.customer_id) AS customer_count\nFROM customer c\nJOIN region r ON c.region_id = r.region_id\nGROUP BY r.name;"
+          },
+          {
+            "id": "G-05",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title\nFROM game\nWHERE age_rating = 'M'\nORDER BY title;\n",
+            "generatedSql": "SELECT title FROM game WHERE age_rating = 'M';"
+          },
+          {
+            "id": "G-06",
+            "difficulty": "medium",
+            "recall": 0.5,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_minutes\nFROM play_session ps\nJOIN game g ON g.game_id = ps.game_id\nGROUP BY g.title\nORDER BY total_minutes DESC\nLIMIT 10;\n",
+            "generatedSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_playtime\nFROM play_session ps\nJOIN game g ON ps.game_id = g.game_id\nGROUP BY g.game_id, g.title\nORDER BY total_playtime DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-07",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "error": "column g.name does not exist",
+            "referenceSql": "SELECT ge.name AS genre, ROUND(AVG(r.score), 2) AS avg_score\nFROM genre ge\nLEFT JOIN game_genre gg ON gg.genre_id = ge.genre_id\nLEFT JOIN rating r ON r.game_id = gg.game_id\nGROUP BY ge.name\nORDER BY avg_score DESC NULLS LAST;\n",
+            "generatedSql": "SELECT g.name AS genre, AVG(r.score) AS average_rating\nFROM rating r\nJOIN game g ON r.game_id = g.game_id\nGROUP BY g.name;"
+          },
+          {
+            "id": "G-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT SUM(amount) AS dlc_revenue_2025\nFROM purchase\nWHERE purchase_date >= DATE '2025-01-01'\n  AND purchase_date <  DATE '2026-01-01';\n",
+            "generatedSql": "SELECT SUM(amount) AS total_revenue\nFROM purchase\nWHERE EXTRACT(YEAR FROM purchase_date) = 2025;"
+          },
+          {
+            "id": "G-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT sp.name AS plan, COUNT(s.plan_id) AS active_subscriptions\nFROM subscription_plan sp\nLEFT JOIN subscription s ON s.plan_id = sp.plan_id AND s.status = 'active'\nGROUP BY sp.name\nORDER BY active_subscriptions DESC;\n",
+            "generatedSql": "SELECT \n    sp.name AS plan_name,\n    COUNT(s.subscription_id) AS active_subscriptions\nFROM \n    subscription_plan sp\nJOIN \n    subscription s ON sp.plan_id = s.plan_id\nWHERE \n    s.status = 'active'\nGROUP BY \n    sp.name;"
+          },
+          {
+            "id": "G-10",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.name AS developer, COUNT(*) AS games_developed\nFROM game g\nJOIN company c ON c.company_id = g.developer_company_id\nGROUP BY c.name\nORDER BY games_developed DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT c.name AS developer_name, COUNT(g.game_id) AS game_count\nFROM company c\nJOIN game g ON c.company_id = g.developer_company_id\nGROUP BY c.name\nORDER BY game_count DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, MAX(cs.concurrent_players) AS peak_concurrent\nFROM concurrent_snapshot cs\nJOIN game g ON g.game_id = cs.game_id\nGROUP BY g.title\nORDER BY peak_concurrent DESC\nLIMIT 10;\n",
+            "generatedSql": "WITH max_concurrent_players AS (\n    SELECT game_id, MAX(concurrent_players) AS peak_players\n    FROM concurrent_snapshot\n    GROUP BY game_id\n)\nSELECT g.title, mcp.peak_players\nFROM max_concurrent_players mcp\nJOIN game g ON mcp.game_id = g.game_id\nORDER BY mcp.peak_players DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-12",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT p.name AS platform, ROUND(AVG(ps.duration_minutes), 1) AS avg_minutes\nFROM platform p\nLEFT JOIN play_session ps ON ps.platform_id = p.platform_id\nGROUP BY p.name\nORDER BY avg_minutes DESC NULLS LAST;\n",
+            "generatedSql": "SELECT p.name AS platform_name, AVG(ps.duration_minutes) AS average_duration\nFROM play_session ps\nJOIN platform p ON ps.platform_id = p.platform_id\nGROUP BY p.name;"
+          },
+          {
+            "id": "G-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title,\n       dev.name AS developer,\n       pub.name AS publisher\nFROM game g\nJOIN company dev ON dev.company_id = g.developer_company_id\nJOIN company pub ON pub.company_id = g.publisher_company_id\nWHERE g.developer_company_id <> g.publisher_company_id\nORDER BY g.title;\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN company p ON g.publisher_company_id = p.company_id\nJOIN company d ON g.developer_company_id = d.company_id\nWHERE p.name <> d.name;"
+          },
+          {
+            "id": "G-14",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT c.name\nFROM company c\nJOIN game gp ON gp.publisher_company_id = c.company_id\nWHERE c.company_id NOT IN (\n    SELECT developer_company_id FROM game\n)\nORDER BY c.name;\n",
+            "generatedSql": "SELECT c.name\nFROM company c\nJOIN game g ON c.company_id = g.publisher_company_id\nWHERE c.company_id NOT IN (\n  SELECT developer_company_id\n  FROM game\n);"
+          },
+          {
+            "id": "G-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT SUM(monthly_price) AS mrr\nFROM subscription\nWHERE status = 'active';\n",
+            "generatedSql": "SELECT SUM(monthly_price) AS mrr\nFROM subscription\nWHERE status = 'active';"
+          },
+          {
+            "id": "G-16",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT f.name AS franchise, SUM(p.amount) AS dlc_revenue\nFROM purchase p\nJOIN dlc d ON d.dlc_id = p.dlc_id\nJOIN game g ON g.game_id = d.game_id\nJOIN franchise f ON f.franchise_id = g.franchise_id\nGROUP BY f.name\nORDER BY dlc_revenue DESC\nLIMIT 5;\n",
+            "generatedSql": "WITH dlc_sales AS (\n    SELECT \n        f.name AS franchise_name,\n        SUM(p.amount) AS total_revenue\n    FROM \n        dlc d\n    JOIN \n        purchase p ON d.dlc_id = p.dlc_id\n    JOIN \n        game g ON d.game_id = g.game_id\n    JOIN \n        franchise f ON g.franchise_id = f.franchise_id\n    GROUP BY \n        f.name\n)\nSELECT \n    franchise_name,\n    total_revenue\nFROM \n    dlc_sales\nORDER BY \n    total_revenue DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-17",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "error": "operator does not exist: integer < interval",
+            "referenceSql": "SELECT DISTINCT c.customer_id, c.username\nFROM subscription s\nJOIN customer c ON c.customer_id = s.customer_id\nWHERE s.status = 'cancelled'\n  AND s.end_date IS NOT NULL\n  AND (s.end_date - s.start_date) < 30\nORDER BY c.customer_id;\n",
+            "generatedSql": "SELECT c.username\nFROM customer c\nJOIN subscription s ON c.customer_id = s.customer_id\nWHERE s.status = 'cancelled'\nAND (s.end_date - s.start_date) < INTERVAL '30 days';"
+          },
+          {
+            "id": "G-18",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.name AS developer, COUNT(DISTINCT gg.genre_id) AS distinct_genres\nFROM game g\nJOIN company c ON c.company_id = g.developer_company_id\nJOIN game_genre gg ON gg.game_id = g.game_id\nGROUP BY c.name\nHAVING COUNT(DISTINCT gg.genre_id) > 3\nORDER BY distinct_genres DESC;\n",
+            "generatedSql": "SELECT c.name AS developer_name\nFROM company c\nJOIN game g ON c.company_id = g.developer_company_id\nJOIN game_genre gg ON g.game_id = gg.game_id\nGROUP BY c.name\nHAVING COUNT(DISTINCT gg.genre_id) > 3;"
+          },
+          {
+            "id": "G-19",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT f.name AS franchise,\n       ROUND(AVG(r.score), 2) AS avg_score,\n       COUNT(*) AS n_ratings\nFROM rating r\nJOIN game g ON g.game_id = r.game_id\nJOIN franchise f ON f.franchise_id = g.franchise_id\nGROUP BY f.name\nHAVING COUNT(*) >= 50\nORDER BY avg_score DESC\nLIMIT 5;\n",
+            "generatedSql": "WITH avg_ratings AS (\n    SELECT g.franchise_id, AVG(r.score) AS avg_score, COUNT(*) AS rating_count\n    FROM game g\n    JOIN rating r ON g.game_id = r.game_id\n    GROUP BY g.franchise_id\n    HAVING COUNT(*) >= 50\n)\nSELECT f.name, ar.avg_score\nFROM avg_ratings ar\nJOIN franchise f ON ar.franchise_id = f.franchise_id\nORDER BY ar.avg_score DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-20",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name AS region, COALESCE(SUM(p.amount), 0) AS dlc_revenue\nFROM region r\nLEFT JOIN customer c ON c.region_id = r.region_id\nLEFT JOIN purchase p ON p.customer_id = c.customer_id\nGROUP BY r.name\nORDER BY dlc_revenue DESC;\n",
+            "generatedSql": "SELECT r.name AS region, SUM(p.amount) AS total_income\nFROM purchase p\nJOIN customer c ON p.customer_id = c.customer_id\nJOIN region r ON c.region_id = r.region_id\nGROUP BY r.name;"
+          },
+          {
+            "id": "G-21",
+            "difficulty": "hard",
+            "recall": 0.75,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT ge.name AS genre, MAX(cs.concurrent_players) AS peak_concurrent\nFROM concurrent_snapshot cs\nJOIN game g ON g.game_id = cs.game_id\nJOIN game_genre gg ON gg.game_id = g.game_id\nJOIN genre ge ON ge.genre_id = gg.genre_id\nGROUP BY ge.name\nORDER BY peak_concurrent DESC\nLIMIT 1;\n",
+            "generatedSql": "SELECT g.title AS genre_title, MAX(cs.concurrent_players) AS max_concurrent_players\nFROM concurrent_snapshot cs\nJOIN game g ON cs.game_id = g.game_id\nGROUP BY g.title\nORDER BY max_concurrent_players DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-22",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, COUNT(*) AS dlc_count\nFROM dlc d\nJOIN game g ON g.game_id = d.game_id\nGROUP BY g.title\nORDER BY dlc_count DESC\nLIMIT 1;\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN dlc d ON g.game_id = d.game_id\nGROUP BY g.title\nORDER BY COUNT(d.dlc_id) DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-23",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'active') / COUNT(*), 1)\n         AS active_pct_2024\nFROM subscription\nWHERE start_date >= DATE '2024-01-01'\n  AND start_date <  DATE '2025-01-01';\n",
+            "generatedSql": "SELECT \n    (COUNT(CASE WHEN status = 'active' THEN subscription_id END) * 100.0 / COUNT(subscription_id)) AS active_percentage\nFROM \n    subscription\nWHERE \n    EXTRACT(YEAR FROM start_date) = 2024;"
+          },
+          {
+            "id": "G-24",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title\nFROM game g\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM game_platform gp\n    JOIN platform p ON p.platform_id = gp.platform_id\n    WHERE gp.game_id = g.game_id\n      AND p.kind = 'console'\n)\nORDER BY g.title;\n",
+            "generatedSql": "SELECT title \nFROM game \nWHERE game_id NOT IN (\n  SELECT game_id \n  FROM game_platform\n);"
+          },
+          {
+            "id": "G-25",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.customer_id, c.username, COUNT(*) AS wishlist_games\nFROM t_042 w\nJOIN customer c ON c.customer_id = w.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY wishlist_games DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT c.username, COUNT(w.game_id) AS games_in_wishlist\nFROM t_042 w\nJOIN customer c ON w.customer_id = c.customer_id\nGROUP BY c.username\nORDER BY games_in_wishlist DESC\nLIMIT 5;"
+          }
+        ]
+      },
+      {
+        "mode": "graphrag",
+        "cases": [
+          {
+            "id": "G-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT COUNT(*) AS total_games FROM game;\n",
+            "generatedSql": "SELECT COUNT(*) AS total_games FROM game;"
+          },
+          {
+            "id": "G-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT title\nFROM game\nORDER BY base_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT name, monthly_price\nFROM subscription_plan\nORDER BY monthly_price;\n",
+            "generatedSql": "SELECT name, monthly_price FROM subscription_plan;"
+          },
+          {
+            "id": "G-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name AS region, COUNT(c.customer_id) AS customers\nFROM region r\nLEFT JOIN customer c ON c.region_id = r.region_id\nGROUP BY r.name\nORDER BY customers DESC;\n",
+            "generatedSql": "SELECT r.name AS region_name, COUNT(c.customer_id) AS num_customers\nFROM customer c\nJOIN region r ON c.region_id = r.region_id\nGROUP BY r.name;"
+          },
+          {
+            "id": "G-05",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title\nFROM game\nWHERE age_rating = 'M'\nORDER BY title;\n",
+            "generatedSql": "SELECT title FROM game WHERE age_rating = 'M';"
+          },
+          {
+            "id": "G-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_minutes\nFROM play_session ps\nJOIN game g ON g.game_id = ps.game_id\nGROUP BY g.title\nORDER BY total_minutes DESC\nLIMIT 10;\n",
+            "generatedSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_duration\nFROM game g\nJOIN play_session ps ON g.game_id = ps.game_id\nGROUP BY g.title\nORDER BY total_duration DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-07",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT ge.name AS genre, ROUND(AVG(r.score), 2) AS avg_score\nFROM genre ge\nLEFT JOIN game_genre gg ON gg.genre_id = ge.genre_id\nLEFT JOIN rating r ON r.game_id = gg.game_id\nGROUP BY ge.name\nORDER BY avg_score DESC NULLS LAST;\n",
+            "generatedSql": "SELECT genre.name, AVG(rating.score) AS average_rating\nFROM rating\nJOIN game ON rating.game_id = game.game_id\nJOIN game_genre ON game.game_id = game_genre.game_id\nJOIN genre ON game_genre.genre_id = genre.genre_id\nGROUP BY genre.name;"
+          },
+          {
+            "id": "G-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT SUM(amount) AS dlc_revenue_2025\nFROM purchase\nWHERE purchase_date >= DATE '2025-01-01'\n  AND purchase_date <  DATE '2026-01-01';\n",
+            "generatedSql": "SELECT SUM(amount) AS total_revenue\nFROM purchase\nWHERE EXTRACT(YEAR FROM purchase_date) = 2025;"
+          },
+          {
+            "id": "G-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT sp.name AS plan, COUNT(s.plan_id) AS active_subscriptions\nFROM subscription_plan sp\nLEFT JOIN subscription s ON s.plan_id = sp.plan_id AND s.status = 'active'\nGROUP BY sp.name\nORDER BY active_subscriptions DESC;\n",
+            "generatedSql": "SELECT \n    sp.name AS plan_name, \n    COUNT(s.subscription_id) AS active_subscriptions\nFROM \n    subscription_plan sp\nJOIN \n    subscription s ON sp.plan_id = s.plan_id\nWHERE \n    s.status = 'active'\nGROUP BY \n    sp.name;"
+          },
+          {
+            "id": "G-10",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.name AS developer, COUNT(*) AS games_developed\nFROM game g\nJOIN company c ON c.company_id = g.developer_company_id\nGROUP BY c.name\nORDER BY games_developed DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT c.name AS developer_name, COUNT(g.game_id) AS number_of_games\nFROM company c\nJOIN game g ON c.company_id = g.developer_company_id\nGROUP BY c.name\nORDER BY number_of_games DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, MAX(cs.concurrent_players) AS peak_concurrent\nFROM concurrent_snapshot cs\nJOIN game g ON g.game_id = cs.game_id\nGROUP BY g.title\nORDER BY peak_concurrent DESC\nLIMIT 10;\n",
+            "generatedSql": "WITH max_concurrent_players AS (\n  SELECT\n    game_id,\n    MAX(concurrent_players) AS max_players\n  FROM\n    concurrent_snapshot\n  GROUP BY\n    game_id\n)\nSELECT\n  g.title,\n  mcp.max_players\nFROM\n  max_concurrent_players mcp\nJOIN\n  game g ON mcp.game_id = g.game_id\nORDER BY\n  mcp.max_players DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-12",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT p.name AS platform, ROUND(AVG(ps.duration_minutes), 1) AS avg_minutes\nFROM platform p\nLEFT JOIN play_session ps ON ps.platform_id = p.platform_id\nGROUP BY p.name\nORDER BY avg_minutes DESC NULLS LAST;\n",
+            "generatedSql": "SELECT platform.name, AVG(play_session.duration_minutes) AS average_duration\nFROM play_session\nJOIN platform ON play_session.platform_id = platform.platform_id\nGROUP BY platform.name;"
+          },
+          {
+            "id": "G-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title,\n       dev.name AS developer,\n       pub.name AS publisher\nFROM game g\nJOIN company dev ON dev.company_id = g.developer_company_id\nJOIN company pub ON pub.company_id = g.publisher_company_id\nWHERE g.developer_company_id <> g.publisher_company_id\nORDER BY g.title;\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN company p ON g.publisher_company_id = p.company_id\nJOIN company d ON g.developer_company_id = d.company_id\nWHERE p.name <> d.name;"
+          },
+          {
+            "id": "G-14",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT c.name\nFROM company c\nJOIN game gp ON gp.publisher_company_id = c.company_id\nWHERE c.company_id NOT IN (\n    SELECT developer_company_id FROM game\n)\nORDER BY c.name;\n",
+            "generatedSql": "SELECT c.name\nFROM company c\nWHERE c.company_id IN (\n    SELECT g.publisher_company_id\n    FROM game g\n    GROUP BY g.publisher_company_id\n) AND c.company_id NOT IN (\n    SELECT g.developer_company_id\n    FROM game g\n);"
+          },
+          {
+            "id": "G-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT SUM(monthly_price) AS mrr\nFROM subscription\nWHERE status = 'active';\n",
+            "generatedSql": "SELECT SUM(monthly_price) AS mrr\nFROM subscription\nWHERE status = 'active';"
+          },
+          {
+            "id": "G-16",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT f.name AS franchise, SUM(p.amount) AS dlc_revenue\nFROM purchase p\nJOIN dlc d ON d.dlc_id = p.dlc_id\nJOIN game g ON g.game_id = d.game_id\nJOIN franchise f ON f.franchise_id = g.franchise_id\nGROUP BY f.name\nORDER BY dlc_revenue DESC\nLIMIT 5;\n",
+            "generatedSql": "WITH dlc_revenue AS (\n    SELECT \n        f.name AS franchise_name,\n        SUM(p.amount) AS total_revenue\n    FROM \n        dlc d\n    JOIN \n        purchase p ON d.dlc_id = p.dlc_id\n    JOIN \n        game g ON d.game_id = g.game_id\n    JOIN \n        franchise f ON g.franchise_id = f.franchise_id\n    GROUP BY \n        f.name\n)\nSELECT \n    franchise_name,\n    total_revenue\nFROM \n    dlc_revenue\nORDER BY \n    total_revenue DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-17",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "error": "operator does not exist: integer < interval",
+            "referenceSql": "SELECT DISTINCT c.customer_id, c.username\nFROM subscription s\nJOIN customer c ON c.customer_id = s.customer_id\nWHERE s.status = 'cancelled'\n  AND s.end_date IS NOT NULL\n  AND (s.end_date - s.start_date) < 30\nORDER BY c.customer_id;\n",
+            "generatedSql": "SELECT c.username\nFROM customer c\nJOIN subscription s ON c.customer_id = s.customer_id\nWHERE s.status = 'cancelled'\nAND (s.end_date - s.start_date) < INTERVAL '30 days';"
+          },
+          {
+            "id": "G-18",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.name AS developer, COUNT(DISTINCT gg.genre_id) AS distinct_genres\nFROM game g\nJOIN company c ON c.company_id = g.developer_company_id\nJOIN game_genre gg ON gg.game_id = g.game_id\nGROUP BY c.name\nHAVING COUNT(DISTINCT gg.genre_id) > 3\nORDER BY distinct_genres DESC;\n",
+            "generatedSql": "SELECT c.name\nFROM company c\nJOIN (\n  SELECT developer_company_id, COUNT(DISTINCT gg.genre_id) AS genre_count\n  FROM game g\n  JOIN game_genre gg ON g.game_id = gg.game_id\n  GROUP BY developer_company_id\n  HAVING COUNT(DISTINCT gg.genre_id) > 3\n) subq ON c.company_id = subq.developer_company_id;"
+          },
+          {
+            "id": "G-19",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT f.name AS franchise,\n       ROUND(AVG(r.score), 2) AS avg_score,\n       COUNT(*) AS n_ratings\nFROM rating r\nJOIN game g ON g.game_id = r.game_id\nJOIN franchise f ON f.franchise_id = g.franchise_id\nGROUP BY f.name\nHAVING COUNT(*) >= 50\nORDER BY avg_score DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT \n    f.name AS franchise_name, \n    AVG(r.score) AS average_rating\nFROM \n    rating r\nJOIN \n    game g ON r.game_id = g.game_id\nJOIN \n    franchise f ON g.franchise_id = f.franchise_id\nGROUP BY \n    f.name\nHAVING \n    COUNT(r.rating_id) >= 50\nORDER BY \n    average_rating DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-20",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name AS region, COALESCE(SUM(p.amount), 0) AS dlc_revenue\nFROM region r\nLEFT JOIN customer c ON c.region_id = r.region_id\nLEFT JOIN purchase p ON p.customer_id = c.customer_id\nGROUP BY r.name\nORDER BY dlc_revenue DESC;\n",
+            "generatedSql": "SELECT \n    r.name AS region_name,\n    SUM(p.amount) AS total_income\nFROM \n    purchase p\nJOIN \n    customer c ON p.customer_id = c.customer_id\nJOIN \n    region r ON c.region_id = r.region_id\nGROUP BY \n    r.name;"
+          },
+          {
+            "id": "G-21",
+            "difficulty": "hard",
+            "recall": 0.75,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "error": "column g.genre_name does not exist",
+            "referenceSql": "SELECT ge.name AS genre, MAX(cs.concurrent_players) AS peak_concurrent\nFROM concurrent_snapshot cs\nJOIN game g ON g.game_id = cs.game_id\nJOIN game_genre gg ON gg.game_id = g.game_id\nJOIN genre ge ON ge.genre_id = gg.genre_id\nGROUP BY ge.name\nORDER BY peak_concurrent DESC\nLIMIT 1;\n",
+            "generatedSql": "SELECT g.genre_name\nFROM genre g\nJOIN game_genre gg ON g.genre_id = gg.genre_id\nJOIN game gm ON gg.game_id = gm.game_id\nJOIN concurrent_snapshot cs ON gm.game_id = cs.game_id\nGROUP BY g.genre_name\nORDER BY SUM(cs.concurrent_players) DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-22",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, COUNT(*) AS dlc_count\nFROM dlc d\nJOIN game g ON g.game_id = d.game_id\nGROUP BY g.title\nORDER BY dlc_count DESC\nLIMIT 1;\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN dlc d ON g.game_id = d.game_id\nGROUP BY g.game_id, g.title\nORDER BY COUNT(d.dlc_id) DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-23",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'active') / COUNT(*), 1)\n         AS active_pct_2024\nFROM subscription\nWHERE start_date >= DATE '2024-01-01'\n  AND start_date <  DATE '2025-01-01';\n",
+            "generatedSql": "SELECT \n    ROUND(COUNT(CASE WHEN status = 'active' THEN subscription_id END) * 100.0 / COUNT(subscription_id), 2) AS percentage_active\nFROM \n    subscription\nWHERE \n    EXTRACT(YEAR FROM start_date) = 2024;"
+          },
+          {
+            "id": "G-24",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title\nFROM game g\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM game_platform gp\n    JOIN platform p ON p.platform_id = gp.platform_id\n    WHERE gp.game_id = g.game_id\n      AND p.kind = 'console'\n)\nORDER BY g.title;\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nLEFT JOIN game_platform gp ON g.game_id = gp.game_id\nWHERE gp.platform_id IS NULL;"
+          },
+          {
+            "id": "G-25",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.customer_id, c.username, COUNT(*) AS wishlist_games\nFROM t_042 w\nJOIN customer c ON c.customer_id = w.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY wishlist_games DESC\nLIMIT 5;\n",
+            "generatedSql": "SELECT \n    c.username, \n    COUNT(w.game_id) AS wishlisted_games_count\nFROM \n    t_042 w\nJOIN \n    customer c ON w.customer_id = c.customer_id\nGROUP BY \n    c.username\nORDER BY \n    wishlisted_games_count DESC\nLIMIT 5;"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "nebula",
+    "tableCount": 66,
+    "modes": [
+      {
+        "mode": "none",
+        "cases": [
+          {
+            "id": "N-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT COUNT(*) FROM game;\n",
+            "generatedSql": "SELECT COUNT(*) FROM game;"
+          },
+          {
+            "id": "N-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title, base_price FROM game ORDER BY base_price DESC LIMIT 5;\n",
+            "generatedSql": "SELECT title\nFROM game\nORDER BY base_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "N-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name, COUNT(c.customer_id)\nFROM region r LEFT JOIN customer c ON c.region_id = r.region_id\nGROUP BY r.name;\n",
+            "generatedSql": "SELECT region.name AS region_name, COUNT(customer.customer_id) AS customer_count\nFROM customer\nJOIN region ON customer.region_id = region.region_id\nGROUP BY region.name;"
+          },
+          {
+            "id": "N-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT name, monthly_price FROM subscription_plan ORDER BY monthly_price;\n",
+            "generatedSql": "SELECT name, monthly_price FROM subscription_plan;"
+          },
+          {
+            "id": "N-05",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, f.name FROM game g JOIN franchise f ON f.franchise_id = g.franchise_id;\n",
+            "generatedSql": "SELECT g.title AS game_title, f.name AS franchise_name\nFROM game g\nJOIN franchise f ON g.franchise_id = f.franchise_id;"
+          },
+          {
+            "id": "N-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, SUM(ps.duration_minutes) AS total\nFROM play_session ps JOIN game g ON g.game_id = ps.game_id\nGROUP BY g.title ORDER BY total DESC LIMIT 10;\n",
+            "generatedSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_playtime\nFROM game g\nJOIN play_session ps ON g.game_id = ps.game_id\nGROUP BY g.game_id\nORDER BY total_playtime DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-07",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.username, COUNT(*) AS logros\nFROM customer_achievement ca JOIN customer c ON c.customer_id = ca.customer_id\nGROUP BY c.username ORDER BY logros DESC LIMIT 10;\n",
+            "generatedSql": "SELECT c.username\nFROM customer c\nJOIN customer_achievement ca ON c.customer_id = ca.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY COUNT(ca.achievement_id) DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT status, SUM(total) FROM invoice GROUP BY status;\n",
+            "generatedSql": "SELECT region.name AS region_name, SUM(invoice.total) AS total_invoiced\nFROM invoice\nJOIN customer ON invoice.customer_id = customer.customer_id\nJOIN country ON customer.country_id = country.country_id\nJOIN region ON country.region_id = region.region_id\nGROUP BY region.name;"
+          },
+          {
+            "id": "N-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT g.title FROM tournament t JOIN game g ON g.game_id = t.game_id WHERE t.prize_pool > 10000;\n",
+            "generatedSql": "SELECT DISTINCT g.title\nFROM game g\nJOIN tournament t ON g.game_id = t.game_id\nWHERE t.prize_pool > 10000;"
+          },
+          {
+            "id": "N-10",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.title, COUNT(*) AS utiles\nFROM review r JOIN review_vote rv ON rv.review_id = r.review_id\nWHERE rv.is_helpful GROUP BY r.review_id, r.title ORDER BY utiles DESC LIMIT 10;\n",
+            "generatedSql": "SELECT r.title, COUNT(rv.customer_id) AS helpful_votes\nFROM review r\nJOIN review_vote rv ON r.review_id = rv.review_id\nWHERE rv.is_helpful = TRUE\nGROUP BY r.review_id\nORDER BY helpful_votes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT c.username\nFROM support_ticket t JOIN customer c ON c.customer_id = t.customer_id\nWHERE t.status = 'open';\n",
+            "generatedSql": "SELECT DISTINCT c.customer_id, c.username\nFROM customer c\nJOIN support_ticket st ON c.customer_id = st.customer_id\nWHERE st.status = 'open';"
+          },
+          {
+            "id": "N-12",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title\nFROM game g\nJOIN game_platform gp ON gp.game_id = g.game_id\nJOIN platform p ON p.platform_id = gp.platform_id\nWHERE p.name = 'PC';\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN game_platform gp ON g.game_id = gp.game_id\nJOIN platform p ON gp.platform_id = p.platform_id\nWHERE p.name = 'PC';"
+          },
+          {
+            "id": "N-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.username, COUNT(*) AS deseados\nFROM t_042 w JOIN customer c ON c.customer_id = w.customer_id\nGROUP BY c.username ORDER BY deseados DESC LIMIT 5;\n",
+            "generatedSql": "SELECT \n    c.username, \n    COUNT(w.id) AS wish_count\nFROM \n    customer c\nJOIN \n    t_042 w ON c.customer_id = w.customer_id\nGROUP BY \n    c.username\nORDER BY \n    wish_count DESC\nLIMIT 5;"
+          },
+          {
+            "id": "N-14",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT s.name, co.name\nFROM studio s JOIN company co ON co.company_id = s.company_id\nWHERE s.headcount > 100;\n",
+            "generatedSql": "SELECT s.name AS studio_name, c.name AS company_name\nFROM studio s\nJOIN company c ON s.company_id = c.company_id\nWHERE s.headcount > 100;"
+          },
+          {
+            "id": "N-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT g.title\nFROM game g\nJOIN game_language gl ON gl.game_id = g.game_id\nJOIN language l ON l.language_id = gl.language_id\nWHERE l.name = 'Spanish' AND gl.kind = 'audio';\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN game_language gl ON g.game_id = gl.game_id\nJOIN language l ON gl.language_id = l.language_id\nWHERE l.name = 'Spanish' AND gl.kind = 'Audio';"
+          }
+        ]
+      },
+      {
+        "mode": "vector",
+        "cases": [
+          {
+            "id": "N-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT COUNT(*) FROM game;\n",
+            "generatedSql": "SELECT COUNT(*) FROM game;"
+          },
+          {
+            "id": "N-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title, base_price FROM game ORDER BY base_price DESC LIMIT 5;\n",
+            "generatedSql": "SELECT title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "N-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name, COUNT(c.customer_id)\nFROM region r LEFT JOIN customer c ON c.region_id = r.region_id\nGROUP BY r.name;\n",
+            "generatedSql": "SELECT region.name, COUNT(customer.customer_id) AS customer_count\nFROM customer\nJOIN region ON customer.region_id = region.region_id\nGROUP BY region.name;"
+          },
+          {
+            "id": "N-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT name, monthly_price FROM subscription_plan ORDER BY monthly_price;\n",
+            "generatedSql": "SELECT name, monthly_price \nFROM subscription_plan;"
+          },
+          {
+            "id": "N-05",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, f.name FROM game g JOIN franchise f ON f.franchise_id = g.franchise_id;\n",
+            "generatedSql": "SELECT \n    g.title AS juego, \n    f.name AS franquicia\nFROM \n    game g\nJOIN \n    franchise f ON g.franchise_id = f.franchise_id;"
+          },
+          {
+            "id": "N-06",
+            "difficulty": "medium",
+            "recall": 0.5,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, SUM(ps.duration_minutes) AS total\nFROM play_session ps JOIN game g ON g.game_id = ps.game_id\nGROUP BY g.title ORDER BY total DESC LIMIT 10;\n",
+            "generatedSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_playtime\nFROM play_session ps\nJOIN game g ON ps.game_id = g.game_id\nGROUP BY g.title\nORDER BY total_playtime DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-07",
+            "difficulty": "hard",
+            "recall": 0.5,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.username, COUNT(*) AS logros\nFROM customer_achievement ca JOIN customer c ON c.customer_id = ca.customer_id\nGROUP BY c.username ORDER BY logros DESC LIMIT 10;\n",
+            "generatedSql": "SELECT c.customer_id, COUNT(ca.achievement_id) AS unlocked_achievements\nFROM customer_achievement ca\nJOIN customer c ON ca.customer_id = c.customer_id\nGROUP BY c.customer_id\nORDER BY unlocked_achievements DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT status, SUM(total) FROM invoice GROUP BY status;\n",
+            "generatedSql": "SELECT status, SUM(total) AS total_amount\nFROM invoice\nGROUP BY status;"
+          },
+          {
+            "id": "N-09",
+            "difficulty": "medium",
+            "recall": 0.5,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT g.title FROM tournament t JOIN game g ON g.game_id = t.game_id WHERE t.prize_pool > 10000;\n",
+            "generatedSql": "SELECT DISTINCT g.game_id, g.title\nFROM tournament t\nJOIN game g ON t.game_id = g.game_id\nWHERE t.prize_pool > 10000;"
+          },
+          {
+            "id": "N-10",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.title, COUNT(*) AS utiles\nFROM review r JOIN review_vote rv ON rv.review_id = r.review_id\nWHERE rv.is_helpful GROUP BY r.review_id, r.title ORDER BY utiles DESC LIMIT 10;\n",
+            "generatedSql": "SELECT r.body, COUNT(rv.review_id) AS helpful_votes_count\nFROM review r\nJOIN review_vote rv ON r.review_id = rv.review_id AND rv.is_helpful = true\nGROUP BY r.review_id, r.body\nORDER BY helpful_votes_count DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT c.username\nFROM support_ticket t JOIN customer c ON c.customer_id = t.customer_id\nWHERE t.status = 'open';\n",
+            "generatedSql": "SELECT DISTINCT c.username\nFROM customer c\nJOIN support_ticket st ON c.customer_id = st.customer_id\nWHERE st.status = 'open';"
+          },
+          {
+            "id": "N-12",
+            "difficulty": "hard",
+            "recall": 0.6666666666666666,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title\nFROM game g\nJOIN game_platform gp ON gp.game_id = g.game_id\nJOIN platform p ON p.platform_id = gp.platform_id\nWHERE p.name = 'PC';\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN game_platform gp ON g.game_id = gp.game_id\nJOIN platform p ON gp.platform_id = p.platform_id\nWHERE p.name = 'PC';"
+          },
+          {
+            "id": "N-13",
+            "difficulty": "hard",
+            "recall": 0.5,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.username, COUNT(*) AS deseados\nFROM t_042 w JOIN customer c ON c.customer_id = w.customer_id\nGROUP BY c.username ORDER BY deseados DESC LIMIT 5;\n",
+            "generatedSql": "SELECT c.customer_id, COUNT(t.game_id) AS game_count\nFROM t_042 t\nJOIN customer c ON t.customer_id = c.customer_id\nGROUP BY c.customer_id\nORDER BY game_count DESC\nLIMIT 5;"
+          },
+          {
+            "id": "N-14",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT s.name, co.name\nFROM studio s JOIN company co ON co.company_id = s.company_id\nWHERE s.headcount > 100;\n",
+            "generatedSql": "SELECT s.name AS studio_name, c.name AS company_name\nFROM studio s\nJOIN company c ON s.company_id = c.company_id\nWHERE s.headcount > 100;"
+          },
+          {
+            "id": "N-15",
+            "difficulty": "hard",
+            "recall": 0.3333333333333333,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT g.title\nFROM game g\nJOIN game_language gl ON gl.game_id = g.game_id\nJOIN language l ON l.language_id = gl.language_id\nWHERE l.name = 'Spanish' AND gl.kind = 'audio';\n",
+            "generatedSql": "SELECT game_id FROM game_language WHERE language_id = 1;"
+          }
+        ]
+      },
+      {
+        "mode": "graphrag",
+        "cases": [
+          {
+            "id": "N-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT COUNT(*) FROM game;\n",
+            "generatedSql": "SELECT COUNT(*) FROM game;"
+          },
+          {
+            "id": "N-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT title, base_price FROM game ORDER BY base_price DESC LIMIT 5;\n",
+            "generatedSql": "SELECT title \nFROM game \nORDER BY base_price DESC \nLIMIT 5;"
+          },
+          {
+            "id": "N-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.name, COUNT(c.customer_id)\nFROM region r LEFT JOIN customer c ON c.region_id = r.region_id\nGROUP BY r.name;\n",
+            "generatedSql": "SELECT region.name, COUNT(customer.customer_id) AS customer_count\nFROM customer\nJOIN region ON customer.region_id = region.region_id\nGROUP BY region.name;"
+          },
+          {
+            "id": "N-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT name, monthly_price FROM subscription_plan ORDER BY monthly_price;\n",
+            "generatedSql": "SELECT name, monthly_price FROM subscription_plan;"
+          },
+          {
+            "id": "N-05",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, f.name FROM game g JOIN franchise f ON f.franchise_id = g.franchise_id;\n",
+            "generatedSql": "SELECT g.title AS juego, f.name AS franquicia\nFROM game g\nJOIN franchise f ON g.franchise_id = f.franchise_id;"
+          },
+          {
+            "id": "N-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title, SUM(ps.duration_minutes) AS total\nFROM play_session ps JOIN game g ON g.game_id = ps.game_id\nGROUP BY g.title ORDER BY total DESC LIMIT 10;\n",
+            "generatedSql": "SELECT g.title, SUM(ps.duration_minutes) AS total_playtime\nFROM play_session ps\nJOIN game g ON ps.game_id = g.game_id\nGROUP BY g.title\nORDER BY total_playtime DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-07",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.username, COUNT(*) AS logros\nFROM customer_achievement ca JOIN customer c ON c.customer_id = ca.customer_id\nGROUP BY c.username ORDER BY logros DESC LIMIT 10;\n",
+            "generatedSql": "SELECT c.username, COUNT(ca.achievement_id) AS achievement_count\nFROM customer_achievement ca\nJOIN customer c ON ca.customer_id = c.customer_id\nGROUP BY c.username\nORDER BY achievement_count DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT status, SUM(total) FROM invoice GROUP BY status;\n",
+            "generatedSql": "SELECT status, SUM(total) AS total_amount\nFROM invoice\nGROUP BY status;"
+          },
+          {
+            "id": "N-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT g.title FROM tournament t JOIN game g ON g.game_id = t.game_id WHERE t.prize_pool > 10000;\n",
+            "generatedSql": "SELECT DISTINCT g.title\nFROM game g\nJOIN tournament t ON g.game_id = t.game_id\nWHERE t.prize_pool > 10000;"
+          },
+          {
+            "id": "N-10",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT r.title, COUNT(*) AS utiles\nFROM review r JOIN review_vote rv ON rv.review_id = r.review_id\nWHERE rv.is_helpful GROUP BY r.review_id, r.title ORDER BY utiles DESC LIMIT 10;\n",
+            "generatedSql": "WITH helpful_votes AS (\n    SELECT review_id, COUNT(*) AS helpful_count\n    FROM review_vote\n    WHERE is_helpful = TRUE\n    GROUP BY review_id\n)\nSELECT r.title, rv.helpful_count\nFROM review r\nJOIN helpful_votes rv ON r.review_id = rv.review_id\nORDER BY rv.helpful_count DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT c.username\nFROM support_ticket t JOIN customer c ON c.customer_id = t.customer_id\nWHERE t.status = 'open';\n",
+            "generatedSql": "SELECT DISTINCT c.username\nFROM support_ticket st\nJOIN customer c ON st.customer_id = c.customer_id\nWHERE st.status = 'open';"
+          },
+          {
+            "id": "N-12",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT g.title\nFROM game g\nJOIN game_platform gp ON gp.game_id = g.game_id\nJOIN platform p ON p.platform_id = gp.platform_id\nWHERE p.name = 'PC';\n",
+            "generatedSql": "SELECT g.title\nFROM game_platform gp\nJOIN platform p ON gp.platform_id = p.platform_id\nJOIN game g ON gp.game_id = g.game_id\nWHERE p.name = 'PC';"
+          },
+          {
+            "id": "N-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": true,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT c.username, COUNT(*) AS deseados\nFROM t_042 w JOIN customer c ON c.customer_id = w.customer_id\nGROUP BY c.username ORDER BY deseados DESC LIMIT 5;\n",
+            "generatedSql": "SELECT c.username, COUNT(t.id) AS game_count\nFROM customer c\nJOIN t_042 t ON c.customer_id = t.customer_id\nGROUP BY c.username\nORDER BY game_count DESC\nLIMIT 5;"
+          },
+          {
+            "id": "N-14",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT s.name, co.name\nFROM studio s JOIN company co ON co.company_id = s.company_id\nWHERE s.headcount > 100;\n",
+            "generatedSql": "SELECT s.name AS studio_name, c.name AS company_name\nFROM studio s\nJOIN company c ON s.company_id = c.company_id\nWHERE s.headcount > 100;"
+          },
+          {
+            "id": "N-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchStrict": false,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "(sin juez LLM; revisión manual aparte)",
+            "referenceSql": "SELECT DISTINCT g.title\nFROM game g\nJOIN game_language gl ON gl.game_id = g.game_id\nJOIN language l ON l.language_id = gl.language_id\nWHERE l.name = 'Spanish' AND gl.kind = 'audio';\n",
+            "generatedSql": "SELECT g.title\nFROM game g\nJOIN game_language gl ON g.game_id = gl.game_id\nJOIN language l ON gl.language_id = l.language_id\nWHERE l.name = 'Español';"
+          }
+        ]
+      }
+    ]
+  }
+]

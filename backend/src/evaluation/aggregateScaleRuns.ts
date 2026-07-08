@@ -6,6 +6,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import chalk from 'chalk'
+import { isSemanticPass } from '../graphsql/application/evaluationMetrics'
 
 const RUNS_DIR = join(__dirname, '../../../docs/evaluacion/tiradas')
 const OUTPUT_FILE = join(__dirname, '../../../docs/evaluacion/escala-tiradas.md')
@@ -86,7 +87,9 @@ function main(): void {
     '> Los casos que "bailan" son el ruido de la no-determinación del LLM: la media es más fiable',
     '> que cualquier tirada suelta. Los que fallan SIEMPRE son los deficits reales del sistema (o de',
     '> la referencia): son los que merecen mirarse a mano. Métrica "justa" = la candidata contiene',
-    '> el resultado de referencia; "equiv." = un LLM juez la da por equivalente (complementaria).',
+    '> el resultado de referencia (objetiva). "Equiv." = pasa la justa O el juez LLM la rescata: el',
+    '> juez solo recupera aciertos que la comparación de datos descarta (redondeos, columnas de más),',
+    '> nunca descarta lo que la ejecución ya da por bueno, así que la equivalencia es siempre ≥ justa.',
     '',
   )
   writeFileSync(OUTPUT_FILE, lines.join('\n'))
@@ -112,7 +115,7 @@ function summarizeRun(run: Run, targetName: string, mode: string): { recall: num
   return {
     recall: mean(cases.map((c) => c.recall)),
     fair: mean(cases.map((c) => (c.executionMatchFair ? 1 : 0))),
-    semantic: mean(cases.map((c) => (c.executionMatchSemantic ? 1 : 0))),
+    semantic: mean(cases.map((c) => (isSemanticPass(c.executionMatchFair, c.executionMatchSemantic) ? 1 : 0))),
   }
 }
 

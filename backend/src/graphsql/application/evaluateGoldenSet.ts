@@ -5,10 +5,10 @@
  * complementaria a la execution accuracy, nunca la sustituye.
  */
 import { checkSqlSafety } from '../domain/sql/SqlSafetyPolicy'
-import { schemaLinkingRecall, resultsMatch, resultsContain, estimateTokens, type ResultRow } from './evaluationMetrics'
+import { schemaLinkingRecall, resultsMatch, resultsContain, isSemanticPass, estimateTokens, type ResultRow } from './evaluationMetrics'
 import { retrieveSchemaContext, defaultSchemaRetrievalDependencies, type SchemaRetrievalDependencies } from './schemaRetrieval'
 import { generateSql } from './sqlGeneration'
-import { judgeQueryEquivalence } from './sqlEquivalence'
+import { judgeQueryEquivalence, type ExecutedResults } from './sqlEquivalence'
 import { executeQuery } from './queryExecution'
 import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
 import { readTargetSchema } from './readTargetSchema'
@@ -30,13 +30,20 @@ export interface CaseResult {
   schemaLinkingRecall: number
   contextTableCount: number
   contextTokenEstimate: number
+  /** La SQL de referencia del golden set, guardada junto a la generada para revisar a mano. */
+  referenceSql: string
   generatedSql: string
   safe: boolean
   /** Estricta: mismo resultado exacto (cota inferior). */
   executionMatchStrict: boolean
   /** Justa: la candidata contiene el resultado de referencia (correcto o más rico). */
   executionMatchFair: boolean
-  /** Equivalencia semántica según el juez LLM (D-11). Complementaria. */
+  /**
+   * Veredicto CRUDO del juez LLM (D-11). Se guarda tal cual, aunque contradiga a la
+   * métrica objetiva, para poder auditar cuándo el juez se equivoca. El criterio de
+   * equivalencia que cuenta en la métrica es `isSemanticPass(fair, este)`: el juez solo
+   * rescata, nunca descarta lo que la ejecución ya da por bueno.
+   */
   executionMatchSemantic: boolean
   equivalenceReason?: string
   error?: string
@@ -60,7 +67,10 @@ export interface ModeReport {
     executionAccuracyStrict: number
     /** Justa: es el titular objetivo. */
     executionAccuracyFair: number
-    /** Semántica (juez LLM), complementaria: la reporto al lado de la justa, no en su lugar. */
+    /**
+     * Equivalencia: casos que pasan la métrica objetiva O que el juez rescata (`isSemanticPass`).
+     * Complementaria: la reporto al lado de la justa, no en su lugar. Por construcción ≥ justa.
+     */
     executionAccuracySemantic: number
   }
   byDifficulty: Record<GoldenDifficulty, DifficultyBreakdown>
@@ -70,7 +80,12 @@ export interface EvaluationDependencies {
   retrieve(question: string, mode: RetrievalMode): Promise<SchemaContext>
   generate(question: string, context: SchemaContext, dialect: string): Promise<{ text: string; dialect: string }>
   runQuery(sqlText: string): Promise<ResultRow[]>
-  judgeEquivalence(question: string, referenceSql: string, candidateSql: string): Promise<{ equivalent: boolean; reason: string }>
+  judgeEquivalence(
+    question: string,
+    referenceSql: string,
+    candidateSql: string,
+    results?: ExecutedResults,
+  ): Promise<{ equivalent: boolean; reason: string }>
 }
 
 /** La SQL generada solo se ejecuta si pasa la comprobación de seguridad. */
@@ -92,6 +107,7 @@ export async function evaluateCase(
       schemaLinkingRecall: schemaLinkingRecall(goldenCase.tables, context.tableNames),
       contextTableCount: context.tables.length,
       contextTokenEstimate: estimateTokens(context.ddl),
+      referenceSql: goldenCase.sql,
       generatedSql: sql.text,
       safe,
       executionMatchStrict: false,
@@ -109,7 +125,11 @@ export async function evaluateCase(
       result.executionMatchStrict = resultsMatch(expected, actual)
       result.executionMatchFair = resultsContain(expected, actual)
       // Que la candidata se haya ejecutado sin error es precondición del juez (D-11).
-      const equivalence = await deps.judgeEquivalence(goldenCase.question, goldenCase.sql, sql.text)
+      // Le paso los resultados ejecutados para anclar el veredicto en evidencia real.
+      const equivalence = await deps.judgeEquivalence(goldenCase.question, goldenCase.sql, sql.text, {
+        reference: expected,
+        candidate: actual,
+      })
       result.executionMatchSemantic = equivalence.equivalent
       result.equivalenceReason = equivalence.reason
     } catch (error) {
@@ -124,6 +144,7 @@ export async function evaluateCase(
       schemaLinkingRecall: 0,
       contextTableCount: 0,
       contextTokenEstimate: 0,
+      referenceSql: goldenCase.sql,
       generatedSql: '',
       safe: false,
       executionMatchStrict: false,
@@ -134,15 +155,21 @@ export async function evaluateCase(
   }
 }
 
+/** Aviso opcional al terminar cada caso, para poder mostrar progreso en tiradas largas. */
+export type CaseProgress = (result: CaseResult, index: number, total: number) => void
+
 export async function evaluateGoldenSet(
   cases: GoldenCase[],
   mode: RetrievalMode,
   dialect: string,
   deps: EvaluationDependencies,
+  onCaseDone?: CaseProgress,
 ): Promise<ModeReport> {
   const results: CaseResult[] = []
-  for (const goldenCase of cases) {
-    results.push(await evaluateCase(goldenCase, mode, dialect, deps))
+  for (const [index, goldenCase] of cases.entries()) {
+    const result = await evaluateCase(goldenCase, mode, dialect, deps)
+    results.push(result)
+    onCaseDone?.(result, index, cases.length)
   }
   return summarize(mode, results)
 }
@@ -158,7 +185,7 @@ function summarize(mode: RetrievalMode, cases: CaseResult[]): ModeReport {
       meanContextTokens: mean(cases.map((c) => c.contextTokenEstimate)),
       executionAccuracyStrict: mean(cases.map((c) => (c.executionMatchStrict ? 1 : 0))),
       executionAccuracyFair: mean(cases.map((c) => (c.executionMatchFair ? 1 : 0))),
-      executionAccuracySemantic: mean(cases.map((c) => (c.executionMatchSemantic ? 1 : 0))),
+      executionAccuracySemantic: mean(cases.map((c) => (isSemanticPass(c.executionMatchFair, c.executionMatchSemantic) ? 1 : 0))),
     },
     byDifficulty: {
       easy: breakdownFor(cases, 'easy'),
@@ -252,7 +279,7 @@ export function makeEvaluationDependencies(
           { connectDatabase: (options) => TargetDatabaseFactory.connect(target, options) },
         )
       ).rows,
-    judgeEquivalence: (question, referenceSql, candidateSql) =>
-      judgeQueryEquivalence(question, referenceSql, candidateSql, dialect),
+    judgeEquivalence: (question, referenceSql, candidateSql, results) =>
+      judgeQueryEquivalence(question, referenceSql, candidateSql, dialect, results),
   }
 }

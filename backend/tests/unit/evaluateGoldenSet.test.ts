@@ -61,6 +61,27 @@ describe('evaluateGoldenSet', () => {
     expect(report.cases[0].equivalenceReason).toMatch(/desempate/)
   })
 
+  it('el juez no puede DESCARTAR lo que la métrica objetiva ya da por bueno (solo rescata)', async () => {
+    // Regresión: el juez LLM a veces alucina una divergencia inexistente. Si la ejecución
+    // dice que el resultado contiene la referencia (fair=true), el caso pasa la equivalencia
+    // aunque el juez diga que no. Así la escala es monótona: justa ⊆ equivalente.
+    const deps: EvaluationDependencies = {
+      retrieve: async () => contextFor(['game']),
+      generate: async (_q, _c, dialect) => ({ text: 'SELECT game_id, title FROM game', dialect }),
+      // Referencia y candidata dan exactamente lo mismo (misma fila) → fair=true.
+      runQuery: async () => [{ title: 'A' }],
+      // El juez se equivoca y la marca como NO equivalente.
+      judgeEquivalence: async () => ({ equivalent: false, reason: 'alucina una diferencia que no existe' }),
+    }
+
+    const report = await evaluateGoldenSet([CASES[0]], 'graphrag', 'PostgreSQL', deps)
+
+    expect(report.cases[0].executionMatchFair).toBe(true)
+    expect(report.cases[0].executionMatchSemantic).toBe(false) // veredicto crudo del juez, se conserva
+    expect(report.summary.executionAccuracyFair).toBe(1)
+    expect(report.summary.executionAccuracySemantic).toBe(1) // pero la métrica no baja de la justa
+  })
+
   it('una candidata correcta con una columna de más cuenta como acierto justo pero no estricto', async () => {
     const deps: EvaluationDependencies = {
       retrieve: async () => contextFor(['game']),

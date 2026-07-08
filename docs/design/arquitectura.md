@@ -1,34 +1,30 @@
 # GraphSQL — Diseño detallado y arquitectura
 
+Este es el documento técnico: cómo está montado el sistema y **por qué** cada decisión. Para saber qué es GraphSQL o cómo usarlo, empieza por el [README](../../README.md); aquí voy al detalle del diseño. Los términos están en el [glosario](../glosario.md) y la especificación por componente en [SPEC.md](SPEC.md).
+
+**Índice:**
+
+1. [Motivación y problema](#1-motivación-y-problema)
+2. [Visión de la solución](#2-visión-de-la-solución)
+3. [Arquitectura técnica (grafo de estados)](#3-arquitectura-técnica-grafo-de-estados)
+4. [Los agentes](#4-los-agentes)
+5. [Grafo de conocimiento (Neo4j)](#5-grafo-de-conocimiento-neo4j)
+6. [Memoria vectorial (PostgreSQL + pgvector)](#6-memoria-vectorial-postgresql--pgvector)
+7. [Decisiones técnicas (D-xx)](#7-decisiones-técnicas)
+8. [Seguridad](#8-seguridad)
+9. [Estrategia de tests](#9-estrategia-de-tests)
+10. [Evaluación experimental](#10-evaluación-experimental)
+11. [Mejoras futuras](#11-mejoras-futuras)
+
 ## 1. Motivación y problema
 
 Acceder a una base de datos relacional exige conocer SQL y el esquema exacto (tablas, columnas, relaciones), lo que crea una **brecha de acceso** entre los datos y quien los necesita. El problema se agrava en bases grandes (200+ tablas). Detalle del problema y objetivos en el [README](../../README.md).
 
 ## 2. Visión de la solución
 
-Pipeline **multi-agente** orquestado con LangGraph: agentes especializados localizan las tablas relevantes, generan la SQL, la validan, piden aprobación humana y la ejecutan en solo lectura.
+Pipeline **multi-agente** orquestado con LangGraph: agentes especializados localizan las tablas relevantes, generan la SQL, la validan, piden aprobación humana y la ejecutan en solo lectura. La vista conceptual, con su diagrama, está en el [README](../../README.md); no la repito aquí y voy directo al **grafo real tal cual está implementado** (§3), que es lo que aporta este documento.
 
-```mermaid
-flowchart TD
-    U["Usuario<br/>«Muéstrame las 10 categorías con más ventas este año»"]
-    U -->|Lenguaje natural| GS
-    subgraph GS [GraphSQL]
-        direction LR
-        MA["Memory Agent<br/>(futuro)"] -.-> SA[Schema Agent]
-        SA --> SQL[SQL Agent]
-        SQL --> JA[Judge Agent]
-    end
-    GS --> H[Aprobación humana]
-    H --> E[Ejecución segura<br/>solo lectura]
-    E --> R[Resultados]
-```
-
-Es la visión completa: todo está implementado salvo el **Memory Agent** (ejemplos
-*few-shot* de consultas pasadas), que queda como pieza futura (SPEC-09).
-
-> Simplificado a propósito: el flujo real añade el bucle automático Judge↔SQL y las
-> cuatro decisiones de la revisión (aprobar / rechazar / modificar / afinar) — el grafo
-> completo, tal cual está implementado, es el de §3.
+Todo está implementado salvo el **Memory Agent** (ejemplos *few-shot* de consultas pasadas), que queda como pieza futura (SPEC-09).
 
 ## 3. Arquitectura técnica (grafo de estados)
 
@@ -67,12 +63,14 @@ De estos, el **Schema Agent** (la recuperación GraphRAG), el **Judge** y el **S
 - **Supervisor** (hecho, SPEC-10). Decide el siguiente paso con reglas sobre el estado, sin LLM: forma el bucle automático Judge↔SQL (reintenta con los errores del Judge hasta `MAX_JUDGE_ATTEMPTS`, salvo que la SQL sea una modificación manual) y, cuando corresponde, enruta a Human Review y Execute.
 - **Memory** (opcional). Busca consultas pasadas parecidas y se las pasa como ejemplos al SQL Agent. Es lo primero que recorto si voy justo de tiempo.
 - **Schema** (el GraphRAG). Encuentra las tablas que hacen falta combinando la búsqueda por significado en pgvector (da con `customer` cuando escribo "clientes") y la expansión por claves foráneas en Neo4j para arrastrar las tablas relacionadas que necesitan los JOIN.
-- **SQL.** Escribe la consulta a partir de la pregunta y de las tablas que le pasa el Schema Agent (y de los ejemplos del Memory Agent, si los hay).
+- **SQL.** Escribe la consulta a partir de la pregunta y de las tablas que le pasa el Schema Agent (y de los ejemplos del Memory Agent, si los hay). Su prompt vive en `agents/sql-generator.md` (editable sin tocar código); entre sus reglas, devolver la columna **legible** de cada entidad (title, name, username…) en vez de solo su id, que es lo que un humano espera al preguntar por "los juegos" o "los clientes".
 - **Judge.** Revisa que la SQL sea segura. Lo primero y obligatorio es comprobar que solo lee (empieza por `SELECT`/`WITH`, sin palabras peligrosas ni inyección); si eso falla, no se ejecuta diga lo que diga el resto. Por encima puede ir una comprobación de sintaxis y una revisión con el propio LLM, cuya confianza mide si la consulta **responde a la pregunta con datos reales**, no solo si es sintácticamente correcta: una consulta que devuelve un texto literal en vez de datos puntúa bajo y el supervisor la reintenta en lugar de darla por buena. Además (SPEC-14) juzga el **sentido**: por cada tabla usada evalúa si conoce su propósito —documentado por su descripción, evidente por nombre/columnas, o **supuesto** si el nombre es opaco y no hay descripción—; en ese último caso avisa de que la tabla se usa por suposición (aviso, no bloqueo). Para esto la descripción de cada tabla viaja ya en el contexto (DDL).
 - **Human Review** (hecho, SPEC-08 + SPEC-15). Para el grafo antes de ejecutar y me enseña, en cajas con color, la SQL propuesta y el veredicto del Judge; espera a que la apruebe, la rechace, la modifique a mano o la **afine** (una indicación en lenguaje natural y/o forzar tablas, que rehace la recuperación y regenera la SQL). La pausa persiste en PostgreSQL, recuperable por `thread_id`.
 - **Execute.** Ejecuta la consulta aprobada en solo lectura y devuelve los resultados.
 - **Store Feedback** (futuro, SPEC-09, junto al Memory Agent). Guardaría la consulta aprobada para reutilizarla como ejemplo. Si fallara, no rompería nada (no es crítico).
 - **Format** (no es un agente: es la capa de presentación del CLI). Pinta la SQL resaltada, el veredicto del Judge en cajas y los resultados como tabla o gráfico de barras (SPEC-19); los agentes devuelven datos y la presentación es cosa aparte.
+
+**Los prompts de sistema viven en `agents/*.md`, no en el código.** Cada agente con prompt propio tiene su fichero en la carpeta `agents/` de la raíz (`sql-generator.md`, `judge.md`, `equivalence-judge.md`, `chat.md`), con placeholders tipo `{{dialect}}` que se sustituyen al cargar (`agentPrompts.ts`). Así puedo ajustar el comportamiento de un agente —afinar un criterio del juez, endurecer una regla del generador— editando un Markdown, sin tocar TypeScript ni recompilar; y el prompt exacto de cada agente queda versionado y legible como documentación. El juez de equivalencia de la evaluación, además de las dos SQL, recibe el **resultado ejecutado** de ambas (una muestra de filas) para anclar su veredicto en evidencia real en lugar de especular sobre divergencias hipotéticas.
 
 ## 5. Grafo de conocimiento (Neo4j)
 
@@ -103,7 +101,7 @@ Uso PostgreSQL + pgvector (en la base `graphsql_memory`) para la búsqueda semá
 
 **Proveedor de embeddings configurable.** Detrás del puerto `IEmbeddings` hay un adaptador OpenAI-compatible que sirve para OpenAI (`text-embedding-3-small`, 1536) y para un modelo local en LM Studio (`bge-m3`); el proveedor se elige al escanear, igual que el del chat.
 
-**Principio innegociable.** Indexo y consulto con el **mismo modelo**: la similitud solo tiene sentido dentro del mismo espacio vectorial. Por eso guardo el modelo y la dimensión con cada vector, la dimensión de la columna es configurable, y cambiar de modelo obliga a una re-vectorización explícita (con aviso). Detalle en [`docs/investigacion/embeddings.md`](../investigacion/embeddings.md).
+**Principio innegociable.** Indexo y consulto con el **mismo modelo**: la similitud solo tiene sentido dentro del mismo espacio vectorial. Por eso guardo el modelo y la dimensión con cada vector, la dimensión de la columna es configurable, y cambiar de modelo obliga a una re-vectorización explícita (con aviso). Detalle en [`docs/proceso/investigacion/embeddings.md`](../proceso/investigacion/embeddings.md).
 
 **Recuperación (SPEC-04, hecho).** Dada una pregunta, busco las tablas candidatas por significado en pgvector y las expando por claves foráneas en Neo4j para componer el contexto (tablas relevantes + DDL) que usará el SQL Agent. A esta escala uso búsqueda exacta por coseno, sin índice ANN.
 
@@ -163,7 +161,7 @@ El conjunto de preguntas con su SQL de referencia está en [`golden_set.yaml`](.
 - **schema-linking recall**: de las tablas que la SQL correcta debe tocar, cuántas trae la recuperación. Aísla la recuperación de si el LLM acierta la SQL.
 - **tamaño de contexto** (tablas y tokens estimados del DDL): lo que enseña que "sin recuperación" no escala.
 - **execution accuracy**: la SQL generada, ejecutada en solo lectura, ¿da el mismo resultado que la de referencia? Comparo el resultado como multiconjunto de filas (no el texto de la SQL), en dos variantes: **estricta** (idéntico) y **justa** (la candidata *contiene* el resultado de referencia, para no penalizar una columna de más). Solo la ejecuto si pasa la comprobación de seguridad.
-- **equivalencia semántica (LLM, complementaria)**: si la candidata se ejecuta, un segundo LLM juzga si responde a la MISMA pregunta que la de referencia. Recupera aciertos que la comparación de filas descarta, pero como lo decide un LLM la reporto **al lado** de la execution accuracy, no en su lugar (ver [Sesgos y límites de las métricas](#sesgos-y-límites-de-las-métricas) al final).
+- **equivalencia semántica (LLM, complementaria)**: si la candidata se ejecuta, un segundo LLM juzga si responde a la MISMA pregunta que la de referencia, viendo las dos SQL y una muestra de sus resultados ejecutados. Criterio único: un caso cuenta como equivalente si pasa la execution accuracy (justa) **O** el juez lo rescata — el juez solo RECUPERA aciertos que la comparación de filas descarta, nunca descarta lo que la ejecución ya da por bueno, así que la equivalencia es por construcción ≥ justa. Como lo decide un LLM la reporto **al lado** de la execution accuracy, no en su lugar (ver [Sesgos y límites de las métricas](#sesgos-y-límites-de-las-métricas) al final).
 
 El arnés agrega por modo y por dificultad y guarda el informe en `docs/evaluacion/`.
 
@@ -173,9 +171,9 @@ Las **descripciones** son lo más propio de mi enfoque, así que las mido aparte
 
 | Modo | Recall | Exec. justa | Equiv. semántica (LLM) | Exec. estricta | Tokens |
 |------|--------|-------------|------------------------|----------------|--------|
-| Sin recuperación | 100% | 72% | 64% | 16% | 1498 |
-| Solo vectorial | 93% | 68% | 60% | 24% | 481 |
-| GraphRAG | 99% | 64% | 56% | 28% | 774 |
+| Sin recuperación | 100% | 72% | 88% | 16% | 1498 |
+| Solo vectorial | 93% | 68% | 84% | 24% | 481 |
+| GraphRAG | 99% | 64% | 80% | 28% | 774 |
 
 Lectura honesta:
 
@@ -194,12 +192,12 @@ Lectura honesta:
 
 | BD | Tablas | Modo | Recall | Exec. justa (rango) | Equiv. (LLM) | Tokens |
 |----|--------|------|--------|---------------------|--------------|--------|
-| Arcadia | 17 | Sin recuperación | 100% | 73% (68–76) | 74% | 1498 |
-| Arcadia | 17 | Solo vectorial | 93% | 66% (64–68) | 63% | 481 |
-| Arcadia | 17 | GraphRAG | 99% | 67% (64–72) | 74% | 774 |
-| Nebula | 66 | Sin recuperación | 100% | 68% (67–73) | 85% | 5748 |
-| Nebula | 66 | Solo vectorial | 80% | 60% (60–60) | 59% | 457 |
-| Nebula | 66 | GraphRAG | 100% | 72% (67–80) | 89% | 759 |
+| Arcadia | 17 | Sin recuperación | 100% | 73% (68–76) | 90% | 1498 |
+| Arcadia | 17 | Solo vectorial | 93% | 66% (64–68) | 82% | 481 |
+| Arcadia | 17 | GraphRAG | 99% | 67% (64–72) | 83% | 774 |
+| Nebula | 66 | Sin recuperación | 100% | 68% (67–73) | 95% | 5748 |
+| Nebula | 66 | Solo vectorial | 80% | 60% (60–60) | 71% | 457 |
+| Nebula | 66 | GraphRAG | 100% | 72% (67–80) | 96% | 759 |
 
 Lo que muestra, con tres lecturas separadas:
 
@@ -209,7 +207,7 @@ Lo que muestra, con tres lecturas separadas:
 
 > **Aviso (por qué estos números cambiaron respecto a una versión anterior).** En una primera tirada Nebula daba un 40% engañoso: el arnés ejecutaba las consultas contra la BD por defecto (Arcadia), no contra la que evaluaba, así que las tablas propias de Nebula fallaban con *"relation does not exist"* y las compartidas coincidían por casualidad. Lo detecté mirando a mano 3 fallos y 3 aciertos (aparecían tablas de Nebula como inexistentes). Corregido —ahora ejecuto contra la BD evaluada, con test de regresión— el dato real de Nebula GraphRAG es el 72% de media de arriba. Un número sospechoso casi siempre es la medición, no el sistema.
 
-Los informes reproducibles quedan en [`docs/evaluacion/`](../evaluacion/) (`resumen.md`, `descripciones.md`, `escala.md`, `escala-tiradas.md`, `confusion.md`, y el detalle por caso en `escala-casos.json`). La lectura orientada a producto vive en el argumentario de la presentación ([`docs/presentacion/propuesta-valor.md`](../presentacion/propuesta-valor.md), material de las slides, no documentación pública); aquí me quedo con la lectura neutra.
+Los informes reproducibles quedan en [`docs/evaluacion/`](../evaluacion/) (`resumen.md`, `descripciones.md`, `escala.md`, `escala-tiradas.md`, `confusion.md`, `escala-coder14b.md` como verificación 100% local, y el detalle por caso en `escala-casos.json`). La verificación local (Qwen2.5-Coder-14B, una tirada + revisión objetiva del autor con `evaluate:review`, sin juez LLM) da GraphRAG 80% de equivalencia en Arcadia y 93% en Nebula con contexto plano (~760 tokens): confirma que la ventaja del GraphRAG no depende de estar en la nube. Aquí me quedo con la lectura neutra; la orientada a producto vive aparte, en el material de la presentación (fuera del repositorio).
 
 ### Sesgos y límites de las métricas
 
@@ -219,7 +217,7 @@ Revisar los resultados caso por caso (leyendo la SQL generada frente a la de ref
 
 2. **`INNER` vs `LEFT JOIN` / interpretación de la referencia única.** Comparo contra UNA sola SQL de referencia, que fija una interpretación. Varias preguntas "por/cada categoría" (clientes por región, media por género, duración por plataforma…) admiten dos lecturas válidas: incluir solo las categorías con actividad (`INNER`) o **todas**, con 0/NULL en las vacías (`LEFT`). Mis referencias usaban `INNER` y ocultaban las categorías vacías, cuando "cada/por X" pide justamente todas —un 0 es información, no una fila a esconder—, así que penalizaba al modelo por escribir una consulta *mejor* que mi ground truth. Corregí las referencias a la interpretación inclusiva (**D-13**). Hay un caso engañoso que conviene tener presente: si en los datos ninguna categoría está vacía, `INNER` y `LEFT` devuelven las MISMAS filas, así que la comparación de resultados **no ve** una diferencia que sí existe en la consulta — el sesgo puede esconderse en los datos.
 
-3. **El juez de equivalencia (LLM) corrige en las dos direcciones, pero es falible.** Lo añadí (**D-11**) para capturar aciertos que la comparación de filas descarta (el `id` de más, empates en un top-N, agregaciones equivalentes). En la práctica se movió en los dos sentidos: rescató consultas correctas *y* cazó diferencias reales que la comparación de resultados no veía (un `LEFT JOIN` que cambia la respuesta, un `COUNT(DISTINCT)` frente a `COUNT(*)`). Eso lo hace valioso como tercer cristal, pero como lo decide un LLM también se equivoca y **hereda el marco de la referencia**; por eso va SIEMPRE al lado de la execution accuracy objetiva, nunca en su lugar (mismo motivo por el que el Judge de SPEC-06 no bloquea).
+3. **El juez de equivalencia (LLM) solo puede RESCATAR, nunca descartar (criterio único).** Lo añadí (**D-11**) para capturar aciertos que la comparación de filas descarta (el `id` de más, empates en un top-N, agregaciones equivalentes). Al principio dejé que su veredicto contara tal cual en las dos direcciones, y eso rompía la coherencia de la métrica: revisando las tiradas encontré **82 casos** en los que la ejecución decía que el resultado contenía el de referencia (`justa` = acierto) pero el juez los daba por NO equivalentes especulando sobre divergencias hipotéticas que los datos reales no tienen ("*puede* cambiar *si existen* títulos duplicados", "*si* la columna *puede* ser NULL", "*si* el timestamp lleva hora"). El síntoma agregado: la equivalencia salía **por debajo** de la justa en 8 de 30 combinaciones BD/modo — imposible para una métrica que se supone que *rescata*. La causa es que el juez razonaba sobre el TEXTO de la SQL, no sobre los datos. Lo arreglé por dos vías: (a) ahora el juez ve una **muestra de los resultados ejecutados** de ambas consultas, para anclarse en la evidencia y no en hipótesis; y (b) el criterio de la métrica es `isSemanticPass(justa, juez) = justa OR juez`: **la métrica objetiva manda y el juez solo suma aciertos que ella descarta, nunca resta los que ya da por buenos**. Así la escala es monótona (estricta ⊆ justa ⊆ equivalente) y no hay veredictos ambiguos. El veredicto crudo del juez se conserva en el detalle por caso (`executionMatchSemantic` + `equivalenceReason`) para poder auditar cuándo alucina —aun con los resultados delante, un modelo pequeño todavía inventa alguna divergencia inexistente—, pero ya no puede bajar la cifra por debajo de la evidencia. Es el mismo principio por el que el Judge de SPEC-06 no bloquea: un LLM aconseja, no manda.
 
 4. **El bug que invalidó los primeros números de Nebula.** Los primeros aciertos de Nebula (40%) eran falsos: el arnés ejecutaba las consultas contra la BD por defecto (Arcadia), no contra la que evaluaba, así que las tablas propias de Nebula fallaban y las compartidas coincidían por casualidad. Lo detecté precisamente mirando a mano 3 fallos y 3 aciertos. Arreglado (ejecuto contra la BD evaluada) y con test de regresión; los números de Nebula de arriba ya son los correctos. La lección, otra vez: un número sospechosamente malo casi siempre es la medición, no el sistema — pero solo se ve abriendo los casos.
 
@@ -234,6 +232,7 @@ Y los límites de siempre: golden set pequeño (25 + 15), un dominio y un modelo
 Líneas abiertas más allá del MVP (visión, no alcance entregable):
 
 - **Aprendizaje continuo evaluado**: que el sistema evalúe la calidad de sus respuestas y mejore con el uso.
+- **Relaciones sintéticas en el grafo (SPEC-22)**: aristas curadas a mano para BDs que **no declaran FKs** (un ERP viejo, una BD de un tercero que no puedo tocar). Las declaro en un sidecar, viven solo en Neo4j sin modificar la BD objetivo, y la expansión por FK y el SQL Agent las usan como si fueran reales. Es lo que hace viable el GraphRAG sobre esquemas legacy sin relaciones declaradas — el mismo patrón de metadata curada que las descripciones, aplicado a las relaciones.
 - **Explotación BI / visualización**: detectar resultados "graficables" y generar gráficos o paneles → *análisis conversacional* ("muéstrame las ventas por mes" devuelve un gráfico).
 - Interfaz web, generación automática de descripciones del esquema.
 - **Índice ANN para esquemas muy grandes (miles de tablas).** Hoy la búsqueda de tablas candidatas es *exacta*: comparo la pregunta contra el vector de **cada** tabla. Es un coste lineal (O(N) por consulta), pero a la escala de un esquema —decenas o cientos de tablas— eso es instantáneo (unos milisegundos; manda la llamada de embedding, no el número de tablas). Si algún día apuntara a catálogos de **miles** de tablas, recorrerlas todas en cada consulta empezaría a notarse, y ahí entraría un **índice ANN** (*Approximate Nearest Neighbor*, "vecino más cercano aproximado"): en vez de comparar contra todas, organiza los vectores de forma que la búsqueda solo mira un subconjunto de candidatos probables, bajando el coste a ~O(log N) — por eso escala. El precio es que es *aproximado*: puede saltarse de vez en cuando algún vecino realmente cercano, un intercambio (un poco de recall por mucha velocidad) que solo compensa cuando N es grande. Usaría **`hnsw`**, no el `ivfflat` que quité: no necesita entrenamiento ni afinar `lists`/`probes` y funciona bien aunque haya pocas filas. En resumen: búsqueda exacta mientras el esquema sea manejable, ANN cuando la escala lo pida.

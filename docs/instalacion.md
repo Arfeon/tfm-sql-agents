@@ -54,10 +54,10 @@ EMBEDDING_PROVIDER=openai
 
 # Opción local (LM Studio): sin coste ni API key, necesitas LM Studio corriendo
 # con un modelo de chat Y uno de embeddings cargados A LA VEZ (el CLI avisa si falta uno).
-# Estos son los modelos que hemos usado y validado nosotros:
+# Modelo de chat local recomendado: Qwen2.5-Coder-14B (especialista en SQL, sin razonamiento lento).
 LLM_PROVIDER=local
 LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1
-LMSTUDIO_MODEL=qwen/qwen3.5-9b
+LMSTUDIO_MODEL=qwen2.5-coder-14b-instruct
 EMBEDDING_PROVIDER=local
 LMSTUDIO_EMBEDDING_MODEL=text-embedding-bge-m3
 ```

@@ -5,12 +5,12 @@ Media y rango (mín–máx) sobre **5 tiradas completas** de `npm run evaluate:s
 
 | BD | Modo | Recall (media) | Exec. justa (media) | Exec. justa (rango) | Equiv. LLM (media) | Equiv. LLM (rango) |
 |----|------|----------------|---------------------|---------------------|--------------------|--------------------|
-| arcadia | Sin recuperación | 100% | **73%** | 68%–76% | 74% | 68%–80% |
-| arcadia | Solo vectorial | 93% | **66%** | 64%–68% | 63% | 56%–72% |
-| arcadia | GraphRAG | 99% | **67%** | 64%–72% | 74% | 64%–80% |
-| nebula | Sin recuperación | 100% | **68%** | 67%–73% | 85% | 80%–87% |
-| nebula | Solo vectorial | 80% | **60%** | 60%–60% | 59% | 53%–67% |
-| nebula | GraphRAG | 100% | **72%** | 67%–80% | 89% | 73%–100% |
+| arcadia | Sin recuperación | 100% | **73%** | 68%–76% | 90% | 84%–96% |
+| arcadia | Solo vectorial | 93% | **66%** | 64%–68% | 82% | 80%–88% |
+| arcadia | GraphRAG | 99% | **67%** | 64%–72% | 83% | 76%–88% |
+| nebula | Sin recuperación | 100% | **68%** | 67%–73% | 95% | 93%–100% |
+| nebula | Solo vectorial | 80% | **60%** | 60%–60% | 71% | 67%–73% |
+| nebula | GraphRAG | 100% | **72%** | 67%–80% | 96% | 87%–100% |
 
 ## Estabilidad por caso (modo GraphRAG)
 
@@ -21,4 +21,6 @@ Media y rango (mín–máx) sobre **5 tiradas completas** de `npm run evaluate:s
 > Los casos que "bailan" son el ruido de la no-determinación del LLM: la media es más fiable
 > que cualquier tirada suelta. Los que fallan SIEMPRE son los deficits reales del sistema (o de
 > la referencia): son los que merecen mirarse a mano. Métrica "justa" = la candidata contiene
-> el resultado de referencia; "equiv." = un LLM juez la da por equivalente (complementaria).
+> el resultado de referencia (objetiva). "Equiv." = pasa la justa O el juez LLM la rescata: el
+> juez solo recupera aciertos que la comparación de datos descarta (redondeos, columnas de más),
+> nunca descarta lo que la ejecución ya da por bueno, así que la equivalencia es siempre ≥ justa.

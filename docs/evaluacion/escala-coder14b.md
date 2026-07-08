@@ -4,12 +4,12 @@ Evaluación completa (recall + execution accuracy + tamaño de contexto) sobre e
 
 | BD | Tablas | Casos | Modo | Schema-linking recall | Execution accuracy (justa) | Equivalencia semántica (LLM) | Execution accuracy (estricta) | Tokens de contexto |
 |----|--------|-------|------|-----------------------|----------------------------|------------------------------|-------------------------------|--------------------|
-| arcadia | 17 | 25 | Sin recuperación | 100% | 72% | 84% | 20% | 1498 |
-| arcadia | 17 | 25 | Solo vectorial | 93% | 68% | 80% | 20% | 481 |
-| arcadia | 17 | 25 | GraphRAG | 99% | 64% | 84% | 20% | 774 |
-| nebula | 66 | 15 | Sin recuperación | 100% | 67% | 93% | 13% | 5748 |
-| nebula | 66 | 15 | Solo vectorial | 80% | 60% | 73% | 27% | 457 |
-| nebula | 66 | 15 | GraphRAG | 100% | 73% | 93% | 33% | 759 |
+| arcadia | 17 | 25 | Sin recuperación | 100% | 48% | 48% | 48% | 1498 |
+| arcadia | 17 | 25 | Solo vectorial | 93% | 44% | 44% | 44% | 481 |
+| arcadia | 17 | 25 | GraphRAG | 99% | 56% | 56% | 56% | 774 |
+| nebula | 66 | 15 | Sin recuperación | 100% | 67% | 67% | 53% | 5748 |
+| nebula | 66 | 15 | Solo vectorial | 80% | 67% | 67% | 60% | 457 |
+| nebula | 66 | 15 | GraphRAG | 100% | 87% | 87% | 80% | 759 |
 
 > Schema-linking recall: fracción de las tablas que usa la SQL de referencia que llegan al
 > contexto del generador (1 = el generador tenía todas las tablas necesarias delante).
@@ -25,10 +25,10 @@ Evaluación completa (recall + execution accuracy + tamaño de contexto) sobre e
 >
 > Equivalencia semántica (LLM): un segundo LLM juzga si la SQL candidata responde a la MISMA
 > pregunta que la de referencia, viendo las dos SQL y una muestra de sus resultados ejecutados
-> (con la candidata ejecutable como precondición). Criterio único: un caso cuenta como equivalente
-> si pasa la execution accuracy (justa) O el juez lo rescata; el juez solo RECUPERA aciertos que la
-> comparación de datos descarta (empates, columnas de más, agregaciones equivalentes), nunca descarta
-> lo que la ejecución ya da por bueno, así que la equivalencia es siempre ≥ justa. Como se apoya en un
-> LLM, es COMPLEMENTARIA, no la sustituye. El detalle por caso está en `escala-casos.json`: `recall` y
-> los dos `executionMatch` son estas métricas a nivel de caso (`executionMatchSemantic` es el veredicto
-> CRUDO del juez, que se conserva aunque se equivoque), y `equivalenceReason` es su justificación.
+> (con la candidata ejecutable como precondición). Criterio único: un caso cuenta como
+> equivalente si pasa la execution accuracy (justa) O el juez lo rescata; el juez solo RECUPERA
+> aciertos que la comparación de datos descarta (empates, columnas de más, agregaciones
+> equivalentes), nunca descarta lo que la ejecución ya da por bueno, así que la equivalencia es
+> siempre ≥ justa. Como se apoya en un LLM, es COMPLEMENTARIA, no sustituye a la objetiva. El detalle
+> por caso está en `escala-casos.json`: `recall` y los dos `executionMatch` son estas mismas
+> métricas a nivel de caso, y `equivalenceReason` es la justificación textual del juez.

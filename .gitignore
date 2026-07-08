@@ -73,3 +73,9 @@ docs/PLANNING.md
 *.sqlite
 *.sqlite3
 descriptions/descriptions.json
+
+# Material de presentación: solo local, no va al repo público
+docs/presentacion/
+
+# Plan de trabajo del TFM: solo local
+docs/proceso/PLANNING.md

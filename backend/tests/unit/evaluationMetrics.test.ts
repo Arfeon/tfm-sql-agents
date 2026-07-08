@@ -6,7 +6,20 @@
  * estimación rústica de tokens. No tocan BD ni LLM.
  */
 import { describe, it, expect } from 'vitest'
-import { schemaLinkingRecall, resultsMatch, resultsContain, estimateTokens } from '../../src/graphsql/application/evaluationMetrics'
+import { schemaLinkingRecall, resultsMatch, resultsContain, isSemanticPass, estimateTokens } from '../../src/graphsql/application/evaluationMetrics'
+
+describe('isSemanticPass', () => {
+  it('pasa si la métrica objetiva ya la da por buena, diga lo que diga el juez', () => {
+    expect(isSemanticPass(true, false)).toBe(true) // el juez no puede descartar
+    expect(isSemanticPass(true, true)).toBe(true)
+  })
+  it('el juez rescata un caso que la métrica objetiva descarta', () => {
+    expect(isSemanticPass(false, true)).toBe(true)
+  })
+  it('falla solo si fallan las dos', () => {
+    expect(isSemanticPass(false, false)).toBe(false)
+  })
+})
 
 describe('schemaLinkingRecall', () => {
   it('recupera todas las tablas gold → 1', () => {

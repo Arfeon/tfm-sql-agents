@@ -5,6 +5,7 @@ config({ path: '../.env' })
 import chalk from 'chalk'
 import { select } from '@inquirer/prompts'
 import { showHeader } from './ui'
+import { selectLlmProvider } from './providerSelection'
 import { runSchemaScan } from './schemaScan'
 import { runSqlPipeline } from './sqlPipeline'
 import { runRetrievalDebug } from './retrievalDebug'
@@ -29,6 +30,9 @@ function askMainAction(): Promise<'chat' | 'query' | 'scan' | 'debug' | 'exit'> 
 
 async function main(): Promise<void> {
   showHeader()
+  // Antes de nada, elijo con qué LLM trabajo esta sesión, para no arrancar sin saber
+  // qué modelo se está usando (el .env es solo el valor por defecto).
+  await selectLlmProvider()
 
   while (true) {
     const action = await askMainAction()

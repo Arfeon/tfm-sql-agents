@@ -2,6 +2,16 @@
 
 > 🌱 **Documento incremental.** SDD aplicado de forma incremental: **cada componente se especifica justo antes de implementarlo** (*spec-first* por slice), no todo de golpe.
 
+## Cómo leer este documento
+
+Es la especificación de ingeniería del proyecto: qué se construye y con qué criterios de aceptación. Es largo a propósito (una entrada por componente); **no hace falta leerlo entero**. Para orientarte:
+
+- **§1 Principios** y **§2 Stack** — la metodología y las tecnologías, en dos pinceladas.
+- **§3 Decisiones (D-xx)** — la tabla de decisiones de diseño con su porqué. Si te preguntas "¿por qué está hecho así?", empieza aquí. En §3.1 está el patrón obligatorio de acceso a recursos externos.
+- **§4 Especificaciones por componente** — una **tabla-índice** con todos los componentes (SPEC-00…SPEC-22) y su estado (✅ hecho / 🔮 futuro). Debajo, cada componente tiene su ficha con el mismo formato: **Objetivo · Contrato · Pasos · Criterios de aceptación**. Salta directo al que te interese.
+
+¿Buscabas cómo funciona o cómo se usa? El diseño de alto nivel está en [arquitectura.md](arquitectura.md) y el uso en el [README](../../README.md).
+
 ---
 
 ## 1. Principios rectores (metodología del curso)
@@ -81,6 +91,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-19 | Presentación gráfica de resultados en consola (tabla / gráfico de barras / ambas) | ✅ Cerrada |
 | SPEC-20 | Índice multi-inquilino: varias BDs indexadas a la vez en Neo4j/pgvector | 🔮 Futuro (fuera del MVP) |
 | SPEC-21 | Experimento de confusión: tablas y columnas con nombres opacos, ¿quién sobrevive sin descripciones? | ✅ Cerrada (sin descripciones se hunden todos los modos; con ellas, GraphRAG 83% de equivalencia vs 17% del esquema entero — la recuperación hace la documentación usable) |
+| SPEC-22 | Relaciones sintéticas en Neo4j: aristas curadas para BDs sin FKs declaradas | 🔮 Futuro (fuera del MVP; especificada) |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §10](arquitectura.md).
 
@@ -250,7 +261,7 @@ cd backend && npm run test:diagnostic   # tests de esquema y de Neo4j (requiere 
 
 ### SPEC-03 — Vectorización del esquema (embeddings → pgvector)
 
-**Objetivo.** Quiero poder encontrar las tablas relevantes para una pregunta aunque el usuario no use los nombres exactos del esquema (pregunta "clientes" → tabla `customer`; pregunta en español sobre esquema en inglés). Para eso vectorizo cada tabla con un modelo de embeddings y guardo el vector en pgvector, listo para la búsqueda semántica que hará el Schema Agent (SPEC-04). El razonamiento de fondo está en [`docs/investigacion/embeddings.md`](../investigacion/embeddings.md).
+**Objetivo.** Quiero poder encontrar las tablas relevantes para una pregunta aunque el usuario no use los nombres exactos del esquema (pregunta "clientes" → tabla `customer`; pregunta en español sobre esquema en inglés). Para eso vectorizo cada tabla con un modelo de embeddings y guardo el vector en pgvector, listo para la búsqueda semántica que hará el Schema Agent (SPEC-04). El razonamiento de fondo está en [`docs/proceso/investigacion/embeddings.md`](../proceso/investigacion/embeddings.md).
 
 **Contrato.**
 
@@ -599,9 +610,9 @@ cd backend && npm test    # unit del bucle de reintento Judge↔SQL (con dobles)
 - [X] La SQL candidata solo se ejecuta si pasa la comprobación de seguridad; si no, cuenta como fallo
 - [X] El runner agrega por modo (y por dificultad) y guarda el informe de forma reproducible (`docs/evaluacion/`); declara sus límites
 - [X] Tests unit con dobles del cálculo de métricas y de la orquestación; el runner completo es integración opt-in
-- [X] Ejecutado `npm run evaluate` (chat OpenAI, embeddings locales): 3 modos → recall 100/93/99%, execution accuracy justa 72/68/64%, equivalencia semántica (LLM) 64/60/56%, contexto 1498/481/774 tokens (una tirada; varía ~±8pp por no-determinación)
+- [X] Ejecutado `npm run evaluate` (chat OpenAI, embeddings locales): 3 modos → recall 100/93/99%, execution accuracy justa 72/68/64%, equivalencia (justa O juez) 88/84/80%, contexto 1498/481/774 tokens (una tirada; varía ~±8pp por no-determinación)
 - [X] Ablation de descripciones (`npm run evaluate:descriptions`, 2×2): las descripciones suben recall y precisión; `t_042` (G-25) se recupera y acierta con descripciones, y en solo-vectorial falla sin ellas (GraphRAG la rescata por FK)
-- [X] `arquitectura.md` §10 recoge la lectura neutra de los resultados; la lectura orientada a producto vive en el argumentario de la presentación (`docs/presentacion/propuesta-valor.md`)
+- [X] `arquitectura.md` §10 recoge la lectura neutra de los resultados; la lectura orientada a producto vive aparte, en el material de la presentación (fuera del repositorio)
 
 ```bash
 cd backend && npm test                 # unit del cálculo de métricas (con dobles)
@@ -934,5 +945,38 @@ cd backend && npm run evaluate:scale    # prueba de escala sobre la BD grande (o
 - [X] El golden set existente de Nebula (N-01..N-15) no se ve afectado (ninguna de sus tablas se toca)
 - [X] El informe muestra la matriz 2×3 con recall, justa y equivalencia, y el detalle por caso (`docs/evaluacion/confusion.md`)
 - [X] La lectura honesta queda en `arquitectura.md` §10. **Fase 1** (solo tabla opaca): hipótesis parcialmente refutada — el recall aguantó ~100% sin descripciones porque las COLUMNAS delatan el propósito y la vectorización las incluye. **Fase dura** (tabla + columnas c1..c5 opacas): hipótesis confirmada — sin descripciones se hunden todos los modos (vectorial 8% recall, GraphRAG 17%, y el esquema ENTERO solo 17-33% de equivalencia: verlo todo no sirve si nada habla), el rescate por FK solo no basta (la tabla opaca pierde el sitio del recorte de contexto frente a vecinas con score), y el resultado central: **las descripciones solo funcionan con recuperación** — GraphRAG+descripciones 83% de equivalencia y 100% de recall, mientras el esquema entero con las MISMAS descripciones en el DDL se queda en 17% (la documentación ahogada entre 66 tablas no es usable; la recuperación la hace visible)
+
+---
+
+### SPEC-22 — Relaciones sintéticas en Neo4j: aristas curadas para BDs sin FKs declaradas 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** Que el grafo pueda contener relaciones entre tablas que **no existen como clave foránea** en el DDL de la BD objetivo, declaradas aparte por quien conoce el dominio. El caso que lo motiva es real: un ERP viejo **sin ninguna FK declarada**, cuyo esquema no puedo tocar —es de un tercero y crear FKs cambiaría la BD productiva—, pero cuyas relaciones entre algunas tablas sí conozco. Hoy la expansión por FK del GraphRAG (SPEC-04) no tiene nada que expandir en una BD así: la recuperación se queda en las tablas que casan por significado y no arrastra las del JOIN, y el SQL Agent tiene que **adivinar** cómo unir. Con relaciones sintéticas, declaro esas uniones una vez en un fichero, viven **solo en Neo4j** (nunca escribo en la BD objetivo) y el sistema las usa igual que las FK reales: para traer las tablas relacionadas y para saber por qué columnas unirlas.
+
+**Contrato.**
+
+- *Sidecar de relaciones (mismo patrón que las descripciones).* Fichero(s) JSON en `relations/` con un array de `{ fromTable, fromColumn, toTable, toColumn, note? }`; los `*.example.json` se ignoran, como en `descriptions/`. Es metadata **curada por un humano** que conoce el dominio, no inferida.
+- *Nunca se escribe en la BD objetivo.* Las relaciones viven SOLO en el grafo Neo4j; el DDL del tercero no se toca. Es la razón de ser del componente (no puedo/quiero añadir FKs reales), y a la vez lo hace seguro: es metadata puramente aditiva sobre el índice, no una migración de la BD productiva.
+- *Aristas marcadas con procedencia.* Se crean como `REFERENCES` con una propiedad `synthetic: true`, para que la traza de recuperación (SPEC-13) y el DDL puedan señalar que esa relación es **curada**, no declarada por la BD. Misma filosofía de transparencia que el `assumed` del Judge (SPEC-14) y las fuentes de descripción: el sistema no disimula de dónde sale una relación.
+- *La expansión las usa sin cambios.* La expansión por FK (`SchemaGraphManager.getNeighbors` / `expandByForeignKeys`) ya recorre `:REFERENCES` sin mirar sus propiedades, así que una arista sintética se expande igual que una real; basta con que la ingesta las cree junto a las declaradas.
+- *El SQL Agent sabe unir.* La relación sintética entra en el DDL del contexto (`SchemaContext`) —como línea de FK o como comentario "relación curada: a.x = b.y"— para que el generador escriba el JOIN correcto. Es el aporte doble: mejora la **recuperación** (qué tablas) y la **generación** (cómo unirlas), algo que volcar el DDL entero no da si la relación no está documentada.
+- *Sincronizadas con el escaneo.* Como las descripciones (escaneo atómico Neo4j + pgvector), las relaciones sintéticas se aplican al ingerir y re-escanear las reconstruye. No tocan pgvector (son estructura, no texto de búsqueda).
+- *Guardas de validez.* Una relación cuyas tablas o columnas no existen en el esquema escaneado se **rechaza con aviso claro**, sin crear aristas colgantes. Una relación sintética errónea arrastra tablas equivocadas y baja la precisión, así que la procedencia y la curación humana son la defensa; no hay inferencia automática (un heurístico `X_id`→tabla `X` podría en el futuro *sugerir* candidatas a revisar, nunca aplicarlas solo).
+
+**Pasos**
+
+1. Carga del sidecar `relations/` (parseo + validación de forma), análoga a `descriptions.ts`.
+2. Ingesta: al volcar el grafo, crear las aristas `REFERENCES { synthetic: true, from_column, to_column }` además de las reales, validando que las tablas y columnas existen.
+3. Contexto/DDL: incluir las relaciones sintéticas en `SchemaContext` (marcadas como curadas) para que el SQL Agent las use en el JOIN.
+4. Traza (SPEC-13) y Judge (SPEC-14): señalar cuándo una tabla entra por una relación sintética y cuándo un JOIN se apoya en una relación curada (aviso, no bloqueo).
+5. Tests: una relación válida crea la arista y la expansión la sigue; una con tabla/columna inexistente se rechaza; la BD objetivo no recibe ninguna escritura (verificado con doble).
+
+**Criterios de aceptación**
+
+- [ ] Una relación declarada en el sidecar se convierte en arista en Neo4j y la expansión por FK trae la tabla relacionada aunque no haya FK en el DDL
+- [ ] La BD objetivo no se modifica en ningún momento (las relaciones viven solo en Neo4j)
+- [ ] La traza de recuperación distingue una relación curada de una FK real
+- [ ] El SQL Agent genera el JOIN correcto apoyándose en una relación sintética
+- [ ] Una relación con tabla o columna inexistente se rechaza con un mensaje claro, sin aristas colgantes
+- [ ] Re-escanear reconstruye las relaciones sintéticas junto al resto del grafo
 
 ---

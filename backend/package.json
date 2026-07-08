@@ -14,6 +14,7 @@
     "evaluate:scale": "tsx src/evaluation/runScaleEval.ts",
     "evaluate:aggregate": "tsx src/evaluation/aggregateScaleRuns.ts",
     "evaluate:confusion": "tsx src/evaluation/runConfusionEval.ts",
+    "evaluate:review": "tsx src/evaluation/reviewCases.ts",
     "seed": "tsx src/datasets/seedArcadia.ts",
     "seed:nebula": "tsx src/datasets/seedNebula.ts",
     "prepare": "cd .. && husky backend/.husky"

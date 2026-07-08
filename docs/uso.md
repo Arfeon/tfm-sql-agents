@@ -33,7 +33,18 @@ Desde `backend/`:
 npm start
 ```
 
-Sale una cabecera y el menú principal:
+Sale una cabecera y, **antes de nada, el selector de proveedor LLM de la sesión**: elijo
+si trabajo con OpenAI (nube) o en local (LM Studio), y cada opción muestra el modelo
+concreto que usaría. El `.env` (`LLM_PROVIDER`) es solo el valor por defecto que sale
+preseleccionado; así nunca arranco sin saber con qué modelo estoy trabajando.
+
+```
+¿Con qué proveedor de LLM quieres trabajar en esta sesión?
+❯ OpenAI (nube) — gpt-5-mini-2025-08-07
+  Local / LM Studio — qwen2.5-coder-14b-instruct
+```
+
+Tras elegir, el menú principal:
 
 ```
 ¿Qué quieres hacer?
@@ -179,7 +190,7 @@ Así se ve de un vistazo si una tabla se recupera por su significado o la rescat
 | `TARGET_DB_2_*` | Una **segunda BD** del catálogo (Nebula, la grande de la prueba de escala). Aparece para escanear/evaluar. |
 | `TARGET_DB_n_PUBLIC` | `true` si la BD es pública (muestra un aviso de posible contaminación del LLM). |
 | `EVAL_TARGET` | Qué BD evalúa `npm run evaluate` (por defecto Arcadia). |
-| `LLM_PROVIDER` | `openai` o `local` (LM Studio). Elige el modelo de chat/generación. |
+| `LLM_PROVIDER` | `openai` o `local` (LM Studio). Es el **valor por defecto** del selector que sale al arrancar; puedo cambiarlo por sesión ahí sin tocar el `.env`. |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | Credenciales y modelo de OpenAI. |
 | `LMSTUDIO_BASE_URL`, `LMSTUDIO_MODEL` | URL y modelo de LM Studio (local). |
 | `EMBEDDING_PROVIDER` | `openai` o `local`: con qué se vectoriza (se elige también al escanear). |
@@ -203,10 +214,13 @@ npm run typecheck               # comprueba tipos (tsc --noEmit)
 npm run test:diagnostic         # comprueba que Postgres/pgvector y Arcadia están listos (necesita Docker)
 npm run test:integration        # tests de integración (necesita Docker)
 
-# Evaluación experimental (opt-in: necesitan Docker + LLM) — ver §7
+# Evaluación experimental (opt-in: necesitan Docker + LLM) — ver §7 y docs/evaluacion/README.md
 npm run evaluate                # ablation de 3 modos sobre la BD de EVAL_TARGET (Arcadia por defecto)
 npm run evaluate:descriptions   # ablation 2×2 con/sin descripciones
 npm run evaluate:scale          # prueba de escala Arcadia (17 tablas) vs Nebula (66)
+npm run evaluate:aggregate      # media/rango de varias tiradas de la prueba de escala
+npm run evaluate:confusion      # caso difícil: tablas y columnas de nombre opaco
+npm run evaluate:review         # revisión objetiva de equivalencia (sin juez LLM)
 
 # Regenerar datos (solo si cambio esquema/volumen) — normalmente NO hace falta
 npm run seed -- --truncate      # repuebla Arcadia (seed=42)
@@ -225,30 +239,22 @@ docker compose down -v          # borrar TODO, incluidos los datos (empezar de c
 
 La evaluación mide, sobre un *golden set* de preguntas con su SQL de referencia, si la
 recuperación GraphRAG aporta frente a alternativas más pobres. Es **opt-in** (necesita Docker y
-el LLM) y guarda informes reproducibles en [`docs/evaluacion/`](evaluacion/).
+el LLM) y guarda informes en [`docs/evaluacion/`](evaluacion/).
 
-- **`npm run evaluate`** — corre tres modos de recuperación (*sin recuperación* = esquema entero /
-  *solo vectorial* / *GraphRAG*) y por cada uno mide:
-  - **schema-linking recall** — cuántas de las tablas correctas trae la recuperación.
-  - **tamaño de contexto** — tablas y tokens que recibiría el LLM (lo que enseña que volcar el
-    esquema entero no escala).
-  - **execution accuracy** — ejecuta la SQL generada y la de referencia y compara el resultado, en
-    dos variantes: *justa* (la candidata contiene el resultado de referencia) y *estricta*
-    (idéntico).
-  - **equivalencia semántica (LLM)** — un segundo LLM decide si la candidata responde a la **misma
-    pregunta** que la de referencia. Es **complementaria**: recupera aciertos que la comparación de
-    filas descarta (empates, columnas de más) y, a la vez, caza diferencias reales que la
-    comparación de filas no ve (p. ej. un `LEFT JOIN` que cambia el resultado). Como la juzga un
-    LLM, se reporta **al lado** de la execution accuracy, no en su lugar.
-- **`npm run evaluate:descriptions`** — el mismo experimento con y sin las descripciones de las
-  tablas, para aislar cuánto aportan (re-vectoriza el índice en cada condición y lo restaura).
-- **`npm run evaluate:scale`** — compara Arcadia (17 tablas) con Nebula (66) para ver que el
-  contexto del GraphRAG se mantiene acotado mientras el de "sin recuperación" se dispara.
-  Ingiere/vectoriza cada BD y **restaura Arcadia al terminar**.
+> **Qué mide cada métrica y cómo se interpretan las tablas** está explicado, sin dudas, en
+> [`docs/evaluacion/README.md`](evaluacion/README.md). Léelo antes de sacar conclusiones de los
+> números (sobre todo: la equivalencia la juzga un LLM y con pocos casos no discrimina).
 
-La lectura neutra de los resultados —y los **sesgos conocidos de las métricas** (columna de más,
-`INNER` vs `LEFT JOIN`, interpretación de la referencia única)— está en
-[`arquitectura.md` §10](design/arquitectura.md).
+Los arneses disponibles:
+
+- **`npm run evaluate`** — el ablation base: 3 modos de recuperación (sin recuperación / solo vectorial / GraphRAG) sobre la BD de `EVAL_TARGET`.
+- **`npm run evaluate:descriptions`** — el mismo experimento con y sin las descripciones de tablas, para aislar cuánto aportan.
+- **`npm run evaluate:scale`** — Arcadia (17 tablas) vs Nebula (66); enseña que el contexto del GraphRAG se mantiene plano. Restaura Arcadia al terminar.
+- **`npm run evaluate:aggregate`** — media y rango de varias tiradas de la prueba de escala (la generación no es determinista, así que la media es más fiable que una tirada suelta).
+- **`npm run evaluate:confusion`** — el caso difícil: tablas y columnas de nombre opaco, para ver quién sobrevive sin descripciones.
+- **`npm run evaluate:review`** — revisión objetiva de equivalencia **sin juez LLM**: ejecuta la SQL generada y la de referencia de cada caso y compara los resultados de verdad.
+
+La lectura neutra y los **sesgos conocidos de las métricas** están en [`arquitectura.md` §10](design/arquitectura.md).
 
 ---
 
