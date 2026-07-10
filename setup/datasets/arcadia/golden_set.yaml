@@ -70,9 +70,10 @@
     SELECT g.title, SUM(ps.duration_minutes) AS total_minutes
     FROM play_session ps
     JOIN game g ON g.game_id = ps.game_id
-    GROUP BY g.title
+    GROUP BY g.game_id, g.title
     ORDER BY total_minutes DESC
     LIMIT 10;
+  note: "Agrupo por game_id (no por title): hay títulos duplicados en el catálogo y agrupar por nombre fusiona juegos distintos. La referencia original agrupaba por title y penalizaba candidatas MÁS correctas (auditoría 2026-07-09)."
 
 - id: G-07
   question: "¿Cuál es la valoración media de cada género?"
@@ -130,10 +131,10 @@
     SELECT g.title, MAX(cs.concurrent_players) AS peak_concurrent
     FROM concurrent_snapshot cs
     JOIN game g ON g.game_id = cs.game_id
-    GROUP BY g.title
+    GROUP BY g.game_id, g.title
     ORDER BY peak_concurrent DESC
     LIMIT 10;
-  note: "Métrica tipo 'espectadores simultáneos': MAX sobre telemetría."
+  note: "Métrica tipo 'espectadores simultáneos': MAX sobre telemetría. Agrupo por game_id: hay títulos duplicados (ver G-06)."
 
 - id: G-12
   question: "¿Cuál es la duración media de sesión por plataforma?"
@@ -196,10 +197,10 @@
     JOIN dlc d ON d.dlc_id = p.dlc_id
     JOIN game g ON g.game_id = d.game_id
     JOIN franchise f ON f.franchise_id = g.franchise_id
-    GROUP BY f.name
+    GROUP BY f.franchise_id, f.name
     ORDER BY dlc_revenue DESC
     LIMIT 5;
-  note: "Multi-hop de 4 tablas: purchase -> dlc -> game -> franchise."
+  note: "Multi-hop de 4 tablas: purchase -> dlc -> game -> franchise. Agrupo por franchise_id: hay franquicias homónimas y agrupar por nombre las fusiona."
 
 - id: G-17
   question: "¿Qué clientes cancelaron su suscripción en menos de 30 días desde el alta?"
@@ -239,14 +240,14 @@
     FROM rating r
     JOIN game g ON g.game_id = r.game_id
     JOIN franchise f ON f.franchise_id = g.franchise_id
-    GROUP BY f.name
+    GROUP BY f.franchise_id, f.name
     HAVING COUNT(*) >= 50
     ORDER BY avg_score DESC
     LIMIT 5;
-  note: "Ranking con umbral mínimo de muestras; HAVING sobre el conteo, no sobre un corte arbitrario de nota."
+  note: "Ranking con umbral mínimo de muestras; HAVING sobre el conteo, no sobre un corte arbitrario de nota. Agrupo por franchise_id: las franquicias homónimas fusionadas cambiaban el top-5 (auditoría 2026-07-09)."
 
 - id: G-20
-  question: "Dame los ingresos por DLC desglosados por región del cliente."
+  question: "Dame los ingresos totales de las compras de DLC desglosados por región del cliente."
   difficulty: hard
   tables: [purchase, customer, region]
   sql: |
@@ -256,10 +257,10 @@
     LEFT JOIN purchase p ON p.customer_id = c.customer_id
     GROUP BY r.name
     ORDER BY dlc_revenue DESC;
-  note: "Interpretación inclusiva (D-13): 'por región' incluye regiones con 0 ingresos (LEFT JOIN, SUM→0). Un 0 es información: una región sin ventas es una señal, no una fila a ocultar."
+  note: "Interpretación inclusiva (D-13): 'por región' incluye regiones con 0 ingresos (LEFT JOIN, SUM→0). Un 0 es información: una región sin ventas es una señal, no una fila a ocultar. Pregunta desambiguada en la auditoría 2026-07-09: 'ingresos por DLC' se leía también como desglose por cada DLC."
 
 - id: G-21
-  question: "¿Qué género acumula el mayor pico de jugadores concurrentes?"
+  question: "¿A qué género pertenece el juego con el mayor pico de jugadores concurrentes?"
   difficulty: hard
   tables: [concurrent_snapshot, game, game_genre, genre]
   sql: |
@@ -268,22 +269,27 @@
     JOIN game g ON g.game_id = cs.game_id
     JOIN game_genre gg ON gg.game_id = g.game_id
     JOIN genre ge ON ge.genre_id = gg.genre_id
-    GROUP BY ge.name
+    GROUP BY ge.genre_id, ge.name
     ORDER BY peak_concurrent DESC
     LIMIT 1;
-  note: "Multi-hop telemetría -> catálogo -> género."
+  note: "Multi-hop telemetría -> catálogo -> género. Pregunta desambiguada en la auditoría 2026-07-09: 'acumula el mayor pico' admitía también sumar los concurrentes del género por instante (lectura igual de defensible que penalizaba al sistema)."
 
 - id: G-22
-  question: "¿Qué juego tiene el mayor número de DLCs publicados?"
+  question: "¿Qué juegos tienen el mayor número de DLCs publicados? Si hay varios empatados, muéstralos todos."
   difficulty: medium
   tables: [dlc, game]
   sql: |
-    SELECT g.title, COUNT(*) AS dlc_count
-    FROM dlc d
-    JOIN game g ON g.game_id = d.game_id
-    GROUP BY g.title
-    ORDER BY dlc_count DESC
-    LIMIT 1;
+    WITH counts AS (
+      SELECT d.game_id, COUNT(*) AS dlc_count
+      FROM dlc d
+      GROUP BY d.game_id
+    )
+    SELECT g.title, c.dlc_count
+    FROM counts c
+    JOIN game g ON g.game_id = c.game_id
+    WHERE c.dlc_count = (SELECT MAX(dlc_count) FROM counts)
+    ORDER BY g.title;
+  note: "Hay 41 juegos empatados al máximo: un LIMIT 1 elige uno arbitrario y hace el caso incalificable por comparación exacta. La pregunta pide todos los empatados (auditoría 2026-07-09)."
 
 - id: G-23
   question: "¿Qué porcentaje de las suscripciones iniciadas en 2024 sigue activo?"

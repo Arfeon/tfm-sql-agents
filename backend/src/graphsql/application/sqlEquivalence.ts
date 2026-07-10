@@ -66,9 +66,17 @@ export interface ExecutedResults {
 const RESULT_SAMPLE_ROWS = 20
 
 export function formatResultForJudge(label: string, rows: ResultRow[]): string {
-  const sample = rows.slice(0, RESULT_SAMPLE_ROWS)
+  // Ordeno la muestra de forma canónica: si un resultado viene sin ORDER BY y el otro
+  // ordenado, las "primeras N filas" de cada uno serían ventanas incomparables y el juez
+  // vería conjuntos distintos donde no los hay (falso negativo visto en la auditoría 2026-07-09).
+  const canonical = [...rows].sort((a, b) =>
+    JSON.stringify(Object.values(a)).localeCompare(JSON.stringify(Object.values(b))),
+  )
+  const sample = canonical.slice(0, RESULT_SAMPLE_ROWS)
   const truncationNote =
-    rows.length > RESULT_SAMPLE_ROWS ? `(primeras ${RESULT_SAMPLE_ROWS} de ${rows.length} filas)` : `(${rows.length} filas en total)`
+    rows.length > RESULT_SAMPLE_ROWS
+      ? `(muestra de ${RESULT_SAMPLE_ROWS} de ${rows.length} filas, ordenada de forma canónica)`
+      : `(${rows.length} filas en total)`
   return `Resultado ejecutado de la ${label} ${truncationNote}:\n${JSON.stringify(sample)}`
 }
 

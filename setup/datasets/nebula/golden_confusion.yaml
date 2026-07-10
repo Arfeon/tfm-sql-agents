@@ -64,7 +64,7 @@
     SELECT g.title, COUNT(*) AS saves
     FROM t_ops_06 s
     JOIN game g ON g.game_id = s.c3
-    GROUP BY g.title
+    GROUP BY g.game_id, g.title
     ORDER BY saves DESC
     LIMIT 5;
-  note: "save_game ofuscada, multi-hop: rescate posible por la FK c3→game."
+  note: "save_game ofuscada, multi-hop: rescate posible por la FK c3→game. Agrupo por game_id: hay títulos duplicados y agrupar por nombre fusiona juegos distintos (auditoría 2026-07-09)."

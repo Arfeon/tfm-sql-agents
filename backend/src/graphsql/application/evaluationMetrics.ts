@@ -48,15 +48,44 @@ export function resultsContain(expected: ResultRow[], actual: ResultRow[]): bool
 }
 
 function rowContains(actualRow: ResultRow, expectedRow: ResultRow): boolean {
-  const pool = Object.values(actualRow).map(normalizeValue)
-  for (const value of Object.values(expectedRow).map(normalizeValue)) {
-    const index = pool.indexOf(value)
+  const pool = Object.values(actualRow)
+  const used = new Array(pool.length).fill(false)
+  for (const expectedValue of Object.values(expectedRow)) {
+    const index = pool.findIndex((actualValue, i) => !used[i] && valuesEquivalent(expectedValue, actualValue))
     if (index === -1) {
       return false
     }
-    pool.splice(index, 1)
+    used[index] = true
   }
   return true
+}
+
+/**
+ * Igualdad de valores para la métrica justa. Además de la igualdad normalizada,
+ * dos números casan si coinciden al redondear ambos a la precisión más gruesa de
+ * los dos: una referencia con ROUND(x, 1) = 124.0 y una candidata sin redondear
+ * 124.0037… son la misma respuesta (la métrica estricta sigue exigiendo igualdad).
+ */
+function valuesEquivalent(a: unknown, b: unknown): boolean {
+  const aText = normalizeValue(a)
+  const bText = normalizeValue(b)
+  if (aText === bText) {
+    return true
+  }
+  const aNumber = Number(aText)
+  const bNumber = Number(bText)
+  if (aText === '' || bText === '' || aText === '∅' || bText === '∅' || Number.isNaN(aNumber) || Number.isNaN(bNumber)) {
+    return false
+  }
+  const decimals = Math.min(decimalsOf(a), decimalsOf(b))
+  return aNumber.toFixed(decimals) === bNumber.toFixed(decimals)
+}
+
+/** Decimales declarados por el valor tal cual llegó ('124.0' → 1, '124' o 124.0 → 0). */
+function decimalsOf(value: unknown): number {
+  const text = String(value).trim()
+  const match = /^-?\d+\.(\d+)$/.exec(text)
+  return match ? match[1].length : 0
 }
 
 function normalizeRow(row: ResultRow): string {

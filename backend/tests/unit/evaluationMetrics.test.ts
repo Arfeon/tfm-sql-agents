@@ -90,6 +90,38 @@ describe('resultsContain (execution accuracy justa: referencia ⊆ candidata)', 
   })
 })
 
+describe('resultsContain — tolerancia de redondeo (mismo valor a la precisión más gruesa de los dos)', () => {
+  it('la referencia redondeada a 1 decimal casa con la candidata sin redondear (el caso G-12)', () => {
+    const reference = [{ platform: 'Volt Station 4', avg_minutes: '124.0' }]
+    const candidate = [{ name: 'Volt Station 4', avg: '124.0037912800558715' }]
+    expect(resultsContain(reference, candidate)).toBe(true)
+  })
+  it('la referencia entera casa con la candidata con decimales que redondean a ella', () => {
+    expect(resultsContain([{ total: '124' }], [{ total: '124.0037' }])).toBe(true)
+  })
+  it('mismo número con ceros de más casa', () => {
+    expect(resultsContain([{ score: '3.94' }], [{ score: '3.9400' }])).toBe(true)
+  })
+  it('valores distintos a la misma precisión NO casan', () => {
+    expect(resultsContain([{ score: '3.94' }], [{ score: '3.95' }])).toBe(false)
+  })
+  it('la diferencia sobrevive al redondeo a la precisión gruesa: NO casa', () => {
+    expect(resultsContain([{ avg: '124.0' }], [{ avg: '124.16' }])).toBe(false)
+  })
+  it('enteros distintos NO casan (la tolerancia no convierte 11 en 10)', () => {
+    expect(resultsContain([{ n: 10 }], [{ n: 11 }])).toBe(false)
+  })
+  it('los textos no numéricos siguen comparándose exactos', () => {
+    expect(resultsContain([{ region: 'Norte' }], [{ region: 'Nort' }])).toBe(false)
+  })
+})
+
+describe('resultsMatch sigue estricto (la tolerancia es solo de la métrica justa)', () => {
+  it('124.0 vs 124.0037… NO coincide en la métrica estricta', () => {
+    expect(resultsMatch([{ avg: '124.0' }], [{ avg: '124.0037912800558715' }])).toBe(false)
+  })
+})
+
 describe('estimateTokens', () => {
   it('cadena vacía → 0 tokens', () => {
     expect(estimateTokens('')).toBe(0)

@@ -96,13 +96,20 @@ describe('formatResultForJudge', () => {
   it('muestra el conteo total y recorta a las filas de muestra', () => {
     const rows = Array.from({ length: 25 }, (_, i) => ({ id: i }))
     const formatted = formatResultForJudge('CANDIDATA', rows)
-    expect(formatted).toMatch(/primeras 20 de 25 filas/)
-    expect(formatted).not.toMatch(/"id":24/)
+    expect(formatted).toMatch(/muestra de 20 de 25 filas/)
   })
 
   it('con pocas filas indica el total sin recortar', () => {
     const formatted = formatResultForJudge('REFERENCIA', [{ id: 1 }])
     expect(formatted).toMatch(/1 filas in total|1 filas en total/)
     expect(formatted).toMatch(/"id":1/)
+  })
+
+  it('la muestra es canónica: el mismo conjunto en distinto orden produce la misma muestra', () => {
+    const rows = Array.from({ length: 30 }, (_, i) => ({ title: `Juego ${i}`, total: i * 3 }))
+    const shuffled = [...rows].reverse()
+    const a = formatResultForJudge('REFERENCIA', rows)
+    const b = formatResultForJudge('CANDIDATA', shuffled)
+    expect(a.split(':\n')[1]).toBe(b.split(':\n')[1])
   })
 })
