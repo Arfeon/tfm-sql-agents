@@ -1,6 +1,7 @@
 import { Client } from 'pg'
 import Cursor from 'pg-cursor'
 import type { ITargetDatabase } from '../../domain/ports/ITargetDatabase'
+import { stripTrailingSemicolon } from '../targetdb/sqlText'
 
 interface ConnectionParams {
   host: string
@@ -83,9 +84,4 @@ function closeCursor(cursor: Cursor): Promise<void> {
   return new Promise((resolve, reject) => {
     cursor.close((error?: Error) => (error ? reject(error) : resolve()))
   })
-}
-
-/** Quito un único `;` final para que el cursor (protocolo extendido) no se queje. */
-function stripTrailingSemicolon(sql: string): string {
-  return sql.trim().replace(/;\s*$/, '')
 }

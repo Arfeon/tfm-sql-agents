@@ -57,6 +57,21 @@ describe('loadTargetDatabases', () => {
     expect(targets).toHaveLength(1)
     expect(targets[0].name).toBe('arcadia')
   })
+
+  it('tipoMssql_aplicaPuertoYEsquemaPorDefectoDelMotor', () => {
+    const targets = loadTargetDatabases({ TARGET_DB_1_TYPE: 'mssql', TARGET_DB_1_NAME: 'ventas' })
+    expect(targets[0]).toMatchObject({ type: 'mssql', port: 1433, schema: 'dbo' })
+  })
+
+  it('tipoMssql_respetaPuertoYEsquemaExplicitos', () => {
+    const targets = loadTargetDatabases({
+      TARGET_DB_1_TYPE: 'mssql',
+      TARGET_DB_1_NAME: 'ventas',
+      TARGET_DB_1_PORT: '1444',
+      TARGET_DB_1_SCHEMA: 'sales',
+    })
+    expect(targets[0]).toMatchObject({ port: 1444, schema: 'sales' })
+  })
 })
 
 describe('selectEvalTarget', () => {

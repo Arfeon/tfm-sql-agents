@@ -3,6 +3,7 @@
  * un `ITargetDatabase` ya conectado en solo lectura.
  */
 import { PostgresTargetDatabase } from '../postgres/PostgresTargetDatabase'
+import { SqlServerTargetDatabase } from '../sqlserver/SqlServerTargetDatabase'
 import { loadTargetDatabases, type TargetDatabaseConfig } from '../config/targetDatabases'
 import type { ITargetDatabase } from '../../domain/ports/ITargetDatabase'
 
@@ -28,8 +29,19 @@ export const TargetDatabaseFactory = {
           },
           { statementTimeoutMs: options.statementTimeoutMs },
         )
+      case 'mssql':
+        return SqlServerTargetDatabase.fromParams(
+          {
+            host: target.host,
+            port: target.port,
+            database: target.name,
+            user: target.user,
+            password: target.password,
+          },
+          { statementTimeoutMs: options.statementTimeoutMs },
+        )
       default:
-        throw new Error(`BD objetivo no soportada todavía: "${target.type}". De momento solo PostgreSQL.`)
+        throw new Error(`BD objetivo no soportada todavía: "${target.type}". De momento PostgreSQL y SQL Server.`)
     }
   },
 

@@ -3,6 +3,8 @@
  * lanzo consultas. Qué motor hay detrás lo decide el `TargetDatabaseFactory`.
  */
 export interface ITargetDatabase {
+  /** El placeholder de `params` es el del motor ($1… en PostgreSQL, @p1… en SQL Server): con
+   * parámetros, la consulta solo es portable si quien la escribe conoce el motor. */
   fetchAll<T extends Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>
   /** El adaptador limita de forma eficiente para su motor, sin traerse todo el resultado. */
   fetchCapped<T extends Record<string, unknown>>(
