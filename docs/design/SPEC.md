@@ -8,7 +8,7 @@ Es la especificación de ingeniería del proyecto: qué se construye y con qué 
 
 - **§1 Principios** y **§2 Stack** — la metodología y las tecnologías, en dos pinceladas.
 - **§3 Decisiones (D-xx)** — la tabla de decisiones de diseño con su porqué. Si te preguntas "¿por qué está hecho así?", empieza aquí. En §3.1 está el patrón obligatorio de acceso a recursos externos.
-- **§4 Especificaciones por componente** — una **tabla-índice** con todos los componentes (SPEC-00…SPEC-22) y su estado (✅ hecho / 🔮 futuro). Debajo, cada componente tiene su ficha con el mismo formato: **Objetivo · Contrato · Pasos · Criterios de aceptación**. Salta directo al que te interese.
+- **§4 Especificaciones por componente** — una **tabla-índice** con todos los componentes (SPEC-00…SPEC-25) y su estado (✅ hecho / 🔮 futuro). Debajo, cada componente tiene su ficha con el mismo formato: **Objetivo · Contrato · Pasos · Criterios de aceptación**. Salta directo al que te interese.
 
 ¿Buscabas cómo funciona o cómo se usa? El diseño de alto nivel está en [arquitectura.md](arquitectura.md) y el uso en el [README](../../README.md).
 
@@ -47,6 +47,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | D-12 | Oculto el chat conversacional del menú del CLI (YAGNI), pero **conservo** el grafo `agentGraph` y sus tools (`schemaTools`, `sqlTools`) sin borrarlos | El pipeline NL→SQL con revisión (SPEC-08/10/15) cubre el caso de uso real; la conversación libre no aportaba y confundía en la demo. No la borro porque el grafo y sus tools son una base reutilizable para direcciones futuras (un servidor MCP, backends específicos): oculto solo el punto de entrada (la opción de menú), reactivable con una línea. Distinto de borrar código muerto: aquí es código vivo y reutilizable, solo no expuesto | ✅ Cerrada |
 | D-13 | Golden set: interpretación **inclusiva** de las agregaciones "por/cada categoría" — la SQL de referencia incluye las categorías con 0/NULL (LEFT JOIN), no solo las que tienen actividad | Revisando a mano los fallos vi que varias referencias usaban INNER JOIN y ocultaban categorías sin actividad (regiones sin clientes, géneros sin valoraciones, planes sin suscripciones, plataformas sin sesiones, regiones sin ingresos). Pero una pregunta "por/cada X" pregunta por TODAS las X, y un 0 es información (una región sin ventas es una señal, no una fila a ocultar; el front la etiqueta "sin datos"). Así que la respuesta fiel incluye las vacías, y penalizar al modelo por generarla era un error de la ground truth, no del modelo. Aplico la regla por el ENUNCIADO y de forma uniforme (puede perjudicar a un candidato que usara INNER), no para favorecer al modelo, y mantengo los números anteriores para transparencia. Límite conocido: cualquier referencia única fija una interpretación; para preguntas ambiguas es intrínseco a la execution accuracy (por eso está D-11) | ✅ Cerrada |
 | D-14 | Despliegue objetivo **on-premise** (dentro del perímetro de la organización); la entrega se materializa como instalación reproducible con Docker Compose, **sin instancia en nube pública** | GraphSQL se conecta a la BD corporativa y maneja su esquema, sus descripciones y los resultados de las consultas: exactamente el tipo de pieza que una empresa no despliega en una nube de terceros (lo veo en mi propio entorno laboral: las aplicaciones y las bases de datos corren en servidores propios, orquestadas con Kubernetes y Docker, minimizando lo expuesto a la nube). El proveedor LLM local (LM Studio) existe justo para eso: que ni las preguntas ni el esquema salgan del perímetro; publicar una instancia en un VPS iría contra esa decisión de diseño y demostraría el sistema en un entorno donde ningún usuario real lo usaría. Como aplicación CLI cuya infraestructura ya está empaquetada en contenedores, la entrega natural es la instalación documentada y reproducible (`docker compose up` + guía), y ese mismo compose es la base directa de un despliegue productivo en un orquestador (Kubernetes) sobre servidores de la organización — queda como mejora futura junto al servidor MCP | ✅ Cerrada |
+| D-15 | Consultas guardadas: **una sola tabla `saved_queries` con flags** (`use_as_example`, `is_favorite`) y **guardado explícito tras ver el resultado**, no automático al aprobar; una columna `user_id` (hoy un valor por defecto) deja la puerta abierta al futuro por-usuario | La memoria *few-shot* (SPEC-09) y las consultas favoritas (SPEC-25) comparten la forma de fila (pregunta, SQL, BD objetivo, tablas, fecha) y el MISMO momento natural de guardado: "he visto el resultado y es bueno". Guardarlo una vez en una tabla con dos flags es más simple que dos tablas duplicadas, evita el `if (tipo)` en la capa de aplicación (un solo puerto/adaptador/factory, D-05) y hace el por-usuario futuro una columna, no una migración doble. Los dos comportamientos quedan separados por flag: la recuperación semántica filtra `use_as_example = true` (+ misma BD + umbral, D-06); la lista de favoritas filtra `is_favorite = true`. Cambio el disparador de SPEC-09 de automático-al-aprobar a **explícito**: aprobar la SQL valida el texto, pero ver el resultado valida la RESPUESTA — es un mejor sello de calidad para un corpus de ejemplos, y evita sembrarlo de consultas exploratorias o casi-duplicadas que ensuciarían los *few-shot*. El coste (un paso más y menos ejemplos) lo asumo a cambio de un corpus que el humano cura, no que se llena solo | ✅ Cerrada |
 
 ### 3.1 Patrón obligatorio: acceso a recursos externos (puerto + adaptador + factory)
 
@@ -78,7 +79,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-06 | Judge Agent (seguridad: allowlist + EXPLAIN + juez LLM) | ✅ Cerrada |
 | SPEC-07 | Execute SQL (solo lectura) | ✅ Cerrada |
 | SPEC-08 | Human Review (interrupt) integrado en el pipeline | ✅ Cerrada |
-| SPEC-09 | Memory Agent / Store Feedback: consultas aprobadas como ejemplos *few-shot* | 🔮 Futuro (fuera del MVP; especificada y lista para implementar) |
+| SPEC-09 | Memory Agent / Store Feedback: consultas guardadas como ejemplos *few-shot* (tabla `saved_queries`, guardado explícito, D-15) | 🔮 Futuro (fuera del MVP; especificada y lista para implementar) |
 | SPEC-10 | Supervisor (enrutador determinista) — al final, una vez existen las piezas | ✅ Cerrada |
 | SPEC-11 | Integración CLI completa + Evaluación experimental (ablation sobre el golden set) | ✅ Cerrada (arnés + experimento ejecutado; ablation de 3 modos y de descripciones, informes en `docs/evaluacion/`) |
 | SPEC-12 | Gestión de conversaciones: nombrar, listar y reanudar hilos | 🔮 Futuro (fuera del MVP) |
@@ -94,6 +95,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-22 | Relaciones sintéticas en Neo4j: aristas curadas para BDs sin FKs declaradas | 🔮 Futuro (fuera del MVP; especificada) |
 | SPEC-23 | Plantillas parametrizadas: consultas aprobadas reutilizables con parámetros tipados | 🔮 Futuro (fuera del MVP; especificada) |
 | SPEC-24 | Widgets bajo demanda: SQL aprobada ejecutada sin LLM para dashboards | 🔮 Futuro (fuera del MVP; especificada) |
+| SPEC-25 | Consultas favoritas: guardar con nombre, listar y reejecutar directamente (sin agentes, con la barrera de seguridad) | 🔮 Futuro (fuera del MVP; comparte la tabla `saved_queries` con SPEC-09, D-15) |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §10](arquitectura.md).
 
@@ -493,39 +495,39 @@ cd backend && npm run test:integration   # human review con checkpointer (opt-in
 
 ---
 
-### SPEC-09 — Memory Agent: reutilizar consultas aprobadas como ejemplos *few-shot* 🔮 *Futuro (fuera del MVP)*
+### SPEC-09 — Memory Agent: reutilizar consultas guardadas como ejemplos *few-shot* 🔮 *Futuro (fuera del MVP)*
 
-**Objetivo.** Cerrar el círculo del human-in-the-loop: cada consulta que apruebo en la revisión es una **etiqueta de calidad gratis** (pregunta en lenguaje natural + SQL validada por un humano). Quiero guardarlas y, ante una pregunta nueva parecida, pasarle al SQL Agent las más similares como ejemplos *few-shot*, para que acierte más en preguntas recurrentes y aprenda las convenciones del dominio (cómo se calcula "activo", qué significa "ingresos"…). Son las dos piezas que la visión llama **Store Feedback** (guardar) y **Memory Agent** (recuperar).
+**Objetivo.** Cerrar el círculo del human-in-the-loop: cada consulta que sale bien es una **etiqueta de calidad gratis** (pregunta en lenguaje natural + SQL cuyo resultado el humano ha visto y dado por bueno). Quiero guardarlas y, ante una pregunta nueva parecida, pasarle al SQL Agent las más similares como ejemplos *few-shot*, para que acierte más en preguntas recurrentes y aprenda las convenciones del dominio (cómo se calcula "activo", qué significa "ingresos"…). Son las dos piezas que la visión llama **Store Feedback** (guardar) y **Memory Agent** (recuperar). La tabla y el momento de guardado los comparto con las favoritas (SPEC-25): la decisión está en **D-15**.
 
 **Contrato.**
 
-- *Guardar solo lo validado (Store Feedback).* Al **aprobar y ejecutar con éxito** una consulta, se guarda: la pregunta, la SQL final (la editada a mano vale aún más: lleva corrección humana), la BD objetivo, las tablas usadas y la fecha, junto al **embedding de la pregunta**, en una tabla propia de `graphsql_memory` (separada del índice de esquema). Las rechazadas no se guardan. Guardar es **no crítico**: si falla, la consulta ya se ejecutó y no rompe nada (un aviso y seguir).
-- *Recuperar por similitud (Memory Agent).* Ante una pregunta nueva, se embebe y se buscan las top-K preguntas guardadas más parecidas **de la misma BD objetivo** (lección de SPEC-18: nunca ejemplos de Arcadia para preguntas de Nebula), filtrando por un umbral de similitud. Palancas ya reservadas en el `.env`: `SIMILARITY_THRESHOLD` (0.75) y `MAX_FEEDBACK_EXAMPLES` (5). Sin ejemplos por encima del umbral, el pipeline sigue exactamente como hoy (la memoria es aditiva, nunca bloqueante).
-- *Mismo modelo de embeddings que el índice* (lección de D-06): se embebe y se busca con el modelo del índice actual; si el índice se re-vectoriza con otro modelo, los embeddings de la memoria se regeneran igual (o se invalidan con aviso).
+- *Guardar es explícito y tras ver el resultado (Store Feedback, D-15).* Aprobar la SQL valida el texto; ver el resultado valida la RESPUESTA. Por eso el guardado NO es automático al aprobar: tras presentar el resultado, ofrezco guardar la consulta y, si el humano quiere, marcarla como ejemplo para el agente (`use_as_example`). Se guarda la pregunta, la SQL final (la editada a mano vale aún más: lleva corrección humana), la BD objetivo, las tablas usadas y la fecha, junto al **embedding de la pregunta**. Guardar es **no crítico**: la consulta ya se ejecutó, así que un fallo al guardar solo genera un aviso y sigue.
+- *Una sola tabla con flags (D-15).* `saved_queries` vive en `graphsql_memory` (separada del índice de esquema y de los checkpoints). La misma fila sirve a la memoria y a las favoritas de SPEC-25, distinguidas por flag: la recuperación *few-shot* solo mira las que tienen `use_as_example = true`. Una columna `user_id` (hoy un valor por defecto) deja el por-usuario para el futuro sin migrar el esquema.
+- *Recuperar por similitud (Memory Agent).* Ante una pregunta nueva, se embebe y se buscan las top-K preguntas guardadas (con `use_as_example`) más parecidas **de la misma BD objetivo** (lección de SPEC-18: nunca ejemplos de Arcadia para preguntas de Nebula), filtrando por un umbral de similitud. Palancas ya reservadas en el `.env`: `SIMILARITY_THRESHOLD` (0.75) y `MAX_FEEDBACK_EXAMPLES` (5). Sin ejemplos por encima del umbral, el pipeline sigue exactamente como hoy (la memoria es aditiva, nunca bloqueante).
+- *Mismo modelo de embeddings que el índice* (lección de D-06): se embebe y se busca con el modelo del índice actual; guardo el modelo/dimensión junto al vector, y si el índice se re-vectoriza con otro modelo, los embeddings de la memoria se regeneran igual (o se invalidan con aviso).
 - *Integración en el grafo.* Un nodo `memory` al empezar el ciclo (antes de generar) añade los ejemplos al estado; `generateSql` los recibe como bloque *few-shot* en el prompt (pregunta → SQL, N ejemplos). El enrutado no cambia: la memoria enriquece, no decide.
-- *Transparencia en la revisión.* Si se usaron ejemplos, la caja de la consulta lo dice ("apoyada en N consultas aprobadas similares"), para que el humano sepa de dónde viene el estilo de la SQL — mismo criterio de explicabilidad que la traza de recuperación (SPEC-13).
+- *Transparencia en la revisión.* Si se usaron ejemplos, la caja de la consulta lo dice ("apoyada en N consultas similares guardadas"), para que el humano sepa de dónde viene el estilo de la SQL — mismo criterio de explicabilidad que la traza de recuperación (SPEC-13).
 - *Medir el aporte SIN trampa.* El arnés de evaluación gana un modo "con memoria", pero con **leave-one-out obligatorio**: al evaluar un caso se excluyen de la memoria ese mismo caso y cualquier pregunta idéntica — si no, sembrar la memoria con el golden set y evaluar sobre el golden set sería filtración (el ejemplo *es* la respuesta) y el número saldría inflado. Este sesgo se declara en la sección de sesgos de `arquitectura.md` §10 el día que se mida.
-- *Semilla manual y etiquetas (el "gestor de consultas").* Además de las aprobadas por el pipeline, puedo **sembrar** ejemplos a mano: una pregunta + su SQL (p. ej. una consulta que ya sé buena de mi ERP), con **etiquetas** opcionales ("facturación", "stock"…). Entran al mismo almacén con `source: manual` y el Memory Agent las usa igual que las aprobadas (few-shot por similitud; la etiqueta puede reforzar el filtrado). Y la otra dirección de uso: las entradas se pueden **listar y relanzar directamente como favoritas** desde el CLI (por etiqueta o búsqueda), sin pasar por el LLM — que es la puerta natural a convertirlas en plantillas parametrizadas (SPEC-23). Dos caminos, un almacén: el implícito (el agente se apoya en ellas cuando le hacen falta) y el explícito (yo las recupero de preferidos).
+- *Semilla manual y etiquetas (el "gestor de consultas").* Además de las guardadas desde el pipeline, puedo **sembrar** filas a mano en `saved_queries`: una pregunta + su SQL (p. ej. una consulta que ya sé buena de mi ERP), con los flags que elija (`use_as_example`, `is_favorite` + título) y **etiquetas** opcionales (columna `tags`: "facturación", "stock"…). El Memory Agent las usa igual que las guardadas del pipeline (few-shot por similitud; la etiqueta puede reforzar el filtrado). Dos caminos, un almacén: el implícito (el agente se apoya en ellas cuando le hacen falta) y el explícito (recuperarlas de favoritas, SPEC-25, o convertirlas en plantilla, SPEC-23).
 - *Mantenimiento mínimo.* Una forma de vaciar la memoria (por BD o entera) desde el CLI o un script, y de borrar/editar una entrada sembrada; sin más gestión fina en esta fase.
 
 **Pasos**
 
-1. Tabla `approved_queries` en `graphsql_memory` (pregunta, SQL, BD, tablas, embedding, fecha) detrás de un puerto + adaptador + factory (patrón D-05), separada del índice de esquema.
-2. Caso de uso `storeApprovedQuery` (deps inyectadas): lo llama el pipeline tras ejecutar con éxito; fallo → aviso, no rotura.
-3. Caso de uso `findSimilarApprovedQueries(question, target)`: embeber, buscar top-K de la misma BD, filtrar por umbral.
+1. Tabla `saved_queries` en `graphsql_memory` (pregunta, SQL, BD, tablas, embedding, modelo/dimensión, `use_as_example`, `is_favorite`, `title` nulo, `tags` opcionales, `user_id` por defecto, fecha) detrás de un puerto + adaptador + factory (patrón D-05), separada del índice de esquema. Compartida con SPEC-25.
+2. Caso de uso `storeSavedQuery` (deps inyectadas): lo llama el CLI tras presentar el resultado, con los flags que elija el humano; fallo → aviso, no rotura.
+3. Caso de uso `findSimilarSavedQueries(question, target)`: embeber con el modelo del índice, buscar top-K de la misma BD con `use_as_example`, filtrar por umbral.
 4. `generateSql` acepta ejemplos *few-shot* opcionales y los inyecta en el prompt con formato estable.
-5. Nodo `memory` en el pipeline + canal `examples` en el estado; el CLI muestra la línea de transparencia en la revisión.
+5. Nodo `memory` en el pipeline + canal `examples` en el estado; el CLI muestra la línea de transparencia en la revisión y el prompt de guardado tras el resultado.
 6. Evaluación: modo "con memoria" con leave-one-out; comparar con/sin memoria sobre el mismo golden set y declarar el método.
-7. Tests con dobles: guardar solo aprobadas, no romper si falla el guardado, filtrar por BD y umbral, prompt con ejemplos, leave-one-out.
+7. Tests con dobles: guardar solo con el flag pedido, no romper si falla el guardado, filtrar por BD/flag/umbral, prompt con ejemplos, leave-one-out.
 
 **Criterios de aceptación**
 
-- [ ] Una consulta aprobada y ejecutada queda guardada con su embedding; una rechazada, no; un fallo al guardar no rompe el flujo
-- [ ] Ante una pregunta parecida, el SQL Agent recibe como mucho `MAX_FEEDBACK_EXAMPLES` ejemplos de la MISMA BD por encima de `SIMILARITY_THRESHOLD`; sin ejemplos, el pipeline se comporta exactamente como hoy
+- [ ] Tras ver el resultado puedo guardar la consulta y marcarla como ejemplo; sin marcarla, no entra en la memoria *few-shot*; un fallo al guardar no rompe el flujo
+- [ ] Ante una pregunta parecida, el SQL Agent recibe como mucho `MAX_FEEDBACK_EXAMPLES` ejemplos (`use_as_example`) de la MISMA BD por encima de `SIMILARITY_THRESHOLD`; sin ejemplos, el pipeline se comporta exactamente como hoy
 - [ ] La revisión muestra si la consulta se apoyó en ejemplos (transparencia)
 - [ ] El aporte se mide con leave-one-out y se declara el método (sin filtración golden set → memoria → golden set)
-- [ ] Puedo sembrar a mano una pregunta + SQL con etiquetas; entra al almacén como `manual` y el Memory Agent la usa igual que una aprobada
-- [ ] Puedo listar las consultas guardadas (filtrando por etiqueta o texto) y relanzar una directamente sin LLM
+- [ ] Puedo sembrar a mano una pregunta + SQL con etiquetas y flags; entra en `saved_queries` y el Memory Agent la usa igual que una guardada desde el pipeline (listar y reejecutar viven en SPEC-25)
 - [ ] Suite unitaria verde con dobles, sin Docker ni LLM
 
 ---
@@ -990,7 +992,7 @@ Dos motivos más se sumaron después. La auditoría de la evaluación (2026-07-0
 
 ### SPEC-23 — Plantillas parametrizadas: consultas aprobadas reutilizables con parámetros tipados 🔮 *Futuro (fuera del MVP)*
 
-**Objetivo.** Una consulta aprobada resuelve una pregunta concreta ("ventas del cliente 42 en junio"), pero el patrón se repite con otros valores. Quiero poder guardar una consulta aprobada como **plantilla**: sus literales del `WHERE`/`HAVING` se convierten en parámetros con nombre y tipo, y cualquier usuario la relanza con valores nuevos sin pasar por el LLM ni por una nueva aprobación — la estructura ya la validó un humano; lo único que cambia son valores, y van **siempre ligados**. Nace de una petición de los primeros usuarios (reproducir "consultas favoritas" con datos actualizados) y es el puente entre el almacén de aprobadas (SPEC-09) y los widgets (SPEC-24).
+**Objetivo.** Una consulta aprobada resuelve una pregunta concreta ("ventas del cliente 42 en junio"), pero el patrón se repite con otros valores. Quiero poder guardar una consulta aprobada como **plantilla**: sus literales del `WHERE`/`HAVING` se convierten en parámetros con nombre y tipo, y cualquier usuario la relanza con valores nuevos sin pasar por el LLM ni por una nueva aprobación — la estructura ya la validó un humano; lo único que cambia son valores, y van **siempre ligados**. Nace de una petición de los primeros usuarios (reproducir consultas favoritas —SPEC-25— con datos actualizados) y es el puente entre el almacén de guardadas (SPEC-09, D-15), las favoritas (SPEC-25) y los widgets (SPEC-24).
 
 **Contrato.**
 
@@ -1048,5 +1050,39 @@ Dos motivos más se sumaron después. La auditoría de la evaluación (2026-07-0
 - [ ] El widget de una plantilla pide (o usa por defecto) sus parámetros tipados
 - [ ] Puedo listar, renombrar y borrar widgets desde el CLI sin afectar a las consultas aprobadas de origen
 - [ ] Suite unitaria verde con dobles, sin Docker ni LLM
+
+---
+
+### SPEC-25 — Consultas favoritas: guardar con nombre, listar y reejecutar sin agentes 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** Que una consulta que me funciona la pueda **guardar con un nombre** y, otro día, **recuperarla y reejecutarla directamente** — sin pasar por la recuperación, la generación, el Judge LLM ni el bucle de revisión. Es el uso "día a día" que no necesita a los agentes: preguntas recurrentes (los ingresos del mes, los clientes activos) que ya resolví una vez y solo quiero volver a lanzar. Comparte la tabla y el momento de guardado con la memoria *few-shot* (SPEC-09): la decisión de una sola tabla con flags está en **D-15**.
+
+**Contrato.**
+
+- *Guardar como favorita (mismo momento que SPEC-09).* Tras presentar el resultado, además de "marcar como ejemplo" (SPEC-09) puedo **guardarla como favorita con un título**: marca `is_favorite = true` y rellena `title` en la misma fila de `saved_queries`. Los dos flags son independientes: una consulta puede ser favorita, ejemplo, las dos o ninguna. Guardar es no crítico (la consulta ya se ejecutó): un fallo solo avisa.
+- *Listar.* El CLI ofrece "Consultas favoritas": lista las favoritas de la BD objetivo elegida (título, fecha, un extracto de la SQL), ordenadas por fecha o título. Es una vista **cara al usuario**, por título, no por similitud (eso es la memoria).
+- *Reejecutar sin agentes, PERO con la barrera de seguridad.* Elegir una favorita salta la recuperación, la generación y el Judge LLM — pero **no** la Capa 1 de seguridad de SPEC-06 (allowlist `SELECT`/`WITH`, keywords peligrosas, patrones de inyección: determinista y barata) ni el modo solo-lectura: la SQL guardada fue buena una vez, pero la BD pudo cambiar y la defensa en profundidad es innegociable. Flujo: elegir favorita → **check de seguridad** → ejecutar en solo-lectura contra su BD → presentar con el `presentResult` que ya existe (tabla/gráfico, SPEC-19). Si el check falla (o la ejecución da error porque el esquema cambió), aviso claro y no ejecuto.
+- *Gestionar.* Puedo **renombrar** y **borrar** favoritas desde el CLI. Borrar una fila que también es ejemplo (`use_as_example`) solo debería quitarla de favoritas si sigue sirviendo a la memoria — o borrar la fila entera con aviso; lo resuelvo como quitar el flag `is_favorite` y borrar la fila solo si ningún flag queda activo.
+- *Fuera de alcance en esta fase.* Parametrizar la consulta al reejecutar ("lo mismo pero del mes pasado", "para el cliente X") es exactamente **SPEC-23 (plantillas parametrizadas)**, que construye sobre esta pieza; aquí se reejecuta **literal**. El por-usuario también es futuro (la columna `user_id` de D-15 ya lo prevé; hoy, un valor por defecto).
+
+**Pasos**
+
+1. Reutilizar la tabla/puerto/adaptador/factory `saved_queries` de SPEC-09 (D-05, D-15): añadir al puerto `listFavorites(target)`, `get(id)`, `rename(id, title)`, `delete(id)`.
+2. Caso de uso `runSavedQuery(id, deps)`: recupera la fila, pasa la SQL por la Capa 1 de seguridad (servicio de dominio puro de SPEC-06) y, si pasa, la ejecuta en solo-lectura contra su BD objetivo (`executeQuery`, SPEC-07). Deps inyectadas con reales por defecto.
+3. CLI: en el guardado tras el resultado, opción "guardar como favorita" con título; nueva entrada de menú "Consultas favoritas" que lista, reejecuta (reusando `presentResult`), renombra y borra.
+4. Tests con dobles: reejecutar pasa siempre por la barrera de seguridad; una SQL que hoy no la pasaría no se ejecuta; listar filtra por BD y `is_favorite`; renombrar y borrar; guardar como favorita marca el flag y el título sin tocar `use_as_example`.
+
+**Criterios de aceptación**
+
+- [ ] Tras ver el resultado puedo guardar la consulta como favorita con un título; los flags favorita/ejemplo son independientes
+- [ ] El CLI lista mis favoritas de la BD elegida (título + fecha + extracto), y puedo elegir una y reejecutarla
+- [ ] La reejecución salta recuperación/generación/Judge LLM pero **pasa por la Capa 1 de seguridad** y el modo solo-lectura antes de ejecutar; si no la pasa, no se ejecuta
+- [ ] El resultado se presenta con el mismo render de SPEC-19 (tabla / gráfico)
+- [ ] Puedo renombrar y borrar favoritas; borrar respeta que la fila pueda seguir siendo ejemplo de la memoria
+- [ ] Suite unitaria verde con dobles, sin Docker ni LLM
+
+```bash
+cd backend && npm test    # unit de listar/reejecutar/renombrar/borrar favoritas (con dobles)
+```
 
 ---
