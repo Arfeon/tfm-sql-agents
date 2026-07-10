@@ -14,4 +14,5 @@ Incluye tanto las tecnologías base (su encaje y cuestiones abiertas) como lo **
 - [Embeddings](embeddings.md) — proveedor y modelo para la vectorización del esquema
 - [Infraestructura y despliegue](infraestructura-despliegue.md) — local vs cloud managed; por qué docker compose on-premise
 - [CLI y herramientas](cli-herramientas.md) — librerías del terminal interactivo
-- _(pendiente: GraphRAG para SQL, evaluación, prompts…)_
+- [Recuperación por capas](recuperacion-por-capas.md) — por qué el top-K vectorial se rompe a escala y cómo llegué a las cuatro capas (el aprendizaje central del proyecto)
+- _(pendiente: evaluación, prompts…)_
