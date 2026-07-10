@@ -4,12 +4,12 @@ Evaluación completa (recall + execution accuracy + tamaño de contexto) sobre e
 
 | BD | Tablas | Casos | Modo | Schema-linking recall | Execution accuracy (justa) | Equivalencia semántica (LLM) | Execution accuracy (estricta) | Tokens de contexto |
 |----|--------|-------|------|-----------------------|----------------------------|------------------------------|-------------------------------|--------------------|
-| arcadia | 17 | 25 | Sin recuperación | 100% | 48% | 48% | 48% | 1498 |
-| arcadia | 17 | 25 | Solo vectorial | 93% | 44% | 44% | 44% | 481 |
-| arcadia | 17 | 25 | GraphRAG | 99% | 56% | 56% | 56% | 774 |
-| nebula | 66 | 15 | Sin recuperación | 100% | 67% | 67% | 53% | 5748 |
-| nebula | 66 | 15 | Solo vectorial | 80% | 67% | 67% | 60% | 457 |
-| nebula | 66 | 15 | GraphRAG | 100% | 87% | 87% | 80% | 759 |
+| arcadia | 17 | 25 | Sin recuperación | 100% | 68% | 80% | 56% | 1498 |
+| arcadia | 17 | 25 | Solo vectorial | 93% | 56% | 68% | 48% | 479 |
+| arcadia | 17 | 25 | GraphRAG | 99% | 68% | 80% | 60% | 775 |
+| nebula | 66 | 15 | Sin recuperación | 100% | 73% | 80% | 60% | 5748 |
+| nebula | 66 | 15 | Solo vectorial | 80% | 73% | 73% | 53% | 458 |
+| nebula | 66 | 15 | GraphRAG | 97% | 67% | 67% | 60% | 759 |
 
 > Schema-linking recall: fracción de las tablas que usa la SQL de referencia que llegan al
 > contexto del generador (1 = el generador tenía todas las tablas necesarias delante).

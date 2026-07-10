@@ -1,0 +1,1124 @@
+[
+  {
+    "name": "arcadia",
+    "tableCount": 17,
+    "modes": [
+      {
+        "mode": "none",
+        "cases": [
+          {
+            "id": "G-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan las filas de la tabla game y sólo difieren en el alias de la columna (total_games vs total_juegos), por lo que responden la misma pregunta.",
+            "generatedSql": "SELECT COUNT(*) AS total_juegos FROM game;"
+          },
+          {
+            "id": "G-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve los mismos 5 juegos ordenados por base_price descendente; solo añade la columna game_id, que no cambia la información solicitada.",
+            "generatedSql": "SELECT game_id, title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve las mismas columnas de la misma tabla y el mismo conjunto de filas; la única diferencia es la ausencia de ORDER BY, que solo afecta el orden de las filas pero no la información devuelta.",
+            "generatedSql": "SELECT name, monthly_price FROM subscription_plan;"
+          },
+          {
+            "id": "G-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula el mismo recuento de clientes por región (incluye regiones sin clientes). Solo difiere en columnas adicionales (region_id) y en el orden de las filas, lo cual no cambia la respuesta.",
+            "generatedSql": "SELECT\n  r.region_id,\n  r.name,\n  COUNT(c.customer_id) AS customer_count\nFROM region r\nLEFT JOIN customer c ON r.region_id = c.region_id\nGROUP BY r.region_id, r.name\nORDER BY r.region_id;"
+          },
+          {
+            "id": "G-05",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve las mismas filas (los títulos de juegos con age_rating = 'M'); solo añade la columna game_id, lo cual no altera la respuesta solicitada.",
+            "generatedSql": "SELECT game_id, title\nFROM game\nWHERE age_rating = 'M'\nORDER BY title;"
+          },
+          {
+            "id": "G-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata agrupa por game_id y title (separa juegos con el mismo título) mientras que la de referencia agrupa solo por title (puede fusionar juegos distintos con idéntico título), lo que puede cambiar los totales y el ranking.",
+            "generatedSql": "SELECT g.game_id, g.title, SUM(ps.duration_minutes) AS total_minutes\nFROM play_session ps\nJOIN game g ON ps.game_id = g.game_id\nGROUP BY g.game_id, g.title\nORDER BY total_minutes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-07",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas calculan la misma métrica (AVG(rating.score)) por género usando LEFT JOINs; la candidata sólo añade genre_id, hace un JOIN intermedio a game y cambia el ORDER BY y el redondeo, diferencias que no alteran las puntuaciones medias por género.",
+            "generatedSql": "SELECT\n  genre.genre_id,\n  genre.name,\n  AVG(rating.score) AS average_rating\nFROM genre\nLEFT JOIN game_genre ON genre.genre_id = game_genre.genre_id\nLEFT JOIN game ON game_genre.game_id = game.game_id\nLEFT JOIN rating ON game.game_id = rating.game_id\nGROUP BY genre.genre_id, genre.name\nORDER BY genre.name;"
+          },
+          {
+            "id": "G-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No son equivalentes: la candidata usa BETWEEN ... AND '2025-12-31' (inclusive) y, si purchase_date tiene componente de tiempo, puede excluir compras ocurridas el 31-dic-2025 después de la medianoche; la de referencia usa < '2026-01-01' e incluye todo el día 31-dic-2025.",
+            "generatedSql": "SELECT COALESCE(SUM(amount), 0) AS ingresos_2025\nFROM purchase\nWHERE purchase_date BETWEEN DATE '2025-01-01' AND DATE '2025-12-31';"
+          },
+          {
+            "id": "G-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata excluye los planes que no tienen suscripciones activas (hace un JOIN desde subscription y filtra WHERE s.status='active'), mientras que la referencia usa LEFT JOIN para incluir todos los planes mostrando 0 cuando no hay suscripciones activas.",
+            "generatedSql": "SELECT sp.plan_id, sp.name, COUNT(*) AS active_subscriptions\nFROM subscription s\nJOIN subscription_plan sp ON s.plan_id = sp.plan_id\nWHERE s.status = 'active'\nGROUP BY sp.plan_id, sp.name\nORDER BY active_subscriptions DESC;"
+          },
+          {
+            "id": "G-10",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas cuentan juegos por desarrolladora, ordenan por el conteo y devuelven los 5 primeros; la candidata solo añade company_id y agrupa por id+nombre (información adicional que no cambia la respuesta).",
+            "generatedSql": "SELECT c.company_id, c.name, COUNT(g.game_id) AS games_developed\nFROM company c\nJOIN game g ON g.developer_company_id = c.company_id\nGROUP BY c.company_id, c.name\nORDER BY games_developed DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas calculan el pico máximo de jugadores concurrentes por juego y devuelven el top 10; la candidata sólo añade game_id y agrupa por game_id y title, lo que no cambia el resultado.",
+            "generatedSql": "SELECT g.game_id, g.title, MAX(cs.concurrent_players) AS max_concurrent_players\nFROM game g\nJOIN concurrent_snapshot cs USING (game_id)\nGROUP BY g.game_id, g.title\nORDER BY max_concurrent_players DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-12",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No: la candidata usa JOIN (inner) y por tanto excluye plataformas sin sesiones (la referencia usa LEFT JOIN para incluirlas con avg NULL), además no aplica el redondeo del promedio (detalle cosmético).",
+            "generatedSql": "SELECT p.platform_id,\n       p.name,\n       AVG(ps.duration_minutes) AS avg_duration_minutes\nFROM play_session ps\nJOIN platform p ON ps.platform_id = p.platform_id\nGROUP BY p.platform_id, p.name\nORDER BY avg_duration_minutes DESC;"
+          },
+          {
+            "id": "G-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas filtran los mismos juegos (developer_company_id <> publisher_company_id) y devuelven título, desarrolladora y editora; la candidata solo añade game_id y omite el ORDER BY, lo cual no cambia la información retornada.",
+            "generatedSql": "SELECT\n  g.game_id,\n  g.title,\n  dev.name AS developer_name,\n  pub.name AS publisher_name\nFROM game g\nJOIN company dev ON g.developer_company_id = dev.company_id\nJOIN company pub ON g.publisher_company_id = pub.company_id\nWHERE g.developer_company_id <> g.publisher_company_id;"
+          },
+          {
+            "id": "G-14",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas devuelven las compañías que aparecen como editoras en la tabla game pero nunca como desarrolladoras; la candidata usa EXISTS/NOT EXISTS y añade company_id como columna adicional, lo cual no cambia la información entregada.",
+            "generatedSql": "SELECT c.company_id, c.name\nFROM company c\nWHERE EXISTS (\n  SELECT 1 FROM game g WHERE g.publisher_company_id = c.company_id\n)\nAND NOT EXISTS (\n  SELECT 1 FROM game g2 WHERE g2.developer_company_id = c.company_id\n);"
+          },
+          {
+            "id": "G-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata añade filtros de fecha (start_date <= CURRENT_DATE y end_date IS NULL OR end_date >= CURRENT_DATE) que restringen a suscripciones vigentes hoy; la referencia solo filtra por status = 'active'. Esos criterios adicionales pueden cambiar el MRR si hay suscripciones marcadas como active pero fuera del rango de fechas actual.",
+            "generatedSql": "SELECT CURRENT_DATE AS as_of,\n       COALESCE(SUM(s.monthly_price), 0) AS mrr\nFROM subscription s\nWHERE s.status = 'active'\n  AND s.start_date <= CURRENT_DATE\n  AND (s.end_date IS NULL OR s.end_date >= CURRENT_DATE);"
+          },
+          {
+            "id": "G-16",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula la misma métrica (SUM(p.amount)) por franquicia y devuelve las 5 con más ingresos de DLC; incluir franchise_id y agrupar por id y nombre son diferencias descriptivas que no cambian el resultado.",
+            "generatedSql": "SELECT\n  f.franchise_id,\n  f.name,\n  SUM(p.amount) AS total_revenue\nFROM purchase p\nJOIN dlc d ON p.dlc_id = d.dlc_id\nJOIN game g ON d.game_id = g.game_id\nJOIN franchise f ON g.franchise_id = f.franchise_id\nGROUP BY f.franchise_id, f.name\nORDER BY total_revenue DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-17",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La CANDIDATA aplica las mismas condiciones esenciales: end_date IS NOT NULL y (end_date - start_date) < 30, y filtra estados que contienen 'cancel' (LOWER(status) LIKE '%cancel%') lo que cubre 'cancelled'—aunque devuelve columnas adicionales y puede listar una fila por suscripción en lugar de DISTINCT por cliente, sigue identificando los mismos clientes que cancelaron en menos de 30 días.",
+            "generatedSql": "SELECT c.customer_id,\n       c.username,\n       c.email,\n       s.subscription_id,\n       s.start_date,\n       s.end_date,\n       (s.end_date - s.start_date) AS days_between\nFROM subscription s\nJOIN customer c USING (customer_id)\nWHERE s.end_date IS NOT NULL\n  AND (s.end_date - s.start_date) < 30\n  AND LOWER(s.status) LIKE '%cancel%'\nORDER BY days_between ASC;"
+          },
+          {
+            "id": "G-18",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan los géneros distintos por desarrolladora y filtran por más de 3; la candidata solo añade company_id y agrupa por id+nombre (equivalente) y omite el ORDER BY, lo que no cambia los resultados solicitados.",
+            "generatedSql": "SELECT c.company_id,\n       c.name,\n       COUNT(DISTINCT gg.genre_id) AS distinct_genres\nFROM company c\nJOIN game g ON c.company_id = g.developer_company_id\nJOIN game_genre gg ON g.game_id = gg.game_id\nGROUP BY c.company_id, c.name\nHAVING COUNT(DISTINCT gg.genre_id) > 3;"
+          },
+          {
+            "id": "G-19",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas calculan el promedio de puntuación por franquicia con al menos 50 valoraciones y devuelven las 5 mejores por avg_score; las diferencias (columna id adicional, no hacer ROUND, y un desempate por conteo) no cambian la respuesta.",
+            "generatedSql": "SELECT\n  f.franchise_id,\n  f.name,\n  COUNT(r.rating_id) AS rating_count,\n  AVG(r.score) AS avg_score\nFROM rating r\nJOIN game g ON r.game_id = g.game_id\nJOIN franchise f ON g.franchise_id = f.franchise_id\nGROUP BY f.franchise_id, f.name\nHAVING COUNT(r.rating_id) >= 50\nORDER BY avg_score DESC, rating_count DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-20",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata agrupa por DLC y región (devuelve ingresos por cada DLC en cada región) mientras la de referencia suma solo por región sin desglosar por DLC; además la candidata usa INNER JOIN y puede omitir regiones sin compras.",
+            "generatedSql": "SELECT\n  region.region_id,\n  region.name AS region_name,\n  region.currency,\n  dlc.dlc_id,\n  dlc.title AS dlc_title,\n  SUM(purchase.amount) AS total_revenue,\n  COUNT(*) AS purchase_count\nFROM purchase\nJOIN customer ON purchase.customer_id = customer.customer_id\nJOIN region ON customer.region_id = region.region_id\nJOIN dlc ON purchase.dlc_id = dlc.dlc_id\nGROUP BY\n  region.region_id,\n  region.name,\n  region.currency,\n  dlc.dlc_id,\n  dlc.title\nORDER BY region.name, dlc.title;"
+          },
+          {
+            "id": "G-21",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas calculan, por género, el máximo de concurrent_players entre los juegos de ese género y devuelven el género con el mayor pico; la diferencia en incluir la tabla game no altera el resultado.",
+            "generatedSql": "SELECT g.name AS genre_name,\n       MAX(cs.concurrent_players) AS peak_concurrent_players\nFROM genre g\nJOIN game_genre gg ON gg.genre_id = g.genre_id\nJOIN concurrent_snapshot cs ON cs.game_id = gg.game_id\nGROUP BY g.name\nORDER BY peak_concurrent_players DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-22",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula el conteo de DLC por juego, obtiene el máximo y devuelve el/los juego(s) con ese máximo (añadiendo el game_id); solo difiere en que puede devolver todos los empates en lugar de un único registro.",
+            "generatedSql": "WITH dlc_counts AS (\n  SELECT game_id, COUNT(*) AS dlc_count\n  FROM dlc\n  GROUP BY game_id\n), max_count AS (\n  SELECT MAX(dlc_count) AS max_dlc FROM dlc_counts\n)\nSELECT g.game_id, g.title, dc.dlc_count\nFROM dlc_counts dc\nJOIN game g ON g.game_id = dc.game_id\nJOIN max_count m ON dc.dlc_count = m.max_dlc;"
+          },
+          {
+            "id": "G-23",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No: la candidata filtra con BETWEEN '2024-01-01' AND '2024-12-31' (ambos extremos inclusivos), mientras la referencia usa start_date >= '2024-01-01' AND start_date < '2025-01-01'. Si start_date es TIMESTAMP, la candidata excluiría filas del 2024-12-31 con hora posterior a 00:00:00, cambiando el conjunto y el porcentaje (además hay pequeñas diferencias en redondeo y en el manejo de total=0).",
+            "generatedSql": "SELECT CASE WHEN total = 0 THEN 0\n            ELSE (active::numeric / total::numeric) * 100\n       END AS percentage_active_2024\nFROM (\n  SELECT\n    COUNT(*) FILTER (WHERE start_date BETWEEN DATE '2024-01-01' AND DATE '2024-12-31') AS total,\n    COUNT(*) FILTER (WHERE start_date BETWEEN DATE '2024-01-01' AND DATE '2024-12-31' AND status = 'active') AS active\n  FROM subscription\n) s;"
+          },
+          {
+            "id": "G-24",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata aplica la misma condición NOT EXISTS para excluir juegos con plataformas de tipo 'console' (igual efecto aunque use lower() y añada game_id); el extra campo y la falta de ORDER BY no cambian la respuesta.",
+            "generatedSql": "SELECT g.game_id, g.title\nFROM game g\nWHERE NOT EXISTS (\n  SELECT 1\n  FROM game_platform gp\n  JOIN platform p ON gp.platform_id = p.platform_id\n  WHERE gp.game_id = g.game_id\n    AND lower(p.kind) = 'console'\n);"
+          },
+          {
+            "id": "G-25",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata usa COUNT(DISTINCT game_id) mientras la referencia cuenta todas las filas (COUNT(*)). Si existen duplicados de un mismo juego en t_042 por cliente, la métrica y el ranking pueden cambiar, por lo que no son equivalentes.",
+            "generatedSql": "SELECT c.customer_id, c.username, COUNT(DISTINCT t.game_id) AS wish_count\nFROM customer c\nJOIN t_042 t ON c.customer_id = t.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY wish_count DESC, c.customer_id\nLIMIT 5;"
+          }
+        ]
+      },
+      {
+        "mode": "vector",
+        "cases": [
+          {
+            "id": "G-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Las consultas son idénticas y ambas cuentan el número total de filas en la tabla game, por lo que devuelven la misma información.",
+            "generatedSql": "SELECT COUNT(*) AS total_games FROM game;"
+          },
+          {
+            "id": "G-02",
+            "difficulty": "easy",
+            "recall": 0,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata no devuelve los 5 juegos ni sus precios: solo retorna un mensaje de error en lugar de listar los juegos con mayor base_price, por lo que no proporciona la misma información.",
+            "generatedSql": "SELECT 'Imposible responder: falta la tabla \"game\" y su columna de precio base en el esquema proporcionado.' AS mensaje;"
+          },
+          {
+            "id": "G-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Devuelve los mismos planes y sus precios mensuales; la columna adicional plan_id y la ausencia de ORDER BY no cambian la información solicitada.",
+            "generatedSql": "SELECT plan_id, name, monthly_price\nFROM subscription_plan;"
+          },
+          {
+            "id": "G-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve el mismo conteo de clientes por región; solo añade la columna region_id y agrupa por id y nombre (USING equivale al JOIN), lo que no cambia los resultados.",
+            "generatedSql": "SELECT region.region_id, region.name, COUNT(customer.customer_id) AS customer_count\nFROM region\nLEFT JOIN customer USING (region_id)\nGROUP BY region.region_id, region.name\nORDER BY customer_count DESC;"
+          },
+          {
+            "id": "G-05",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas devuelven exactamente los juegos con age_rating = 'M'; la candidata añade game_id como columna adicional, lo cual no cambia la información solicitada (sólo es un dato descriptivo extra).",
+            "generatedSql": "SELECT game_id, title\nFROM game\nWHERE age_rating = 'M'\nORDER BY title;"
+          },
+          {
+            "id": "G-06",
+            "difficulty": "medium",
+            "recall": 0.5,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata agrupa por game_id y devuelve solo los IDs (game_id) y total_minutes, mientras que la referencia devuelve los títulos de los juegos; por tanto no presenta los nombres de los 10 juegos solicitados.",
+            "generatedSql": "SELECT\n  game_id,\n  SUM(duration_minutes) AS total_minutes\nFROM play_session\nGROUP BY game_id\nORDER BY total_minutes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-07",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas calculan la media de la puntuación por género; la candidata solo añade genre_id, no redondea el resultado, ordena por nombre y añade un JOIN redundante a game, cambios que no alteran la métrica solicitada (asumiendo integridad referencial).",
+            "generatedSql": "SELECT g.genre_id,\n       g.name,\n       AVG(r.score) AS average_score\nFROM genre g\nLEFT JOIN game_genre gg ON g.genre_id = gg.genre_id\nLEFT JOIN game gm ON gg.game_id = gm.game_id\nLEFT JOIN rating r ON gm.game_id = r.game_id\nGROUP BY g.genre_id, g.name\nORDER BY g.name;"
+          },
+          {
+            "id": "G-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas suman la columna amount con el mismo filtro de fechas para 2025; la diferencia (COALESCE para convertir NULL en 0 y distinto alias) no cambia la respuesta devuelta.",
+            "generatedSql": "SELECT COALESCE(SUM(amount), 0) AS ingresos_2025\nFROM purchase\nWHERE purchase_date >= DATE '2025-01-01' AND purchase_date < DATE '2026-01-01';"
+          },
+          {
+            "id": "G-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan las suscripciones con status = 'active' por plan; la candidata usa COUNT ... FILTER y además devuelve el plan_id y un orden distinto, pero la métrica y el agrupamiento por plan son equivalentes.",
+            "generatedSql": "SELECT\n  subscription_plan.plan_id,\n  subscription_plan.name,\n  COUNT(subscription.subscription_id) FILTER (WHERE subscription.status = 'active') AS active_subscriptions\nFROM subscription_plan\nLEFT JOIN subscription ON subscription_plan.plan_id = subscription.plan_id\nGROUP BY subscription_plan.plan_id, subscription_plan.name\nORDER BY subscription_plan.plan_id;"
+          },
+          {
+            "id": "G-10",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata calcula el mismo conteo de juegos por desarrolladora y limita a 5; agrupa por company_id y name (equivalente a agrupar por name si id identifica la empresa), añade company_id como columna extra y un desempate por nombre, pero devuelve la misma información solicitada.",
+            "generatedSql": "SELECT\n  c.company_id,\n  c.name,\n  COUNT(g.game_id) AS games_count\nFROM company c\nJOIN game g ON c.company_id = g.developer_company_id\nGROUP BY c.company_id, c.name\nORDER BY games_count DESC, c.name ASC\nLIMIT 5;"
+          },
+          {
+            "id": "G-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata agrupa por game_id y title mientras la referencia agrupa solo por title; eso cambia la agregación si hay varios juegos con el mismo título (además de añadir game_id como columna extra).",
+            "generatedSql": "SELECT g.game_id, g.title, MAX(cs.concurrent_players) AS peak_concurrent\nFROM concurrent_snapshot cs\nJOIN game g USING (game_id)\nGROUP BY g.game_id, g.title\nORDER BY peak_concurrent DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-12",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No: la consulta candidata hace un JOIN desde play_session (INNER JOIN) y excluye plataformas sin sesiones, mientras que la referencia usa LEFT JOIN para incluirlas (mostrando avg NULL para esas plataformas).",
+            "generatedSql": "SELECT\n  p.platform_id,\n  p.name,\n  AVG(ps.duration_minutes) AS average_duration_minutes\nFROM play_session ps\nJOIN platform p USING (platform_id)\nGROUP BY p.platform_id, p.name\nORDER BY average_duration_minutes DESC;"
+          },
+          {
+            "id": "G-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata aplica los mismos JOINs y el mismo filtro (developer_company_id <> publisher_company_id) y devuelve los mismos juegos; solo incluye columnas adicionales (ids/nombres) que no cambian la respuesta.",
+            "generatedSql": "SELECT\n  g.game_id,\n  g.title,\n  g.publisher_company_id,\n  pub.name AS publisher_name,\n  g.developer_company_id,\n  dev.name AS developer_name\nFROM game g\nJOIN company pub ON g.publisher_company_id = pub.company_id\nJOIN company dev ON g.developer_company_id = dev.company_id\nWHERE g.publisher_company_id <> g.developer_company_id;"
+          },
+          {
+            "id": "G-14",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas devuelven las compañías que han sido editoras (tienen al menos un juego con publisher_company_id) y que nunca han sido desarrolladoras (no aparecen como developer_company_id); la consulta candidata usa EXISTS/NOT EXISTS y añade company_id pero proporciona la misma información relevante.",
+            "generatedSql": "SELECT c.company_id, c.name\nFROM company c\nWHERE EXISTS (\n  SELECT 1 FROM game g WHERE g.publisher_company_id = c.company_id\n)\nAND NOT EXISTS (\n  SELECT 1 FROM game g2 WHERE g2.developer_company_id = c.company_id\n);"
+          },
+          {
+            "id": "G-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata añade filtros de fechas (start_date <= CURRENT_DATE y end_date IS NULL o >= CURRENT_DATE) que restringen a suscripciones vigentes hoy; la referencia solo filtra por status = 'active', por lo que pueden devolver resultados distintos.",
+            "generatedSql": "SELECT COALESCE(SUM(monthly_price), 0) AS mrr\nFROM subscription\nWHERE status = 'active'\n  AND start_date <= CURRENT_DATE\n  AND (end_date IS NULL OR end_date >= CURRENT_DATE);"
+          },
+          {
+            "id": "G-16",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas suman p.amount por franquicia usando las mismas JOINs (purchase->dlc->game->franchise), agrupan por franquicia, ordenan por el total descendente y limitan a 5; la candidata solo incluye franchise_id adicional en SELECT/GROUP BY, lo cual no cambia la respuesta.",
+            "generatedSql": "SELECT f.franchise_id, f.name, SUM(p.amount) AS total_revenue\nFROM purchase p\nJOIN dlc d ON p.dlc_id = d.dlc_id\nJOIN game g ON d.game_id = g.game_id\nJOIN franchise f ON g.franchise_id = f.franchise_id\nGROUP BY f.franchise_id, f.name\nORDER BY total_revenue DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-17",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata aplica las mismas condiciones esenciales: end_date IS NOT NULL y (end_date - start_date) < 30 y filtra estados de cancelación (s.status ILIKE '%cancel%' captura 'cancelled' y variantes). Solo añade columnas y puede devolver varias filas por un mismo cliente (una por suscripción), lo que no altera el conjunto de clientes que cancelaron en menos de 30 días.",
+            "generatedSql": "SELECT c.customer_id,\n       c.username,\n       c.email,\n       s.subscription_id,\n       s.start_date,\n       s.end_date,\n       (s.end_date - s.start_date) AS days_active,\n       s.status\nFROM subscription s\nJOIN customer c USING (customer_id)\nWHERE s.end_date IS NOT NULL\n  AND (s.end_date - s.start_date) < 30\n  AND s.status ILIKE '%cancel%';"
+          },
+          {
+            "id": "G-18",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan los géneros distintos por desarrolladora y aplican HAVING COUNT(DISTINCT genre_id) > 3; la candidata sólo añade company_id y agrupa por id y nombre (más preciso) sin cambiar la lógica ni el criterio de filtrado.",
+            "generatedSql": "SELECT c.company_id,\n       c.name,\n       COUNT(DISTINCT gg.genre_id) AS genre_count\nFROM company c\nJOIN game g ON g.developer_company_id = c.company_id\nJOIN game_genre gg ON gg.game_id = g.game_id\nGROUP BY c.company_id, c.name\nHAVING COUNT(DISTINCT gg.genre_id) > 3\nORDER BY genre_count DESC, c.name;"
+          },
+          {
+            "id": "G-19",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata calcula la misma métrica (avg(score)) con el mismo filtro (al menos 50 valoraciones), ordena y limita a 5; las diferencias son sólo sintácticas/columnas extra (franchise_id), COUNT(r.rating_id) vs COUNT(*) y la forma de redondeo, que no cambian el resultado.",
+            "generatedSql": "SELECT\n  f.franchise_id,\n  f.name,\n  COUNT(r.rating_id) AS num_ratings,\n  ROUND(AVG(r.score)::numeric, 2) AS avg_score\nFROM franchise f\nJOIN game g ON g.franchise_id = f.franchise_id\nJOIN rating r ON r.game_id = g.game_id\nGROUP BY f.franchise_id, f.name\nHAVING COUNT(r.rating_id) >= 50\nORDER BY AVG(r.score) DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-20",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata agrupa por región y por DLC (devuelve filas por cada DLC en cada región) mientras que la referencia solo agrega por región; además la candidata hace JOIN a dlc y usa INNER JOINs que pueden excluir regiones sin compras de DLC. Por tanto no proporcionan la misma información.",
+            "generatedSql": "SELECT region.name AS region, dlc.title AS dlc_title, SUM(purchase.amount) AS ingresos\nFROM purchase\nJOIN customer ON purchase.customer_id = customer.customer_id\nJOIN region ON customer.region_id = region.region_id\nJOIN dlc ON purchase.dlc_id = dlc.dlc_id\nGROUP BY region.name, dlc.title\nORDER BY region.name, dlc.title;"
+          },
+          {
+            "id": "G-21",
+            "difficulty": "hard",
+            "recall": 0.75,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No: la consulta de referencia toma MAX(cs.concurrent_players) por género (el valor máximo observado en una fila, i.e. el pico de un juego), mientras que la candidata suma los concurrent_players de todos los juegos de un género por timestamp y luego toma el máximo de esas sumas (pico agregado del género en un instante). Son métricas diferentes y por tanto responden preguntas distintas.",
+            "generatedSql": "WITH genre_time_peaks AS (\n  SELECT\n    gg.genre_id,\n    cs.captured_at,\n    SUM(cs.concurrent_players) AS concurrent_sum\n  FROM concurrent_snapshot cs\n  JOIN game_genre gg ON gg.game_id = cs.game_id\n  GROUP BY gg.genre_id, cs.captured_at\n)\nSELECT\n  genre_id,\n  MAX(concurrent_sum) AS peak_concurrent_players\nFROM genre_time_peaks\nGROUP BY genre_id\nORDER BY peak_concurrent_players DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-22",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula el mismo conteo de DLC por juego y devuelve el juego con más DLCs; agrupar también por game_id es equivalente y no altera el resultado.",
+            "generatedSql": "SELECT game.title, COUNT(dlc.dlc_id) AS dlc_count\nFROM game JOIN dlc ON game.game_id = dlc.game_id\nGROUP BY game.game_id, game.title\nORDER BY dlc_count DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-23",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata calcula el mismo numerador y denominador: cuenta las suscripciones con start_date en 2024 y las que además tienen status 'active' (usa lower() para la comparación). Las diferencias son solo de implementación (comparación case-insensitive, manejo explícito de total=0 y distinto redondeo), que no cambian la respuesta solicitada.",
+            "generatedSql": "SELECT\n  CASE WHEN total = 0 THEN 0\n       ELSE ROUND(100.0 * active::numeric / total, 2)\n  END AS porcentaje\nFROM (\n  SELECT\n    COUNT(*) FILTER (WHERE start_date >= DATE '2024-01-01' AND start_date < DATE '2025-01-01') AS total,\n    COUNT(*) FILTER (WHERE start_date >= DATE '2024-01-01' AND start_date < DATE '2025-01-01' AND lower(status) = 'active') AS active\n  FROM subscription\n) sub;"
+          },
+          {
+            "id": "G-24",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas devuelven exactamente los juegos que no tienen ninguna plataforma de tipo 'console'; la candidata sólo añade game_id (permitido) y usa LOWER(p.kind) = 'console' (equivalente a comparar directamente), y la falta de ORDER BY no cambia el contenido de la respuesta.",
+            "generatedSql": "SELECT game_id, title\nFROM game g\nWHERE NOT EXISTS (\n  SELECT 1\n  FROM game_platform gp\n  JOIN platform p ON gp.platform_id = p.platform_id\n  WHERE gp.game_id = g.game_id\n    AND LOWER(p.kind) = 'console'\n);"
+          },
+          {
+            "id": "G-25",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan los juegos en la lista de deseos por cliente, se agrupan por cliente, ordenan por ese conteo descendente y toman los 5 primeros; solo difieren en alias y en la sintaxis del JOIN, que no cambian el resultado.",
+            "generatedSql": "SELECT c.customer_id,\n       c.username,\n       COUNT(*) AS wishlist_count\nFROM t_042 w\nJOIN customer c USING (customer_id)\nGROUP BY c.customer_id, c.username\nORDER BY wishlist_count DESC\nLIMIT 5;"
+          }
+        ]
+      },
+      {
+        "mode": "graphrag",
+        "cases": [
+          {
+            "id": "G-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas cuentan el número total de filas en la tabla game usando COUNT(*); solo difiere el alias de la columna (total_games vs total_juegos), lo que no cambia la respuesta.",
+            "generatedSql": "SELECT COUNT(*) AS total_juegos FROM game;"
+          },
+          {
+            "id": "G-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata es idéntica a la de referencia: selecciona title y base_price, ordena por base_price DESC y aplica LIMIT 5, devolviendo los mismos 5 juegos con mayor precio base.",
+            "generatedSql": "SELECT title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas devuelven los mismos campos (name y monthly_price) para todos los planes; la candidata solo omite el ORDER BY, y el orden de filas no cambia la información solicitada.",
+            "generatedSql": "SELECT name, monthly_price\nFROM subscription_plan;"
+          },
+          {
+            "id": "G-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan clientes por región usando LEFT JOIN e incluyen regiones sin clientes; la candidata sólo añade region_id en la salida y lo incluye en el GROUP BY, sin alterar el criterio ni los filtros, por lo que devuelven la misma información.",
+            "generatedSql": "SELECT region.region_id, region.name, COUNT(customer.customer_id) AS customer_count\nFROM region\nLEFT JOIN customer USING (region_id)\nGROUP BY region.region_id, region.name\nORDER BY customer_count DESC;"
+          },
+          {
+            "id": "G-05",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve los mismos juegos con age_rating = 'M' que la de referencia; sólo añade la columna game_id, que es información descriptiva adicional y no cambia la respuesta solicitada.",
+            "generatedSql": "SELECT game_id, title\nFROM game\nWHERE age_rating = 'M'\nORDER BY title;"
+          },
+          {
+            "id": "G-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula la misma suma de minutos por juego y devuelve los 10 con más minutos; solo añade la columna game_id y agrupa por id+title (equivalente a agrupar por juego), sin cambiar la agregación, el orden ni el límite.",
+            "generatedSql": "SELECT g.game_id, g.title, SUM(ps.duration_minutes) AS total_minutes\nFROM play_session ps\nJOIN game g ON ps.game_id = g.game_id\nGROUP BY g.game_id, g.title\nORDER BY total_minutes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-07",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas calculan la misma métrica (media de r.score por género) y difieren solo en formato/agrupación irrelevante (sin ROUND y con genre_id en GROUP BY), lo que no cambia la información devuelta.",
+            "generatedSql": "SELECT\n  g.name,\n  AVG(r.score) AS average_score\nFROM genre g\nLEFT JOIN game_genre gg ON gg.genre_id = g.genre_id\nLEFT JOIN rating r ON r.game_id = gg.game_id\nGROUP BY g.genre_id, g.name\nORDER BY average_score DESC NULLS LAST;"
+          },
+          {
+            "id": "G-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas suman amount con el mismo filtro de fechas para 2025; la candidata solo envuelve SUM en COALESCE para devolver 0 en lugar de NULL, sin cambiar la métrica ni el filtro.",
+            "generatedSql": "SELECT COALESCE(SUM(amount), 0) AS ingresos_dlc_2025\nFROM purchase\nWHERE purchase_date >= DATE '2025-01-01'\n  AND purchase_date < DATE '2026-01-01';"
+          },
+          {
+            "id": "G-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata produce el mismo conteo de suscripciones con estado 'active' por plan (usa FILTER en lugar de poner la condición en el JOIN) y sólo difiere en columnas adicionales (plan_id) y en el ORDER, diferencias que no cambian la información solicitada.",
+            "generatedSql": "SELECT\n  sp.plan_id,\n  sp.name,\n  COUNT(s.subscription_id) FILTER (WHERE s.status = 'active') AS active_subscriptions\nFROM subscription_plan sp\nLEFT JOIN subscription s USING (plan_id)\nGROUP BY sp.plan_id, sp.name\nORDER BY sp.plan_id;"
+          },
+          {
+            "id": "G-10",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan los juegos por desarrolladora y devuelven las 5 con mayor número; la candidata solo añade company_id y un desempate por nombre, lo cual no cambia la respuesta solicitada.",
+            "generatedSql": "SELECT\n  company.company_id,\n  company.name,\n  COUNT(*) AS games_count\nFROM game\nJOIN company ON game.developer_company_id = company.company_id\nGROUP BY company.company_id, company.name\nORDER BY games_count DESC, company.name ASC\nLIMIT 5;"
+          },
+          {
+            "id": "G-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula el mismo MAX(cs.concurrent_players) por juego y ordena/limita al top 10; solo añade la columna game_id y agrupa por id+y título, lo que no altera el pico por juego ni la respuesta solicitada.",
+            "generatedSql": "SELECT g.game_id,\n       g.title,\n       MAX(cs.concurrent_players) AS peak_concurrent_players\nFROM concurrent_snapshot cs\nJOIN game g ON cs.game_id = g.game_id\nGROUP BY g.game_id, g.title\nORDER BY peak_concurrent_players DESC\nLIMIT 10;"
+          },
+          {
+            "id": "G-12",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata usa JOIN (INNER) y excluye plataformas sin sesiones, mientras la de referencia usa LEFT JOIN para incluirlas (con avg NULL); eso cambia el conjunto de resultados.",
+            "generatedSql": "SELECT p.platform_id, p.name, AVG(ps.duration_minutes) AS average_duration_minutes\nFROM platform p\nJOIN play_session ps ON ps.platform_id = p.platform_id\nGROUP BY p.platform_id, p.name\nORDER BY average_duration_minutes DESC;"
+          },
+          {
+            "id": "G-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata aplica la misma condición (publisher_company_id <> developer_company_id) y devuelve los mismos títulos con nombres de editora y desarrolladora; solo añade game_id y cambia el orden/aliases, lo cual no altera la respuesta.",
+            "generatedSql": "SELECT\n  game.game_id,\n  game.title,\n  pub.name AS publisher_name,\n  dev.name AS developer_name\nFROM game\nJOIN company AS pub ON pub.company_id = game.publisher_company_id\nJOIN company AS dev ON dev.company_id = game.developer_company_id\nWHERE game.publisher_company_id <> game.developer_company_id;"
+          },
+          {
+            "id": "G-14",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas seleccionan las mismas compañías: existen como editoras (publisher) y no existen como desarrolladoras (developer). La candidata usa EXISTS/NOT EXISTS en vez de JOIN/NOT IN y añade company_id y omite ORDER BY, diferencias que no cambian la información devuelta.",
+            "generatedSql": "SELECT c.company_id, c.name\nFROM company c\nWHERE EXISTS (\n  SELECT 1 FROM game g WHERE g.publisher_company_id = c.company_id\n)\nAND NOT EXISTS (\n  SELECT 1 FROM game g2 WHERE g2.developer_company_id = c.company_id\n);"
+          },
+          {
+            "id": "G-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata define 'activo' por el rango de fechas (start_date ≤ hoy y end_date nulo o ≥ hoy) en lugar de filtrar status = 'active', por lo que puede incluir/excluir suscripciones distintas (p. ej. status='active' con start_date futura o filas con fecha vigente pero status distinto).",
+            "generatedSql": "SELECT COALESCE(SUM(monthly_price), 0) AS mrr\nFROM subscription\nWHERE start_date <= CURRENT_DATE\n  AND (end_date IS NULL OR end_date >= CURRENT_DATE);"
+          },
+          {
+            "id": "G-16",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas suman p.amount por franquicia y devuelven las 5 franquicias con mayor ingreso por DLC; la candidata sólo incluye franchise_id adicional en salida y en GROUP BY, lo cual no cambia la respuesta.",
+            "generatedSql": "SELECT f.franchise_id, f.name, SUM(p.amount) AS total_revenue\nFROM franchise f\nJOIN game g ON g.franchise_id = f.franchise_id\nJOIN dlc d ON d.game_id = g.game_id\nJOIN purchase p ON p.dlc_id = d.dlc_id\nGROUP BY f.franchise_id, f.name\nORDER BY total_revenue DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-17",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata omite el filtro s.status = 'cancelled' (y además devuelve filas por suscripción en lugar de clientes distintos), por lo que puede incluir casos cuya suscripción terminó en <30 días pero no fue cancelada; no responde la misma pregunta.",
+            "generatedSql": "SELECT c.customer_id,\n       c.username,\n       c.email,\n       s.subscription_id,\n       s.start_date,\n       s.end_date,\n       (s.end_date - s.start_date) AS days_active\nFROM subscription s\nJOIN customer c USING (customer_id)\nWHERE s.end_date IS NOT NULL\n  AND (s.end_date - s.start_date) < 30;"
+          },
+          {
+            "id": "G-18",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata calcula el mismo COUNT(DISTINCT genre_id) por desarrolladora y aplica HAVING > 3; solamente añade company_id y no incluye el ORDER BY, diferencias que no cambian la respuesta.",
+            "generatedSql": "SELECT\n  company.company_id,\n  company.name,\n  COUNT(DISTINCT game_genre.genre_id) AS distinct_genres\nFROM game\nJOIN company ON game.developer_company_id = company.company_id\nJOIN game_genre ON game.game_id = game_genre.game_id\nGROUP BY company.company_id, company.name\nHAVING COUNT(DISTINCT game_genre.genre_id) > 3;"
+          },
+          {
+            "id": "G-19",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula la misma métrica (AVG de score) con el mismo filtro HAVING (>=50), ordena por la misma media y limita a 5; solo añade franchise_id y usa un formateo numérico distinto, lo que no cambia la respuesta.",
+            "generatedSql": "SELECT\n  f.franchise_id,\n  f.name,\n  AVG(r.score)::numeric(10,2) AS average_score,\n  COUNT(*) AS ratings_count\nFROM rating r\nJOIN game g ON r.game_id = g.game_id\nJOIN franchise f ON g.franchise_id = f.franchise_id\nGROUP BY f.franchise_id, f.name\nHAVING COUNT(*) >= 50\nORDER BY average_score DESC\nLIMIT 5;"
+          },
+          {
+            "id": "G-20",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No: la candidata agrupa por región y por DLC (devuelve ingresos por cada DLC en cada región) mientras que la referencia devuelve el total de ingresos de DLC por región; además la candidata usa JOINs internos que pueden omitir regiones sin ventas en lugar de los LEFT JOIN y COALESCE de la referencia.",
+            "generatedSql": "SELECT\n  region.region_id,\n  region.name AS region_name,\n  region.currency,\n  dlc.dlc_id,\n  dlc.title AS dlc_title,\n  SUM(purchase.amount) AS revenue\nFROM purchase\nJOIN dlc ON purchase.dlc_id = dlc.dlc_id\nJOIN customer ON purchase.customer_id = customer.customer_id\nJOIN region ON customer.region_id = region.region_id\nGROUP BY\n  region.region_id,\n  region.name,\n  region.currency,\n  dlc.dlc_id,\n  dlc.title\nORDER BY region.name, dlc.title;"
+          },
+          {
+            "id": "G-21",
+            "difficulty": "hard",
+            "recall": 0.75,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No: la candidata suma los concurrent_players de TODOS los juegos del mismo género por instante (pico agregado por género), mientras que la referencia toma el máximo de concurrent_players de un solo juego dentro de cada género; son métricas distintas.",
+            "generatedSql": "SELECT genre_id,\n       MAX(total_concurrent) AS peak_concurrent\nFROM (\n  SELECT gg.genre_id,\n         cs.captured_at,\n         SUM(cs.concurrent_players) AS total_concurrent\n  FROM concurrent_snapshot cs\n  JOIN game_genre gg USING (game_id)\n  GROUP BY gg.genre_id, cs.captured_at\n) t\nGROUP BY genre_id\nORDER BY peak_concurrent DESC\nLIMIT 1;"
+          },
+          {
+            "id": "G-22",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata cuenta los DLC por juego y devuelve el/los juego(s) cuyo dlc_count es máximo — es la misma información que la referencia (la referencia usa LIMIT 1 sólo para un desempate arbitrario, que se admite ignorar).",
+            "generatedSql": "WITH counts AS (\n  SELECT game_id, COUNT(*) AS dlc_count\n  FROM dlc\n  GROUP BY game_id\n)\nSELECT g.title, c.dlc_count\nFROM counts c\nJOIN game g ON g.game_id = c.game_id\nWHERE c.dlc_count = (SELECT MAX(dlc_count) FROM counts);"
+          },
+          {
+            "id": "G-23",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula la misma métrica: proporción de suscripciones iniciadas en 2024 que están activas (active/total * 100). Las diferencias son menores y no cambian la información: usa BETWEEN para el rango 2024 (equivalente al filtro original para valores DATE), lower(status) para coincidir sin distinción de mayúsculas y añade manejo de total=0; el redondeo/format no altera la respuesta.",
+            "generatedSql": "SELECT\n  CASE WHEN total = 0 THEN 0\n       ELSE 100.0 * active / total\n  END AS percentage_active\nFROM (\n  SELECT\n    COUNT(*) FILTER (WHERE start_date BETWEEN DATE '2024-01-01' AND DATE '2024-12-31')::numeric AS total,\n    COUNT(*) FILTER (WHERE start_date BETWEEN DATE '2024-01-01' AND DATE '2024-12-31' AND lower(status) = 'active')::numeric AS active\n  FROM subscription\n) t;"
+          },
+          {
+            "id": "G-24",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas aplican el mismo NOT EXISTS filtrando plataformas con kind = 'console' y por tanto devuelven el mismo conjunto de juegos; la candidata solo añade game_id y usa LOWER(...) (equivalente) y omite el ORDER BY (irrelevante para la equivalencia).",
+            "generatedSql": "SELECT g.game_id, g.title\nFROM game g\nWHERE NOT EXISTS (\n  SELECT 1\n  FROM game_platform gp\n  JOIN platform p ON gp.platform_id = p.platform_id\n  WHERE gp.game_id = g.game_id\n    AND LOWER(p.kind) = 'console'\n);"
+          },
+          {
+            "id": "G-25",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Devuelven los mismos 5 clientes con más juegos en la wishlist; la candidata solo añade la columna email y usa COUNT(t.id) en lugar de COUNT(*), sin cambiar el resultado.",
+            "generatedSql": "SELECT c.customer_id, c.username, c.email, COUNT(t.id) AS wishlist_count\nFROM t_042 t\nJOIN customer c ON t.customer_id = c.customer_id\nGROUP BY c.customer_id, c.username, c.email\nORDER BY wishlist_count DESC\nLIMIT 5;"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "nebula",
+    "tableCount": 66,
+    "modes": [
+      {
+        "mode": "none",
+        "cases": [
+          {
+            "id": "N-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas cuentan todas las filas de la tabla game; solo difieren en el alias de la columna.",
+            "generatedSql": "SELECT COUNT(*) AS total_games FROM game;"
+          },
+          {
+            "id": "N-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata selecciona los mismos 5 juegos ordenando por base_price DESC; solo añade game_id y un desempate por título (arbitrario), lo que no cambia la selección de filas.",
+            "generatedSql": "SELECT game_id, title, base_price\nFROM game\nORDER BY base_price DESC, title ASC\nLIMIT 5;"
+          },
+          {
+            "id": "N-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula el mismo conteo de clientes por región usando LEFT JOIN y COUNT, solo añade la columna region_id y un ORDER BY; esas diferencias no cambian la información solicitada.",
+            "generatedSql": "SELECT r.region_id, r.name AS region_name, COUNT(c.customer_id) AS customer_count\nFROM region r\nLEFT JOIN customer c ON c.region_id = r.region_id\nGROUP BY r.region_id, r.name\nORDER BY r.name;"
+          },
+          {
+            "id": "N-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata devuelve los mismos planes y su precio mensual; incluir plan_id es una columna descriptiva extra y la ausencia de ORDER BY no cambia la información requerida.",
+            "generatedSql": "SELECT plan_id, name, monthly_price\nFROM subscription_plan;"
+          },
+          {
+            "id": "N-05",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas hacen un INNER JOIN entre game y franchise para devolver los juegos que pertenecen a una franquicia y el nombre de la franquicia; la candidata sólo añade columnas identificadoras (ids), lo cual no cambia la información solicitada.",
+            "generatedSql": "SELECT game.game_id, game.title, franchise.franchise_id, franchise.name\nFROM game\nJOIN franchise ON game.franchise_id = franchise.franchise_id;"
+          },
+          {
+            "id": "N-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas calculan la suma de duration_minutes por juego y devuelven los 10 juegos con mayor total; la candidata solo añade game_id y agrupa por game_id y title (equivalente a agrupar por título si id es único) y usa otro alias, lo que no cambia la información devuelta.",
+            "generatedSql": "SELECT\n  g.game_id,\n  g.title,\n  SUM(ps.duration_minutes) AS total_minutes\nFROM game g\nJOIN play_session ps ON g.game_id = ps.game_id\nGROUP BY g.game_id, g.title\nORDER BY total_minutes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-07",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata cuenta logros por cliente y devuelve los 10 con más logros; solo añade customer_id como columna y un desempate por id, lo que no cambia la información solicitada.",
+            "generatedSql": "SELECT\n  c.customer_id,\n  c.username,\n  COUNT(*) AS achievements_unlocked\nFROM customer_achievement ca\nJOIN customer c ON ca.customer_id = c.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY achievements_unlocked DESC, c.customer_id\nLIMIT 10;"
+          },
+          {
+            "id": "N-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata agrupa por status y calcula SUM(total) igual que la de referencia; solo añade un alias y un ORDER BY que no cambia los resultados.",
+            "generatedSql": "SELECT status, SUM(total) AS total_facturado\nFROM invoice\nGROUP BY status\nORDER BY SUM(total) DESC;"
+          },
+          {
+            "id": "N-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas devuelven los juegos que tienen al menos un torneo con prize_pool > 10000; la consulta candidata solo añade game_id como columna adicional sin cambiar la condición.",
+            "generatedSql": "SELECT g.game_id, g.title\nFROM game g\nWHERE EXISTS (\n  SELECT 1\n  FROM tournament t\n  WHERE t.game_id = g.game_id\n    AND t.prize_pool > 10000\n);"
+          },
+          {
+            "id": "N-10",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata calcula el mismo conteo de votos 'útil' por review (agrupa por review_id), ordena descendente y limita a 10; solo añade columnas descriptivas y usa COUNT(rv.customer_id) en lugar de COUNT(*), lo cual no cambia el resultado.",
+            "generatedSql": "SELECT r.review_id,\n       r.customer_id,\n       r.game_id,\n       r.title,\n       r.body,\n       COUNT(rv.customer_id) AS helpful_votes\nFROM review_vote rv\nJOIN review r USING (review_id)\nWHERE rv.is_helpful = true\nGROUP BY r.review_id, r.customer_id, r.game_id, r.title, r.body\nORDER BY helpful_votes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata usa WHERE st.status ILIKE 'open%' (case-insensitive y que incluye cualquier estado que comience por 'open'), mientras la referencia exige status = 'open'; eso puede devolver un conjunto más amplio de clientes y por tanto no garantiza la misma respuesta.",
+            "generatedSql": "SELECT\n  c.customer_id,\n  c.username,\n  c.email,\n  COUNT(st.ticket_id) AS open_ticket_count\nFROM customer c\nJOIN support_ticket st ON c.customer_id = st.customer_id\nWHERE st.status ILIKE 'open%'\nGROUP BY c.customer_id, c.username, c.email\nORDER BY open_ticket_count DESC;"
+          },
+          {
+            "id": "N-12",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata devuelve los mismos títulos de juegos disponibles en la plataforma 'PC'; solo añade el id, aplica DISTINCT para evitar duplicados y ordena los resultados, diferencias que no cambian la información solicitada.",
+            "generatedSql": "SELECT DISTINCT g.game_id, g.title\nFROM game g\nJOIN game_platform gp ON g.game_id = gp.game_id\nJOIN platform p ON gp.platform_id = p.platform_id\nWHERE p.name = 'PC'\nORDER BY g.title;"
+          },
+          {
+            "id": "N-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan entradas de t_042 por cliente y devuelven los 5 con mayor conteo; la candidata solo añade customer_id y un desempate por username, que no cambia la respuesta solicitada.",
+            "generatedSql": "SELECT\n  c.customer_id,\n  c.username,\n  COUNT(t.id) AS wishlist_count\nFROM customer c\nJOIN t_042 t ON c.customer_id = t.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY wishlist_count DESC, c.username ASC\nLIMIT 5;"
+          },
+          {
+            "id": "N-14",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve los mismos estudios con headcount > 100 y su compañía matriz; solo añade la columna headcount y un ORDER BY, que no cambian la respuesta solicitada.",
+            "generatedSql": "SELECT studio.name, company.name, studio.headcount\nFROM studio\nJOIN company ON studio.company_id = company.company_id\nWHERE studio.headcount > 100\nORDER BY studio.headcount DESC;"
+          },
+          {
+            "id": "N-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata usa lower(gl.kind) LIKE '%audio%' y búsquedas parciales de idioma (códigos y LIKE '%span%','%españ%'), lo que es más permisivo que gl.kind = 'audio' y puede incluir juegos que la consulta de referencia excluye.",
+            "generatedSql": "SELECT DISTINCT g.game_id, g.title\nFROM game g\nJOIN game_language gl ON g.game_id = gl.game_id\nJOIN language l ON gl.language_id = l.language_id\nWHERE lower(gl.kind) LIKE '%audio%'\n  AND (lower(l.code) IN ('es','spa') OR lower(l.name) LIKE '%span%' OR lower(l.name) LIKE '%españ%')\nORDER BY g.title;"
+          }
+        ]
+      },
+      {
+        "mode": "vector",
+        "cases": [
+          {
+            "id": "N-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan el número de filas en la tabla game; solo difieren en el alias de la columna.",
+            "generatedSql": "SELECT COUNT(*) AS total_games FROM game;"
+          },
+          {
+            "id": "N-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve los mismos 5 juegos con mayor base_price; solo añade la columna game_id y un criterio de desempate por game_id, lo cual no altera el conjunto resultado.",
+            "generatedSql": "SELECT game_id, title, base_price\nFROM game\nORDER BY base_price DESC, game_id ASC\nLIMIT 5;"
+          },
+          {
+            "id": "N-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula el mismo COUNT(customer_id) por región usando LEFT JOIN y GROUP BY; solo añade region_id y un ORDER BY/alias, que no cambian los resultados solicitados.",
+            "generatedSql": "SELECT\n  region.region_id,\n  region.name,\n  COUNT(customer.customer_id) AS customer_count\nFROM region\nLEFT JOIN customer ON region.region_id = customer.region_id\nGROUP BY region.region_id, region.name\nORDER BY customer_count DESC;"
+          },
+          {
+            "id": "N-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve los mismos planes y sus precios mensuales; la única diferencia es la ausencia de ORDER BY, que no cambia los datos devueltos.",
+            "generatedSql": "SELECT name, monthly_price\nFROM subscription_plan;"
+          },
+          {
+            "id": "N-05",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas seleccionan el título del juego y el nombre de su franquicia uniéndose por franchise_id, por lo que devuelven la misma información.",
+            "generatedSql": "SELECT game.title, franchise.name\nFROM game\nJOIN franchise ON game.franchise_id = franchise.franchise_id;"
+          },
+          {
+            "id": "N-06",
+            "difficulty": "medium",
+            "recall": 0.5,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata agrupa por game_id y devuelve solo los IDs; la referencia muestra los títulos (g.title). No une la tabla game y por tanto no entrega los nombres de los juegos solicitados.",
+            "generatedSql": "SELECT\n  game_id,\n  SUM(duration_minutes) AS total_minutes\nFROM play_session\nGROUP BY game_id\nORDER BY total_minutes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-07",
+            "difficulty": "hard",
+            "recall": 0.5,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan los logros por cliente y devuelven los 10 con más; la candidata agrupa por customer_id y añade display_name/customer_id como columnas descriptivas, por lo que aporta la misma información.",
+            "generatedSql": "SELECT ca.customer_id, cp.display_name, COUNT(*) AS unlocked_count\nFROM customer_achievement ca\nLEFT JOIN customer_profile cp ON ca.customer_id = cp.customer_id\nGROUP BY ca.customer_id, cp.display_name\nORDER BY unlocked_count DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultan el mismo total por status (SUM(total) GROUP BY status); la consulta candidata solo añade un alias y un ORDER BY que no cambia los valores devueltos.",
+            "generatedSql": "SELECT status, SUM(total) AS total_facturado\nFROM invoice\nGROUP BY status\nORDER BY SUM(total) DESC;"
+          },
+          {
+            "id": "N-09",
+            "difficulty": "medium",
+            "recall": 0.5,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No: la consulta candidata devuelve solo game_id (identificadores) de los torneos con prize_pool > 10000, mientras que la referencia devuelve los títulos de los juegos (g.title); al no hacer JOIN con la tabla game no se obtienen los nombres solicitados.",
+            "generatedSql": "SELECT DISTINCT game_id\nFROM tournament\nWHERE prize_pool > 10000;"
+          },
+          {
+            "id": "N-10",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata usa LEFT JOIN y COUNT(...) FILTER que asigna 0 a reseñas sin votos útiles y puede incluirlas en el top-10; la referencia usa JOIN con WHERE rv.is_helpful y excluye reseñas sin votos útiles, por lo que pueden devolver resultados diferentes cuando hay menos de 10 reseñas con votos útiles.",
+            "generatedSql": "SELECT\n  r.review_id,\n  r.title,\n  r.body,\n  r.posted_at,\n  r.game_id,\n  r.customer_id,\n  COUNT(*) FILTER (WHERE rv.is_helpful) AS helpful_votes\nFROM review r\nLEFT JOIN review_vote rv ON r.review_id = rv.review_id\nGROUP BY r.review_id, r.title, r.body, r.posted_at, r.game_id, r.customer_id\nORDER BY helpful_votes DESC, r.review_id ASC\nLIMIT 10;"
+          },
+          {
+            "id": "N-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La candidata usa WHERE s.status ILIKE '%open%' (coincidencia por subcadena y caso insensible), lo que puede incluir estados que no sean exactamente 'open' (p. ej. 'not open' o textos que contienen 'open' como 'reopened'), por lo que puede devolver clientes adicionales; las columnas extra no son el problema.",
+            "generatedSql": "SELECT DISTINCT c.customer_id,\n       c.username,\n       c.email,\n       cp.display_name\nFROM customer c\nJOIN support_ticket s ON c.customer_id = s.customer_id\nLEFT JOIN customer_profile cp ON c.customer_id = cp.customer_id\nWHERE s.status ILIKE '%open%'\nORDER BY c.customer_id;"
+          },
+          {
+            "id": "N-12",
+            "difficulty": "hard",
+            "recall": 0.6666666666666666,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata no devuelve los títulos de juegos en la plataforma 'PC'; en su lugar devuelve un mensaje de error sobre la ausencia de la tabla 'platform', por lo que no responde la misma pregunta.",
+            "generatedSql": "SELECT 'No es posible responder: falta la tabla \"platform\" o una columna con el nombre de la plataforma en el esquema proporcionado' AS mensaje;"
+          },
+          {
+            "id": "N-13",
+            "difficulty": "hard",
+            "recall": 0.5,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan juegos por cliente y devuelven los 5 con más elementos; la candidata usa customer_id en lugar de username y añade un desempate por id, diferencias que no cambian la respuesta solicitada.",
+            "generatedSql": "SELECT customer_id, COUNT(*) AS wishlist_count\nFROM t_042\nGROUP BY customer_id\nORDER BY wishlist_count DESC, customer_id\nLIMIT 5;"
+          },
+          {
+            "id": "N-14",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Aplica el mismo JOIN y el mismo filtro s.headcount > 100 y devuelve los nombres de estudio y compañía; solo añade la columna headcount, que no cambia la respuesta solicitada.",
+            "generatedSql": "SELECT s.name AS studio_name, s.headcount, c.name AS company_name\nFROM studio s\nJOIN company c ON s.company_id = c.company_id\nWHERE s.headcount > 100;"
+          },
+          {
+            "id": "N-15",
+            "difficulty": "hard",
+            "recall": 0.3333333333333333,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata no devuelve los títulos de juegos con audio en español; en lugar de consultar las tablas y filtrar por l.name='Spanish' y gl.kind='audio' devuelve un mensaje que afirma que no es posible determinarlo, por tanto no responde la misma pregunta.",
+            "generatedSql": "SELECT 'No es posible determinar qué juegos tienen audio en español: el esquema proporcionado no incluye una tabla language con nombres de idioma' AS mensaje;"
+          }
+        ]
+      },
+      {
+        "mode": "graphrag",
+        "cases": [
+          {
+            "id": "N-01",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas realizan exactamente COUNT(*) sobre la tabla game sin filtros ni diferencias, por lo que devuelven la misma respuesta.",
+            "generatedSql": "SELECT COUNT(*) FROM game;"
+          },
+          {
+            "id": "N-02",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Devuelve los mismos 5 juegos ordenados por base_price descendente; solo añade game_id como columna descriptiva extra que no altera la respuesta.",
+            "generatedSql": "SELECT game_id, title, base_price\nFROM game\nORDER BY base_price DESC\nLIMIT 5;"
+          },
+          {
+            "id": "N-03",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula el mismo conteo de clientes por región usando LEFT JOIN y COUNT(c.customer_id); solo añade la columna region_id y un ORDER BY y agrupa por region_id y name, lo cual no cambia los resultados agregados.",
+            "generatedSql": "SELECT r.region_id, r.name, COUNT(c.customer_id) AS customer_count\nFROM region r\nLEFT JOIN customer c ON r.region_id = c.region_id\nGROUP BY r.region_id, r.name\nORDER BY customer_count DESC, r.region_id;"
+          },
+          {
+            "id": "N-04",
+            "difficulty": "easy",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata devuelve las mismas columnas (name, monthly_price) y los mismos registros; la única diferencia es la cláusula ORDER BY, y el orden de filas se ignora según las reglas.",
+            "generatedSql": "SELECT name, monthly_price\nFROM subscription_plan;"
+          },
+          {
+            "id": "N-05",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas realizan el mismo JOIN por franchise_id y devuelven los mismos pares título/franquicia; el ORDER BY sólo cambia el orden de filas y no el contenido.",
+            "generatedSql": "SELECT g.title, f.name\nFROM game g\nJOIN franchise f USING (franchise_id)\nORDER BY g.title;"
+          },
+          {
+            "id": "N-06",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata calcula la misma suma de minutos por juego y devuelve los 10 con mayor total; solo añade la columna game_id y agrupa por id+y título, lo cual no cambia la información solicitada.",
+            "generatedSql": "SELECT g.game_id, g.title, SUM(ps.duration_minutes) AS total_minutes\nFROM play_session ps\nJOIN game g ON ps.game_id = g.game_id\nGROUP BY g.game_id, g.title\nORDER BY total_minutes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-07",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La candidata calcula el conteo de logros por cliente (agrupando por customer_id y username) y toma los 10 con más, igual que la de referencia; sólo añade columnas descriptivas (customer_id, display_name) y un desempate por id, que no cambia la información solicitada.",
+            "generatedSql": "SELECT\n  ca.customer_id,\n  c.username,\n  cp.display_name,\n  COUNT(*) AS achievements_unlocked\nFROM customer_achievement ca\nJOIN customer c ON c.customer_id = ca.customer_id\nLEFT JOIN customer_profile cp ON cp.customer_id = c.customer_id\nGROUP BY ca.customer_id, c.username, cp.display_name\nORDER BY achievements_unlocked DESC, ca.customer_id\nLIMIT 10;"
+          },
+          {
+            "id": "N-08",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas agrupan por status y calculan SUM(total) por estado; la candidata sólo añade un alias y un ORDER BY, que no cambia los resultados agregados solicitados.",
+            "generatedSql": "SELECT status, SUM(total) AS total_facturado\nFROM invoice\nGROUP BY status\nORDER BY SUM(total) DESC;"
+          },
+          {
+            "id": "N-09",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas devuelven los títulos distintos de juegos que tienen al menos un torneo con prize_pool > 10000; sólo difieren en sintaxis/alias (JOIN ... USING vs JOIN ... ON).",
+            "generatedSql": "SELECT DISTINCT game.title\nFROM game\nJOIN tournament USING (game_id)\nWHERE tournament.prize_pool > 10000;"
+          },
+          {
+            "id": "N-10",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas cuentan los votos 'útil' por reseña y devuelven las 10 con más votos; la candidata solo añade columnas extra (review_id, body) y usa la misma condición v.is_helpful = true, por lo que proporcionan la misma información principal.",
+            "generatedSql": "SELECT r.review_id, r.title, r.body, COUNT(*) AS helpful_votes\nFROM review r\nJOIN review_vote v ON v.review_id = r.review_id\nWHERE v.is_helpful = true\nGROUP BY r.review_id, r.title, r.body\nORDER BY helpful_votes DESC\nLIMIT 10;"
+          },
+          {
+            "id": "N-11",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "La consulta candidata usa st.status ILIKE '%open%' (coincidencia parcial y case-insensitive) en lugar de = 'open', por lo que puede incluir estados distintos ('opened', 'reopened', 'Open', etc.) que la referencia no devuelve.",
+            "generatedSql": "SELECT DISTINCT c.customer_id, c.username, c.email, cp.display_name\nFROM customer c\nJOIN support_ticket st ON c.customer_id = st.customer_id\nLEFT JOIN customer_profile cp ON c.customer_id = cp.customer_id\nWHERE st.status ILIKE '%open%';"
+          },
+          {
+            "id": "N-12",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata usa las mismas tablas y el mismo filtro WHERE p.name = 'PC' y por tanto devuelve los mismos juegos; solo añade game_id y DISTINCT (para evitar duplicados), lo cual no cambia la respuesta solicitada.",
+            "generatedSql": "SELECT DISTINCT g.game_id, g.title\nFROM game g\nJOIN game_platform gp ON g.game_id = gp.game_id\nJOIN platform p ON gp.platform_id = p.platform_id\nWHERE p.name = 'PC';"
+          },
+          {
+            "id": "N-13",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": false,
+            "equivalenceReason": "No son equivalentes: la consulta de referencia usa COUNT(*) mientras la candidata usa COUNT(DISTINCT game_id), que cambia la métrica si hay duplicados en t_042; eso puede alterar el top-5 (el resto de diferencias, p. ej. incluir customer_id o un desempate por id, no afectan).",
+            "generatedSql": "SELECT\n  c.customer_id,\n  c.username,\n  COUNT(DISTINCT t.game_id) AS wishlist_count\nFROM customer c\nJOIN t_042 t ON c.customer_id = t.customer_id\nGROUP BY c.customer_id, c.username\nORDER BY wishlist_count DESC, c.customer_id\nLIMIT 5;"
+          },
+          {
+            "id": "N-14",
+            "difficulty": "medium",
+            "recall": 1,
+            "executionMatchFair": true,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "La consulta candidata aplica el mismo JOIN y el mismo filtro (s.headcount > 100). Solo añade la columna headcount y un ORDER BY, cambios puramente presentacionales que no alteran la respuesta solicitada.",
+            "generatedSql": "SELECT s.name AS studio_name,\n       s.headcount,\n       c.name AS company_name\nFROM studio s\nJOIN company c ON c.company_id = s.company_id\nWHERE s.headcount > 100\nORDER BY s.headcount DESC;"
+          },
+          {
+            "id": "N-15",
+            "difficulty": "hard",
+            "recall": 1,
+            "executionMatchFair": false,
+            "executionMatchSemantic": true,
+            "equivalenceReason": "Ambas consultas buscan juegos cuya pista de audio es español; la candidata usa coincidencias flexibles sobre name/code (incluyendo variantes) y solo añade game_id y ORDER BY, sin alterar el propósito ni la métrica retornada.",
+            "generatedSql": "SELECT DISTINCT g.game_id, g.title\nFROM game g\nJOIN game_language gl ON gl.game_id = g.game_id\nJOIN language l ON l.language_id = gl.language_id\nWHERE gl.kind = 'audio'\n  AND (l.name ILIKE '%spanish%' OR l.name ILIKE '%español%' OR l.code ILIKE 'es%')\nORDER BY g.title;"
+          }
+        ]
+      }
+    ]
+  }
+]

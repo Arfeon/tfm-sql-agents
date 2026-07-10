@@ -22,17 +22,19 @@ Cada pregunta se resuelve de tres maneras, y comparo los resultados:
 
 ## Reglas para leerlo sin equivocarse
 
-1. **Las métricas objetivas mandan.** Recall y execution accuracy (justa) se calculan ejecutando y comparando de verdad; son la referencia. La equivalencia del LLM va **al lado**, como complemento, nunca como titular.
-2. **La equivalencia es un LLM opinando, y falla.** Solo la uso para *rescatar* aciertos que la comparación objetiva descarta (nunca para quitar los que ya da por buenos). Por diseño, la equivalencia es siempre ≥ la justa.
+1. **Las métricas objetivas mandan, y la equivalencia responde la pregunta de producto.** Recall y execution accuracy (justa) se calculan ejecutando y comparando de verdad: son el **suelo objetivo** y siempre se muestran. La **equivalencia** es la que responde a "¿el sistema contesta bien?" — la [auditoría 2026-07-09](auditoria-2026-07-09.md) demostró que la justa a secas castiga artefactos (columnas de más, empates, redondeos) que ningún humano llamaría fallo. Regla práctica: la equivalencia **nunca se cita sola**; va siempre con la justa al lado.
+2. **La equivalencia solo puede RESCATAR, nunca descartar.** Es `justa OR juez`: el LLM juez suma aciertos que la comparación de filas descarta por un artefacto, pero no puede quitar los que la ejecución ya da por buenos. Por diseño es siempre ≥ la justa, y su falibilidad queda auditable en el detalle por caso (`equivalenceReason`).
 3. **Con pocos casos, ignora la equivalencia entre modos.** En el experimento de confusión son 6 casos: cada uno vale ~17%, así que una diferencia de un caso no significa nada. Ahí mira **recall y justa**. (Ejemplo real que confundió: "solo vectorial" salía con más equivalencia que GraphRAG por *un* caso rescatado por el juez, mientras la justa era idéntica y el recall de GraphRAG era mayor — el GraphRAG era mejor, no peor.)
 4. **Una sola tirada baila.** La generación del LLM no es determinista: entre tiradas el mismo caso puede cambiar ±varios puntos. Por eso la prueba de escala se reporta como **media de 5 tiradas** (`escala-tiradas.md`), no una suelta.
 
 ## Qué informe es cada cosa
 
-- **`resumen.md`** — el ablation base sobre Arcadia (3 modos × con/sin recuperación).
-- **`descripciones.md`** — qué aportan las descripciones de tablas (con/sin), con el foco en la tabla de nombre opaco `t_042`.
-- **`escala.md`** — una evaluación completa sobre las dos BDs (Arcadia 17 tablas, Nebula 66); muestra cómo el contexto del GraphRAG se mantiene plano al crecer el esquema.
-- **`escala-tiradas.md`** — la media de 5 tiradas de la prueba de escala (el dato en el que confiar para la escala).
+- **`resumen.md`** — la portada: la tabla completa (media de 5 tiradas, las dos BDs) y las cuatro lecturas.
+- **`auditoria-2026-07-09.md`** — la auditoría caso a caso que corrigió el arnés (referencias con bugs, comparador, juez) y el antes/después de los números. **Léela antes de comparar con números antiguos.**
+- **`descripciones.md`** — qué aportan las descripciones de tablas (2×2 con/sin, media de 5 tiradas), con el foco en la tabla de nombre opaco `t_042`.
+- **`escala.md`** — el informe de la última tirada suelta de la prueba de escala (Arcadia 17 tablas, Nebula 66), con los tokens de contexto por modo.
+- **`escala-tiradas.md`** — la media de 5 tiradas de la prueba de escala con la estabilidad por caso (el dato en el que confiar).
 - **`confusion.md`** — el caso difícil: tablas y columnas con nombres opacos. Mide quién sobrevive sin descripciones.
 - **`escala-coder14b.md`** — verificación con el modelo **100% local** (Qwen2.5-Coder-14B), para enseñar que la ventaja no depende de estar en la nube.
-- **`escala-casos.json`** — el detalle por caso (la SQL generada de cada pregunta), por si quieres abrir un caso concreto.
+- **`escala-casos.json`** — el detalle por caso (SQL de referencia y generada, veredicto del juez), por si quieres abrir un caso concreto.
+- **`tiradas/`** — los ficheros crudos de cada tirada; `tiradas/pre-auditoria/` conserva las tiradas anteriores a la corrección del arnés, como evidencia del antes.

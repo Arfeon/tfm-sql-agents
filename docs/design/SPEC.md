@@ -92,6 +92,8 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-20 | Índice multi-inquilino: varias BDs indexadas a la vez en Neo4j/pgvector | 🔮 Futuro (fuera del MVP) |
 | SPEC-21 | Experimento de confusión: tablas y columnas con nombres opacos, ¿quién sobrevive sin descripciones? | ✅ Cerrada (sin descripciones se hunden todos los modos; con ellas, GraphRAG 83% de equivalencia vs 17% del esquema entero — la recuperación hace la documentación usable) |
 | SPEC-22 | Relaciones sintéticas en Neo4j: aristas curadas para BDs sin FKs declaradas | 🔮 Futuro (fuera del MVP; especificada) |
+| SPEC-23 | Plantillas parametrizadas: consultas aprobadas reutilizables con parámetros tipados | 🔮 Futuro (fuera del MVP; especificada) |
+| SPEC-24 | Widgets bajo demanda: SQL aprobada ejecutada sin LLM para dashboards | 🔮 Futuro (fuera del MVP; especificada) |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §10](arquitectura.md).
 
@@ -952,6 +954,8 @@ cd backend && npm run evaluate:scale    # prueba de escala sobre la BD grande (o
 
 **Objetivo.** Que el grafo pueda contener relaciones entre tablas que **no existen como clave foránea** en el DDL de la BD objetivo, declaradas aparte por quien conoce el dominio. El caso que lo motiva es real: un ERP viejo **sin ninguna FK declarada**, cuyo esquema no puedo tocar —es de un tercero y crear FKs cambiaría la BD productiva—, pero cuyas relaciones entre algunas tablas sí conozco. Hoy la expansión por FK del GraphRAG (SPEC-04) no tiene nada que expandir en una BD así: la recuperación se queda en las tablas que casan por significado y no arrastra las del JOIN, y el SQL Agent tiene que **adivinar** cómo unir. Con relaciones sintéticas, declaro esas uniones una vez en un fichero, viven **solo en Neo4j** (nunca escribo en la BD objetivo) y el sistema las usa igual que las FK reales: para traer las tablas relacionadas y para saber por qué columnas unirlas.
 
+Dos motivos más se sumaron después. La auditoría de la evaluación (2026-07-09) documentó el déficit real G-21: una tabla necesaria (`genre`) queda a **dos saltos** de las candidatas semánticas y la expansión de un salto no la alcanza — una relación sintética curada acorta ese camino sin tocar la profundidad de expansión (que queda como alternativa a valorar dentro de esta spec). Y el primer uso real descubrió un valor lateral: los técnicos usan el grafo de Neo4j como **banco de pruebas del esquema** — ensayar una relación aquí y ver su efecto en la recuperación *antes* de decidir si se implementa como FK real en la BD propia; las relaciones sintéticas convierten ese ensayo en flujo soportado.
+
 **Contrato.**
 
 - *Sidecar de relaciones (mismo patrón que las descripciones).* Fichero(s) JSON en `relations/` con un array de `{ fromTable, fromColumn, toTable, toColumn, note? }`; los `*.example.json` se ignoran, como en `descriptions/`. Es metadata **curada por un humano** que conoce el dominio, no inferida.
@@ -978,5 +982,68 @@ cd backend && npm run evaluate:scale    # prueba de escala sobre la BD grande (o
 - [ ] El SQL Agent genera el JOIN correcto apoyándose en una relación sintética
 - [ ] Una relación con tabla o columna inexistente se rechaza con un mensaje claro, sin aristas colgantes
 - [ ] Re-escanear reconstruye las relaciones sintéticas junto al resto del grafo
+
+---
+
+### SPEC-23 — Plantillas parametrizadas: consultas aprobadas reutilizables con parámetros tipados 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** Una consulta aprobada resuelve una pregunta concreta ("ventas del cliente 42 en junio"), pero el patrón se repite con otros valores. Quiero poder guardar una consulta aprobada como **plantilla**: sus literales del `WHERE`/`HAVING` se convierten en parámetros con nombre y tipo, y cualquier usuario la relanza con valores nuevos sin pasar por el LLM ni por una nueva aprobación — la estructura ya la validó un humano; lo único que cambia son valores, y van **siempre ligados**. Nace de una petición de los primeros usuarios (reproducir "consultas favoritas" con datos actualizados) y es el puente entre el almacén de aprobadas (SPEC-09) y los widgets (SPEC-24).
+
+**Contrato.**
+
+- *Parametrización asistida, una sola vez.* Al guardar como plantilla, el LLM propone qué literales convertir en parámetros (nombre legible, tipo, valor de ejemplo) y el humano confirma o ajusta. El tipo sale del esquema real (la columna comparada, vía el grafo), no de una adivinación.
+- *Solo VALORES, nunca estructura con texto libre.* Los parámetros son valores de `WHERE`/`HAVING` (y `LIMIT`); la ejecución usa placeholders con valores ligados por el driver → inyección imposible por construcción. La estructura (`SELECT`/`JOIN`/`GROUP BY`) queda congelada tal como se aprobó.
+- *Variantes de estructura por allowlist.* SQL no permite ligar nombres de columna como parámetros; si una plantilla necesita variar el eje ("por mes / por delegación"), cada variante es una estructura **pre-aprobada** y el usuario elige de una lista cerrada. Nunca se sustituye un identificador con texto del usuario.
+- *Ejecución sin LLM.* Relanzar una plantilla = pedir los valores (validados por tipo) + ejecutar en solo lectura + presentar (tabla/gráfico, SPEC-19). Coste LLM cero, latencia la de la query.
+- *El Judge determinista sigue de guardia.* La sentencia final pasa igualmente la Capa 1 (allowlist de solo lectura): es barata y no negociable, aunque la estructura esté aprobada.
+- *Almacén compartido con SPEC-09*: la tabla de consultas aprobadas gana los campos de plantilla (SQL con placeholders, parámetros tipados con default, variantes), detrás del mismo puerto.
+
+**Pasos**
+
+1. Modelo de dominio de la plantilla: SQL con placeholders, lista de parámetros `{ nombre, tipo, default }`, variantes opcionales.
+2. Caso de uso "guardar como plantilla" (deps inyectadas): el LLM propone la parametrización, el humano la confirma en el CLI.
+3. Caso de uso "ejecutar plantilla": validar tipos → ligar valores → Capa 1 → ejecutar en solo lectura.
+4. CLI: listar plantillas (por BD objetivo), elegir, rellenar parámetros con validación, presentar el resultado.
+5. Variantes por allowlist (cada una con su SQL pre-aprobada).
+6. Tests con dobles: bind correcto, valor de tipo inválido rechazado antes de ejecutar, la estructura no es editable en la ejecución, la Capa 1 se aplica siempre.
+
+**Criterios de aceptación**
+
+- [ ] Guardar una consulta aprobada como plantilla propone parámetros con nombre y tipo, y el humano los confirma
+- [ ] Ejecutar una plantilla pide los valores, los valida por tipo y ejecuta con parámetros ligados (nunca interpolación de texto en la SQL)
+- [ ] Un valor de tipo incorrecto se rechaza con un mensaje claro antes de tocar la BD
+- [ ] La estructura aprobada no cambia; las variantes de agrupación solo salen de la allowlist pre-aprobada
+- [ ] La ejecución de una plantilla no llama a ningún LLM y pasa la capa determinista del Judge
+- [ ] Suite unitaria verde con dobles, sin Docker ni LLM
+
+---
+
+### SPEC-24 — Widgets bajo demanda: SQL aprobada ejecutada sin LLM para dashboards 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** El caso de uso que piden las primeras empresas interesadas: estadísticas en tiempo (casi) real para usuarios de un ERP, como widgets o dashboards bajo demanda. La pieza clave es económica y de seguridad a la vez: el LLM (el pipeline completo, con revisión humana) solo interviene al **crear** el widget; cada refresco ejecuta directamente la SQL aprobada (o la plantilla de SPEC-23 con sus valores) — coste LLM cero por refresco, latencia la de la query, y solo se ejecuta estructura que un humano aprobó. El coste crece con los widgets que la gente crea, no con las veces que se miran.
+
+**Contrato.**
+
+- *Un widget es*: una consulta aprobada o plantilla (SPEC-23) + valores por defecto + una presentación (tabla / gráfico de barras, SPEC-19) + metadatos (nombre, BD objetivo, fecha).
+- *Crear desde la revisión*: tras aprobar y ejecutar una consulta, una acción "guardar como widget" (nombre + presentación). También desde una plantilla existente.
+- *Refrescar sin LLM*: ejecutar el widget repite la consulta por la misma vía que SPEC-23 (valores ligados, Capa 1, solo lectura, timeout y tope de filas) y repinta la presentación.
+- *Primera entrega en el CLI*: una opción "mis widgets" que lista, ejecuta y pinta. La exposición a un ERP externo (API HTTP o servidor MCP sobre las tools existentes, D-12) queda **explícitamente fuera** de esta spec y ligada a esa dirección futura; aquí se deja la lógica desacoplada de la presentación para que ese salto sea pequeño.
+- *Gestión mínima*: renombrar y borrar; sin permisos ni compartición entre usuarios en esta fase.
+
+**Pasos**
+
+1. Modelo de dominio del widget (consulta/plantilla + presentación + metadatos) y su almacén en `graphsql_memory` (puerto + adaptador + factory, D-05).
+2. Acción "guardar como widget" en la revisión humana y sobre plantillas.
+3. Caso de uso "ejecutar widget" reutilizando la ejecución de SPEC-23; presentación con SPEC-19.
+4. CLI: listar/ejecutar/renombrar/borrar.
+5. Tests con dobles: crear desde una aprobación, refrescar no llama al LLM, borrar no afecta a la consulta aprobada origen.
+
+**Criterios de aceptación**
+
+- [ ] Tras aprobar una consulta puedo guardarla como widget con nombre y presentación
+- [ ] Ejecutar un widget no llama a ningún LLM y respeta solo lectura, timeout y tope de filas
+- [ ] El widget de una plantilla pide (o usa por defecto) sus parámetros tipados
+- [ ] Puedo listar, renombrar y borrar widgets desde el CLI sin afectar a las consultas aprobadas de origen
+- [ ] Suite unitaria verde con dobles, sin Docker ni LLM
 
 ---
