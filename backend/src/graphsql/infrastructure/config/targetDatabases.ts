@@ -3,7 +3,7 @@
  * (`TARGET_DB_1_*`, `TARGET_DB_2_*`, …) porque un `.env` no admite arrays.
  */
 
-export type TargetDbType = 'postgresql'
+export type TargetDbType = 'postgresql' | 'mssql'
 
 export interface TargetDatabaseConfig {
   type: TargetDbType
@@ -23,7 +23,12 @@ export function targetDatabaseLabel(target: TargetDatabaseConfig): string {
 
 const DIALECT_LABELS: Record<TargetDbType, string> = {
   postgresql: 'PostgreSQL',
+  mssql: 'SQL Server',
 }
+
+/** Valores por defecto que dependen del motor (los demás son comunes). */
+const DEFAULT_PORT: Record<TargetDbType, number> = { postgresql: 5432, mssql: 1433 }
+const DEFAULT_SCHEMA: Record<TargetDbType, string> = { postgresql: 'public', mssql: 'dbo' }
 export function sqlDialectFor(target: TargetDatabaseConfig): string {
   return DIALECT_LABELS[target.type] ?? target.type
 }
@@ -51,16 +56,26 @@ function loadNumberedTargets(env: NodeJS.ProcessEnv): TargetDatabaseConfig[] {
 
 function readTarget(env: NodeJS.ProcessEnv, prefix: string): TargetDatabaseConfig {
   const value = (suffix: string): string | undefined => env[`TARGET_DB_${prefix}${suffix}`]
+  const type = parseTargetDbType(value('TYPE'), `TARGET_DB_${prefix}TYPE`)
   return {
-    type: (value('TYPE') ?? 'postgresql') as TargetDbType,
+    type,
     name: value('NAME') ?? 'arcadia',
     host: value('HOST') ?? 'localhost',
-    port: parseInt(value('PORT') ?? '5432', 10),
+    port: parseInt(value('PORT') ?? String(DEFAULT_PORT[type]), 10),
     user: value('USER') ?? 'postgres',
     password: value('PASSWORD') ?? 'postgres',
-    schema: value('SCHEMA') ?? 'public',
+    schema: value('SCHEMA') ?? DEFAULT_SCHEMA[type],
     public: value('PUBLIC') === 'true',
   }
+}
+
+/** Un tipo desconocido falla aquí, no aguas abajo con los defaults de PostgreSQL (puerto, schema). */
+function parseTargetDbType(raw: string | undefined, envKey: string): TargetDbType {
+  const type = raw ?? 'postgresql'
+  if (!(type in DEFAULT_PORT)) {
+    throw new Error(`${envKey}="${raw}" no es un tipo de BD soportado. Valores válidos: ${Object.keys(DEFAULT_PORT).join(', ')}.`)
+  }
+  return type as TargetDbType
 }
 
 /** La BD a evaluar: `EVAL_TARGET` por nombre, o la primera del catálogo si no está. */
