@@ -1,12 +1,7 @@
 /**
- * Almacén de embeddings de tablas en PostgreSQL + pgvector.
- *
- * Guarda, por cada tabla, el texto de búsqueda, su vector y el modelo/dimensión
- * con que se generó. Vivo en la base `graphsql_memory` (la misma que usaré para
- * los checkpoints), no en la BD objetivo.
- *
- * `prepare` reconstruye la tabla desde cero (cada vectorización re-vectoriza
- * todo), así no tengo que lidiar con cambios de dimensión a medias.
+ * Almacén de embeddings de tablas (PostgreSQL + pgvector), en la base `graphsql_memory`, no
+ * en la BD objetivo. Guarda por tabla el texto de búsqueda, su vector y el modelo/dimensión.
+ * `prepare` reconstruye la tabla desde cero: cada vectorización re-vectoriza todo.
  */
 import { Client } from 'pg'
 import type { IEmbeddingsStore, TableMatch } from '../../domain/ports/IEmbeddingsStore'
@@ -124,6 +119,14 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
       [toVectorLiteral(embedding), limit],
     )
     return result.rows.map((row) => ({ tableName: row.table_name, score: Number(row.score) }))
+  }
+
+  /** Nombre + texto de búsqueda de todas las tablas, para el ranking léxico (schema linking híbrido). */
+  async getAllTableTexts(): Promise<{ tableName: string; searchText: string }[]> {
+    const result = await this.client.query<{ table_name: string; search_text: string | null }>(
+      'SELECT table_name, search_text FROM table_embeddings',
+    )
+    return result.rows.map((row) => ({ tableName: row.table_name, searchText: row.search_text ?? '' }))
   }
 
   async count(): Promise<number> {

@@ -5,11 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { explainSchemaRetrieval } from '../../src/graphsql/application/schemaRetrieval'
 import type { SchemaRetrievalDependencies } from '../../src/graphsql/application/schemaRetrieval'
-import type { TableSchema } from '../../src/graphsql/domain/schema/TableSchema'
-
-function table(name: string): TableSchema {
-  return { name, schema: null, columns: [{ name: `${name}_id`, type: 'integer', nullable: false }], primaryKeys: [`${name}_id`], foreignKeys: [] }
-}
+import { table, tableWithFk } from '../helpers/tableFixtures'
 
 describe('explainSchemaRetrieval', () => {
   it('distingue candidatas de expandidas y muestra el score (bajo) de las expandidas', async () => {
@@ -34,7 +30,15 @@ describe('explainSchemaRetrieval', () => {
     // su motivo en el contexto final es 'expansion'
     expect(trace.finalContext.find((c) => c.tableName === 't_042')?.reason).toBe('expansion')
     expect(trace.finalContext.find((c) => c.tableName === 'game')?.reason).toBe('semantic')
-    expect(trace.levers).toEqual({ semanticTopK: 2, maxContextTables: 8 })
+    expect(trace.levers).toEqual({
+      semanticTopK: 2,
+      maxContextTables: 8,
+      expansionMode: 'neighbors',
+      maxPathLength: 3,
+      lexical: false,
+      useSelector: false,
+      poolSize: 30,
+    })
   })
 
   it('marca como fijada (pinned) una tabla del must-include', async () => {
@@ -53,6 +57,54 @@ describe('explainSchemaRetrieval', () => {
     expect(trace.finalContext.find((c) => c.tableName === 't_042')?.reason).toBe('pinned')
     // y no aparece como "candidata" en el ranking (no está en el top-K semántico).
     expect(trace.ranking.find((r) => r.tableName === 't_042')?.isCandidate).toBe(false)
+  })
+
+  it("modo 'paths': marca el puente como 'connector' y lo lista aparte de las vecinas", async () => {
+    const deps: SchemaRetrievalDependencies = {
+      rankTablesBySimilarity: async () => [
+        { tableName: 'dades_fiscals', score: 0.9 },
+        { tableName: 'abo_linies', score: 0.8 },
+        { tableName: 'abonats', score: 0.05 }, // hub central: score bajísimo
+      ],
+      // a un salto solo aparecen las anclas; el hub no lo trae la vecindad.
+      expandByForeignKeys: async () => [table('dades_fiscals'), table('abo_linies')],
+      // el camino dades_fiscals—abonats—abo_linies rescata 'abonats' como puente.
+      findConnectingTables: async () => [table('abonats')],
+    }
+
+    const trace = await explainSchemaRetrieval('abonado con más líneas', deps, {
+      topK: 2,
+      maxTables: 8,
+      expansionMode: 'paths',
+    })
+
+    expect(trace.finalContext.find((c) => c.tableName === 'abonats')?.reason).toBe('connector')
+    expect(trace.connectorsAdded.map((c) => c.tableName)).toEqual(['abonats'])
+    // el puente no se cuela en la lista de vecinas a un salto.
+    expect(trace.expansionAdded.map((e) => e.tableName)).not.toContain('abonats')
+    expect(trace.levers.expansionMode).toBe('paths')
+    expect(trace.levers.maxPathLength).toBe(3)
+  })
+
+  it("modo 'paths': marca la dimensión referenciada por FK como 'fk-target' y la lista aparte", async () => {
+    const cliSub = tableWithFk('abo_linies', 'id_abonat', 'abonats')
+    const deps: SchemaRetrievalDependencies = {
+      rankTablesBySimilarity: async () => [
+        { tableName: 'abo_linies', score: 0.9 },
+        { tableName: 'abonats', score: 0.02 },
+      ],
+      expandByForeignKeys: async () => [cliSub, table('abonats')],
+    }
+
+    const trace = await explainSchemaRetrieval('abonado con más líneas', deps, {
+      topK: 1,
+      maxTables: 8,
+      expansionMode: 'paths',
+    })
+
+    expect(trace.finalContext.find((c) => c.tableName === 'abonats')?.reason).toBe('fk-target')
+    expect(trace.fkTargetsAdded.map((c) => c.tableName)).toEqual(['abonats'])
+    expect(trace.expansionAdded.map((e) => e.tableName)).not.toContain('abonats')
   })
 
   it('el ranking trae todas las tablas y el contexto respeta el recorte', async () => {

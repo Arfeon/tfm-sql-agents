@@ -72,7 +72,11 @@ docs/PLANNING.md
 # Database files
 *.sqlite
 *.sqlite3
-descriptions/descriptions.json
+
+# Descripciones de tablas: las de una BD real son esquema de la empresa (nombres de tabla
+# y significado de negocio), así que se quedan en local. Al repo solo va el ejemplo.
+descriptions/*.json
+!descriptions/*.example.json
 
 # Material de presentación: solo local, no va al repo público
 docs/presentacion/

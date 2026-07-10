@@ -3,11 +3,19 @@
  * El `select` de @inquirer no se prueba aquí; sí la resolución del defecto y el nombre
  * del modelo, que son lo que decide qué ve y qué se fija por defecto.
  */
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { resolveDefaultProvider, modelNameFor, providerLabel } from '../../src/cli/providerSelection'
 import { LlmProvider } from '../../src/graphsql/infrastructure/llm/LlmProvider'
 
 const savedEnv = { ...process.env }
+// Limpio también las variables de rol: si el .env local define un modelo de razonamiento
+// aparte, `modelNameFor` mostraría "razonamiento X · SQL Y" y el test dependería de mi máquina.
+beforeEach(() => {
+  delete process.env.OPENAI_MODEL_REASONING
+  delete process.env.OPENAI_MODEL_GENERATION
+  delete process.env.LMSTUDIO_MODEL_REASONING
+  delete process.env.LMSTUDIO_MODEL_GENERATION
+})
 afterEach(() => {
   process.env = { ...savedEnv }
 })

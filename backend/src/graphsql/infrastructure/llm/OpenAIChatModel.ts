@@ -5,6 +5,8 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 import type { ChatMessage, IChatModel } from '../../domain/ports/IChatModel'
+import { LlmProvider } from './LlmProvider'
+import { resolveModelName, type LlmRole } from './modelSelection'
 
 export class OpenAIChatModel implements IChatModel {
   private readonly client: ChatOpenAI
@@ -15,9 +17,9 @@ export class OpenAIChatModel implements IChatModel {
     this.client = new ChatOpenAI({ apiKey, model, temperature, maxRetries: 1 })
   }
 
-  static fromEnv(): OpenAIChatModel {
+  static fromEnv(role?: LlmRole): OpenAIChatModel {
     const apiKey = process.env.OPENAI_API_KEY ?? ''
-    const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
+    const model = resolveModelName(LlmProvider.OpenAI, role)
     const temperature = process.env.LLM_TEMPERATURE ? Number(process.env.LLM_TEMPERATURE) : undefined
     return new OpenAIChatModel(apiKey, model, temperature)
   }

@@ -10,7 +10,7 @@ import { join } from 'node:path'
 /** Carpeta de prompts, relativa al directorio de ejecución (backend/). */
 export const AGENTS_DIR = '../agents'
 
-export type AgentPromptName = 'sql-generator' | 'equivalence-judge' | 'judge' | 'chat'
+export type AgentPromptName = 'sql-generator' | 'equivalence-judge' | 'judge' | 'chat' | 'schema-selector'
 
 export function loadAgentPrompt(
   name: AgentPromptName,

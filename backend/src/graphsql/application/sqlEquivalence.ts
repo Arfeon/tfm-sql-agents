@@ -7,6 +7,7 @@ import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
 import { loadAgentPrompt } from '../infrastructure/config/agentPrompts'
 import type { IChatModel } from '../domain/ports/IChatModel'
 import type { ResultRow } from './evaluationMetrics'
+import { extractJsonObject } from './llmReply'
 
 export interface EquivalenceVerdict {
   equivalent: boolean
@@ -18,7 +19,8 @@ export interface SqlEquivalenceDependencies {
 }
 
 export const defaultSqlEquivalenceDependencies: SqlEquivalenceDependencies = {
-  createChatModel: () => ChatModelFactory.fromEnv(),
+  // Generación: comparar dos SQL por equivalencia es tarea centrada en SQL.
+  createChatModel: () => ChatModelFactory.fromEnv('generation'),
 }
 
 export function buildEquivalenceSystemPrompt(dialect: string): string {
@@ -27,23 +29,8 @@ export function buildEquivalenceSystemPrompt(dialect: string): string {
 
 /** Una respuesta ilegible cuenta como NO equivalente (conservador: no inflar aciertos). */
 export function parseEquivalenceVerdict(raw: string): EquivalenceVerdict {
-  const jsonText = raw.match(/\{[\s\S]*\}/)
-  if (!jsonText) {
-    return notInterpretable()
-  }
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(jsonText[0])
-  } catch {
-    return notInterpretable()
-  }
-
-  if (typeof parsed !== 'object' || parsed === null) {
-    return notInterpretable()
-  }
-  const fields = parsed as Record<string, unknown>
-  if (typeof fields.equivalent !== 'boolean') {
+  const fields = extractJsonObject(raw)
+  if (!fields || typeof fields.equivalent !== 'boolean') {
     return notInterpretable()
   }
   return {

@@ -5,6 +5,8 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 import type { ChatMessage, IChatModel } from '../../domain/ports/IChatModel'
+import { LlmProvider } from './LlmProvider'
+import { resolveModelName, type LlmRole } from './modelSelection'
 
 export class LocalChatModel implements IChatModel {
   private readonly client: ChatOpenAI
@@ -15,10 +17,10 @@ export class LocalChatModel implements IChatModel {
     this.client = new ChatOpenAI({ apiKey, model, temperature, maxRetries: 1, configuration: { baseURL: baseUrl } })
   }
 
-  static fromEnv(): LocalChatModel {
+  static fromEnv(role?: LlmRole): LocalChatModel {
     const baseUrl = process.env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234/v1'
     const apiKey = process.env.LMSTUDIO_API_KEY ?? 'lm-studio'
-    const model = process.env.LMSTUDIO_MODEL ?? 'local-model'
+    const model = resolveModelName(LlmProvider.Local, role)
     const temperature = process.env.LLM_TEMPERATURE ? Number(process.env.LLM_TEMPERATURE) : undefined
     return new LocalChatModel(baseUrl, apiKey, model, temperature)
   }

@@ -82,6 +82,9 @@ class FakeEmbeddingsStore implements IEmbeddingsStore {
   async searchSimilar() {
     return [] // la vectorización no busca; stub para cumplir el puerto
   }
+  async getAllTableTexts() {
+    return this.upserts.map((upsert) => ({ tableName: upsert.tableName, searchText: upsert.searchText }))
+  }
   async close(): Promise<void> {
     this.closed = true
   }

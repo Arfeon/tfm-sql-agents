@@ -5,7 +5,7 @@
  * sin visto bueno. Una SQL editada a mano nunca entra en el reintento automático.
  */
 import { StateGraph, Annotation, START, END, type BaseCheckpointSaver } from '@langchain/langgraph'
-import { retrieveSchemaContext } from '../application/schemaRetrieval'
+import { retrieveSchemaContext, LIVE_RETRIEVAL_OPTIONS } from '../application/schemaRetrieval'
 import { generateSql, type Revision } from '../application/sqlGeneration'
 import { judgeSql, defaultSqlJudgingDependencies } from '../application/sqlJudging'
 import { executeQuery } from '../application/queryExecution'
@@ -84,7 +84,11 @@ export interface PipelineDependencies {
 
 /** Implementación real: los casos de uso de SPEC-04..07 con sus defaults. */
 export const defaultPipelineDependencies: PipelineDependencies = {
-  retrieve: (question, mustInclude) => retrieveSchemaContext(question, undefined, { mustInclude }),
+  // El pipeline en vivo usa híbrido + caminos + selección con LLM (LIVE_RETRIEVAL_OPTIONS,
+  // compartidas con el modo depuración para que este depure el MISMO circuito que corre).
+  // El ablation del golden set sigue con los valores por defecto, para poder comparar.
+  retrieve: (question, mustInclude) =>
+    retrieveSchemaContext(question, undefined, { ...LIVE_RETRIEVAL_OPTIONS, mustInclude }),
   generate: (question, schemaContext, dialect, revision) => generateSql(question, schemaContext, dialect, revision),
   judge: (sql, schemaContext, question) =>
     judgeSql(sql, schemaContext, question, { useDbCheck: true, useLlmJudge: true, minConfidence: MIN_CONFIDENCE }),

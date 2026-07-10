@@ -1,22 +1,22 @@
 /**
- * Selección del proveedor LLM al arrancar el CLI. Antes el proveedor solo salía de
- * LLM_PROVIDER en el .env, así que era fácil arrancar sin saber con qué modelo estabas
- * trabajando (y por defecto caía en OpenAI en silencio). Ahora lo elijo explícitamente
- * al inicio: el .env es el valor por DEFECTO, no una decisión oculta, y muestro el modelo
- * concreto de cada opción. Fijo `process.env.LLM_PROVIDER` de la sesión, que es de donde
- * `ChatModelFactory.fromEnv()` lo lee en cada llamada, así que la elección se propaga sin
- * tener que hilarla por todos los casos de uso.
+ * Selección del proveedor LLM al arrancar el CLI: el `.env` es solo el DEFECTO, no una
+ * decisión oculta, y muestro el modelo de cada opción. Fijo `process.env.LLM_PROVIDER` de la
+ * sesión, de donde `ChatModelFactory.fromEnv()` lo lee, así la elección se propaga sola.
  */
 import chalk from 'chalk'
 import { select } from '@inquirer/prompts'
 import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
+import { resolveModelName } from '../graphsql/infrastructure/llm/modelSelection'
 
-/** El modelo concreto que usaría cada proveedor, para enseñarlo antes de elegir. */
+/**
+ * Los modelos que usaría cada proveedor, para enseñarlos antes de elegir. Uso dos: el de
+ * razonamiento (elegir tablas) y el de generación (escribir/evaluar SQL). Si coinciden,
+ * muestro uno solo.
+ */
 export function modelNameFor(provider: LlmProvider): string {
-  if (provider === LlmProvider.Local) {
-    return process.env.LMSTUDIO_MODEL ?? 'local-model'
-  }
-  return process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
+  const reasoning = resolveModelName(provider, 'reasoning')
+  const generation = resolveModelName(provider, 'generation')
+  return reasoning === generation ? reasoning : `razonamiento ${reasoning} · SQL ${generation}`
 }
 
 /** Etiqueta legible del proveedor para los mensajes. */
