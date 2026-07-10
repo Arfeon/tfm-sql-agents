@@ -9,6 +9,7 @@ Es la especificación de ingeniería del proyecto: qué se construye y con qué 
 - **§1 Principios** y **§2 Stack** — la metodología y las tecnologías, en dos pinceladas.
 - **§3 Decisiones (D-xx)** — la tabla de decisiones de diseño con su porqué. Si te preguntas "¿por qué está hecho así?", empieza aquí. En §3.1 está el patrón obligatorio de acceso a recursos externos.
 - **§4 Especificaciones por componente** — una **tabla-índice** con todos los componentes (SPEC-00…SPEC-25) y su estado (✅ hecho / 🔮 futuro). Debajo, cada componente tiene su ficha con el mismo formato: **Objetivo · Contrato · Pasos · Criterios de aceptación**. Salta directo al que te interese.
+- **Mejoras futuras (al final)** — un backlog de una línea por idea, SIN spec. Ahí aparco lo que veo venir pero no voy a implementar todavía; cuando toque, se promociona a SPEC-xx.
 
 ¿Buscabas cómo funciona o cómo se usa? El diseño de alto nivel está en [arquitectura.md](arquitectura.md) y el uso en el [README](../../README.md).
 
@@ -1086,3 +1087,91 @@ cd backend && npm test    # unit de listar/reejecutar/renombrar/borrar favoritas
 ```
 
 ---
+
+### SPEC-26 — Recuperación por capas para esquemas grandes ✅ *Hecho*
+
+**Objetivo.** Que la recuperación siga trayendo el contexto correcto cuando el esquema es grande, opaco y sin documentar (un ERP real de ~800 tablas), donde el top-K vectorial de SPEC-04 se rompe: el sustantivo por el que se pregunta ("abonado") queda enterrado bajo decenas de tablas del tema dominante de la frase. La similitud mide el *tema*, no el *papel* de la tabla; hacen falta capas que aporten recall léxico, recall estructural (grafo) y precisión por razonamiento (LLM). Todo detrás de palancas, para que el *ablation* del golden set (SPEC-11) siga midiendo SPEC-04 puro y las métricas sean comparables.
+
+**Contrato.**
+
+- *Palancas en `SchemaRetrievalOptions` (todas por defecto en el valor histórico).* `lexical` (híbrido on/off), `expansionMode` (`neighbors` | `paths`), `useSelector` (selector LLM on/off), `maxPathLength`. El pipeline en vivo las activa; el arnés de evaluación usa los defaults.
+- *Ranking híbrido.* Fusión por *Reciprocal Rank Fusion* del ranking denso (pgvector) y uno léxico (coincidencia por trigramas de las palabras de la pregunta con nombre y columnas). El score fusionado gobierna candidatas top-K y desempates.
+- *Expansión por grafo.* Además de las vecinas a un salto (SPEC-04): **conectores** (tablas en el camino de FK más corto entre dos anclas) y **destinos de FK** de las anclas (sus dimensiones). Selección final por presupuesto acotado (`maxTables`) con prioridad estricta: fijadas > top-K > conectores > destinos FK > resto; el rescate estructural nunca expulsa a las candidatas semánticas.
+- *Selección con LLM.* Sobre un pool acotado (~`SELECTOR_POOL_SIZE`), un agente elige las tablas por razonamiento y devuelve solo nombres del pool (no inventa). Su selección se completa por grafo (destinos FK + conectores) para cerrar los JOIN. Las fijadas (SPEC-08) se unen siempre a la selección, elija lo que elija el LLM. Si no elige nada válido o el LLM falla (excepción incluida), se cae al recorte por score: el selector es una mejora, nunca un punto único de fallo.
+- *Doble modelo por rol.* `ChatModelFactory.fromEnv(role)` con `reasoning` (selector) y `generation` (generador + juez + equivalencia), cada uno con su variable de entorno y caída al modelo base. Documentado en arquitectura §6.
+- *Explicabilidad.* La traza (SPEC-13) distingue los motivos nuevos (conector / destino FK / elegida por el LLM) y el modo depuración imprime el DDL final.
+
+**Pasos** *(implementados)*
+
+1. `hybridRanking.ts`: tokenización, similitud de trigramas, ranking léxico y fusión RRF (funciones puras).
+2. `SchemaGraphManager.getConnectingTables` (caminos de FK) y cálculo de destinos-FK desde la metadata ya recuperada.
+3. `schemaRetrieval.ts`: palancas, fusión, selección por prioridad, pool y completado; `schemaSelection.ts` (agente + `agents/schema-selector.md`).
+4. `modelSelection.ts` + adaptadores/factory para el doble modelo por rol.
+5. Pipeline en vivo y modo depuración activan híbrido + caminos + selector; el arnés de evaluación no.
+6. Tests unitarios con dobles de cada pieza (fusión, caminos, destinos-FK, selector, resolución de modelo por rol).
+
+**Criterios de aceptación**
+
+- [x] Con las palancas por defecto, la recuperación es idéntica a SPEC-04 (métricas del golden set intactas)
+- [x] En modo híbrido, una tabla léxicamente cercana a la pregunta que el denso entierra entra como candidata
+- [x] Los conectores y destinos de FK entran sin ser expulsados por el recorte, y las candidatas semánticas no se pierden
+- [x] El selector elige solo tablas del pool; si no elige nada válido o el LLM lanza una excepción, se cae al recorte por score
+- [x] Una tabla fijada (SPEC-08) entra en el contexto aunque el selector no la elija
+- [x] Dos modelos por rol configurables, con caída al modelo base si no se especifican
+- [x] La traza y el modo depuración muestran el motivo de cada tabla y el DDL final
+- [x] Suite unitaria verde con dobles, sin Docker ni LLM
+
+---
+
+### SPEC-27 — Generador automático de descripciones de tabla 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** La medición sobre el ERP real de ~800 tablas (SPEC-26) deja claro que en esquemas grandes sin documentar el techo de la recuperación es la **descripción de tabla**: con una frase de descripción, una tabla sube del puesto ~60 al top del ranking (medido, antes/después). Describir 800 tablas a mano no es viable, así que quiero un generador que, dado el esquema ya escaneado (columnas y FKs reales en Neo4j), redacte con un LLM una descripción por tabla y la deje en `descriptions/<bd>.json`, de donde el escaneo ya la recoge (no toca la vectorización, que ya sabe embeber descripciones). Es a la vez la palanca que cierra el problema del ERP real y un artefacto del TFM (auto-documentación de esquema para NL2SQL).
+
+**Contrato.**
+
+- *Entrada.* Una BD objetivo ya escaneada (su esquema en Neo4j) y, opcionalmente, un límite `N` (describir solo las `N` tablas más conectadas, para validar barato antes de lanzar sobre todas) o una lista blanca de nombres.
+- *Por cada tabla.* Leo sus columnas y FKs reales y pido al **modelo de razonamiento** (rol `reasoning`, SPEC-26) una descripción de una línea centrada en *qué es y con qué se relaciona* (no un volcado de columnas: las columnas ya van aparte en el texto de búsqueda). La descripción se ancla en datos reales del esquema, no en suposiciones.
+- *Salida.* Escribo/actualizo `descriptions/<bd>.json` (`[{tableName, description}]`), fusionando con lo que ya haya (respeto descripciones escritas a mano). El escaneo posterior las embebe en pgvector y las guarda en Neo4j (flujo de SPEC-04/§6, sin cambios).
+- *Caso de uso testable (D-05).* Deps inyectadas: leer esquema, elegir tablas (por conectividad/lista), el LLM, escribir el fichero. Reales por defecto; dobles en los tests.
+- *Fuera de alcance.* La calidad "de negocio" de cada descripción (un humano puede pulirla después); el particionado por dominios/clusters (segundo nivel, otra spec); traducir la descripción a varios idiomas.
+
+**Pasos**
+
+1. Selección de tablas a describir: por límite `N` de conectividad (grado de FK en el grafo) o por lista blanca.
+2. Prompt del agente en `agents/table-describer.md` (o similar), con nombre + columnas + FKs de la tabla.
+3. Caso de uso `generateTableDescriptions(target, opts, deps)`: recorre las tablas elegidas, llama al LLM (rol razonamiento), acumula y escribe `descriptions/<bd>.json` fusionando con lo existente.
+4. Entrada de CLI: elegir BD, `N` o lista, previsualizar y confirmar antes de escribir; recordar que hay que re-escanear para que surtan efecto.
+5. Tests con dobles: se describen solo las tablas pedidas, la descripción se ancla en las columnas reales dadas, la fusión respeta las manuales, un fallo del LLM en una tabla no aborta el resto.
+
+**Criterios de aceptación**
+
+- [ ] Genera `descriptions/<bd>.json` describiendo las `N` tablas más conectadas (o la lista dada) a partir de sus columnas/FKs reales
+- [ ] Usa el modelo de rol `reasoning` (SPEC-26) y no bloquea el conjunto si una tabla falla
+- [ ] Fusiona con las descripciones existentes sin pisar las escritas a mano
+- [ ] Tras re-escanear, las tablas descritas suben en la traza de recuperación (verificable en el modo depuración)
+- [ ] Suite unitaria verde con dobles, sin Docker ni LLM
+
+```bash
+cd backend && npm test    # unit del generador (con dobles de esquema y LLM)
+```
+
+---
+
+## Mejoras futuras (backlog, sin SPEC todavía)
+
+Ideas que veo venir pero que aún no voy a implementar. Las aparco aquí en una línea cada una para no engordar el SDD con specs prematuras: cuando decida hacer una, la promociono a su SPEC-xx con contrato y criterios, y la borro de esta lista.
+
+**Afinado de la recuperación por capas (SPEC-26).**
+
+- *Pool del selector relleno desde el ranking global.* Hoy el pool sale solo de la expansión (anclas + vecinas + conectores): si la expansión trae 12 tablas, el selector ve 12, no ~30. Rellenarlo con las siguientes del ranking fusionado hasta `SELECTOR_POOL_SIZE` es el cambio barato que más recall le da al selector (el pivote entraría aunque el léxico y el grafo fallen a la vez).
+- *Presupuesto en el completado por grafo de la selección.* `completeSelectionForJoins` no tiene tope: si el LLM elige muchas tablas y cada una referencia varias dimensiones, el contexto puede superar de largo `maxTables`. Acotarlo con la misma prioridad (elegidas > destinos FK > conectores).
+- *Parseo del selector más estricto.* El fallback de troceo por tokens puede colar una tabla que el LLM menciona precisamente para descartarla ("no incluyo X porque…"). Exigir la lista JSON y reintentar una vez antes de caer al recorte.
+
+**Escala (esquemas de cientos de tablas, como el ERP real de SPEC-26).**
+
+- *Recuperación multi-consulta por entidades.* El problema de raíz del entity-pivot es que UNA consulta vectorial mezcla "abonado" y "fibra" y gana el tema dominante. Extraer las entidades de la pregunta (rol `reasoning`) y lanzar un top-K por entidad, fusionando con el mismo RRF que ya tengo: ataca la causa en vez de rescatar a la víctima.
+- *Particionado por dominios.* Detección de comunidades sobre el grafo de FK (Louvain / label propagation, Neo4j GDS) para partir el ERP en módulos (facturación, líneas, abonados…): primero clasificar la pregunta en 1-2 dominios, después rankear solo dentro. El pivote deja de competir contra 800 tablas.
+- *Ranking léxico dentro de Postgres.* `rankTablesLexically` se baja el `search_text` de todas las tablas en cada pregunta y hace trigramas en memoria; con `pg_trgm` (o `tsvector`) el mismo ranking queda indexado en la base y escala. Mientras tanto, cachear `getAllTableTexts` (el esquema cambia por escaneo, no por consulta).
+- *Poda de columnas en el DDL.* En un ERP real el coste de tokens no son las 8 tablas sino las tablas de 100+ columnas. Recortar el DDL a las columnas relevantes (coincidencia léxica con la pregunta + siempre PK/FK) reduce el contexto del generador y las alucinaciones de columna; el modo depuración ya imprime el DDL para verificarlo a mano.
+- *Reutilización de conexiones en el circuito de recuperación.* Con las tres capas activas hay 5-6 aperturas/cierres de Neo4j y Postgres por pregunta. Tolerable en el CLI; latencia gratuita con usuarios delante.
+- *Golden set sobre el ERP real.* Las capas de SPEC-26 solo tienen validación cualitativa (casos de la depuración). Un golden set pequeño (15-20 preguntas) sobre la BD real permitiría medir la contribución de cada palanca (léxico solo, +caminos, +selector) con el arnés de SPEC-11.
