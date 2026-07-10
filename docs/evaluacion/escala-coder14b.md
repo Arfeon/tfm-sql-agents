@@ -1,34 +1,39 @@
-# Prueba de escala — GraphSQL
+# Verificación 100% local (Qwen2.5-Coder-14B) — media de 3 tiradas
 
-Evaluación completa (recall + execution accuracy + tamaño de contexto) sobre el golden set de cada BD.
+La misma prueba de escala, ejecutada **entera en local** (chat `qwen2.5-coder-14b-instruct` +
+embeddings `bge-m3` en LM Studio, hardware de consumo), con el arnés corregido tras la
+[auditoría 2026-07-09](auditoria-2026-07-09.md). Media y rango de **3 tiradas**
+(los informes crudos, en `tiradas/escala-coder14b-run*.md`). La versión anterior de este
+documento era una tirada única con otra metodología (sin juez LLM + revisión manual del autor),
+así que sus números no son comparables con estos.
 
-| BD | Tablas | Casos | Modo | Schema-linking recall | Execution accuracy (justa) | Equivalencia semántica (LLM) | Execution accuracy (estricta) | Tokens de contexto |
-|----|--------|-------|------|-----------------------|----------------------------|------------------------------|-------------------------------|--------------------|
-| arcadia | 17 | 25 | Sin recuperación | 100% | 68% | 80% | 56% | 1498 |
-| arcadia | 17 | 25 | Solo vectorial | 93% | 56% | 68% | 48% | 479 |
-| arcadia | 17 | 25 | GraphRAG | 99% | 68% | 80% | 60% | 775 |
-| nebula | 66 | 15 | Sin recuperación | 100% | 73% | 80% | 60% | 5748 |
-| nebula | 66 | 15 | Solo vectorial | 80% | 73% | 73% | 53% | 458 |
-| nebula | 66 | 15 | GraphRAG | 97% | 67% | 67% | 60% | 759 |
+| BD | Modo | Recall | Exec. justa (rango) | Equiv. (rango) | Tokens |
+|----|------|--------|---------------------|----------------|--------|
+| arcadia | Sin recuperación | 100% | 61% (56–68) | 79% (76–80) | 1498 |
+| arcadia | Solo vectorial | 93% | 57% (56–60) | 68% (64–72) | 479 |
+| arcadia | GraphRAG | 99% | 64% (56–68) | 79% (68–88) | 775 |
+| nebula | Sin recuperación | 100% | 64% (60–73) | 71% (67–80) | 5748 |
+| nebula | Solo vectorial | 80% | 71% (67–73) | 73% (73–73) | 458 |
+| nebula | GraphRAG | 97% | 62% (53–67) | 64% (53–73) | 759 |
 
-> Schema-linking recall: fracción de las tablas que usa la SQL de referencia que llegan al
-> contexto del generador (1 = el generador tenía todas las tablas necesarias delante).
->
-> Execution accuracy (justa): la SQL generada, ejecutada, contiene el resultado de referencia
-> (correcta o más rica; la pregunta en NL no fija las columnas de salida). Estricta: resultado
-> idéntico, cota inferior que penaliza columnas de más.
->
-> El contexto de "sin recuperación" crece con el nº de tablas del esquema; el del GraphRAG se
-> mantiene acotado, con recall alto. La execution accuracy es de una sola tirada (la generación
-> no es determinista); los datos de Nebula son sintéticos y ligeros (validan la resolución
-> pregunta→SQL, no un volumen realista).
->
-> Equivalencia semántica (LLM): un segundo LLM juzga si la SQL candidata responde a la MISMA
-> pregunta que la de referencia, viendo las dos SQL y una muestra de sus resultados ejecutados
-> (con la candidata ejecutable como precondición). Criterio único: un caso cuenta como
-> equivalente si pasa la execution accuracy (justa) O el juez lo rescata; el juez solo RECUPERA
-> aciertos que la comparación de datos descarta (empates, columnas de más, agregaciones
-> equivalentes), nunca descarta lo que la ejecución ya da por bueno, así que la equivalencia es
-> siempre ≥ justa. Como se apoya en un LLM, es COMPLEMENTARIA, no sustituye a la objetiva. El detalle
-> por caso está en `escala-casos.json`: `recall` y los dos `executionMatch` son estas mismas
-> métricas a nivel de caso, y `equivalenceReason` es la justificación textual del juez.
+## Lectura honesta
+
+- **La ventaja del GraphRAG no depende de la nube, pero el modelo local es otro régimen.** El
+  14B se queda ~20-30 puntos por debajo de gpt-5-mini en todos los modos, y con **mucha más
+  varianza entre tiradas** (rangos de hasta 20 puntos con 15-25 casos): con un modelo pequeño,
+  3 tiradas dibujan tendencias, no décimas.
+- **En Arcadia, GraphRAG empata con el esquema entero (79% de equivalencia ambos) con la mitad
+  de contexto**, y supera al vectorial solo (68%). El patrón de la nube se repite.
+- **En Nebula los tres modos quedan en la misma banda (64-73%), con los rangos solapados**: a
+  esta escala (5.7k tokens) el 14B todavía digiere el esquema entero, así que el argumento local
+  a 66 tablas es el coste/latencia del prefill, no la viabilidad. La viabilidad pura (que el
+  esquema entero *no quepa* o degrade de verdad) es el escenario de 200+ tablas (~17k tokens),
+  que queda como proyección declarada, no medida.
+- **Lo que sí es rotundo en local es el caso opaco** ([confusion.md](confusion.md), medido con
+  este mismo modelo): GraphRAG con descripciones resuelve 4 de 6 y el esquema entero 0 de 6.
+  Cuando el esquema no ayuda, la recuperación no es una optimización — es la diferencia entre
+  funcionar y no.
+
+> Recall y tokens son estables entre tiradas (no dependen del generador). La equivalencia la
+> juzga aquí el propio modelo local — mismo criterio monótono (`justa OR juez`) que el resto
+> de la evaluación.

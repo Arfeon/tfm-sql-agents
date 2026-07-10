@@ -7,13 +7,6 @@ En la fase 1 (solo nombre de tabla opaco) el recall aguantó ~100% porque las co
 propósito; esta fase cierra esa vía. Preguntas que solo se responden con estas tablas, evaluadas
 con y sin descripciones (la descripción mapea las columnas, como documentaría un data steward).
 
-**Re-medido tras la [auditoría 2026-07-09](auditoria-2026-07-09.md), en 2 tiradas** (modelo local
-qwen2.5-coder-14b, como el experimento original; los `.md` de cada tirada, en `tiradas/confusion-run*.md`).
-Las dos tiradas coinciden celda a celda salvo un caso de la baseline sin descripciones (0% vs 17%).
-Con solo 6 casos cada celda vale ~17 puntos: aquí lo sólido es el **recall** y el patrón de casos,
-no el decimal. La versión pre-auditoría daba 83% vs 17%; con las referencias corregidas y el juez
-anclado en muestras canónicas, el contraste es aún más crudo: **4 de 6 contra 0 de 6**.
-
 | Descripciones | Modo | Schema-linking recall | Execution accuracy (justa) | Equivalencia (LLM) |
 |---------------|------|-----------------------|----------------------------|--------------------|
 | con | Sin recuperación | 100% | 0% | 0% |
@@ -39,16 +32,3 @@ anclado en muestras canónicas, el contraste es aún más crudo: **4 de 6 contra
 > descripciones, cuánto rescatan las descripciones, y si el grafo salva las multi-hop (C-05, C-06)
 > por la clave foránea, como hizo con t_042. En "sin recuperación" el esquema entero viaja igual;
 > lo que cambia es si el DDL lleva el comentario de descripción.
-
-## La lectura
-
-- **Con descripciones, solo quien tiene recuperación las aprovecha**: GraphRAG resuelve 4 de 6
-  (67%, recall 100%) y la baseline con el esquema entero delante — con las MISMAS descripciones
-  en su DDL — resuelve **0 de 6**. La documentación ahogada entre 66 tablas no es usable; la
-  recuperación es lo que la hace visible. (El modelo local además se pierde con 5.7k tokens de
-  esquema opaco: *lost in the middle* sobre un DDL que no ayuda.)
-- **Sin descripciones se hunde todo**, la baseline incluida (0-17%): cuando nada habla, ni verlo
-  todo salva — no hay nada que entender.
-- **Las dos multi-hop (C-05, C-06) fallan aún con descripciones** en todos los modos: unir dos
-  tablas ofuscadas por una FK `c3` sigue siendo el caso más difícil — coherente con el déficit
-  G-21 y otra motivación para SPEC-22 (relaciones sintéticas con nota curada).

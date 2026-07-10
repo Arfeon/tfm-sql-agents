@@ -90,7 +90,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-18 | Selección de la BD objetivo en el flujo de consulta (catálogo + índice consciente de su BD) | ✅ Cerrada |
 | SPEC-19 | Presentación gráfica de resultados en consola (tabla / gráfico de barras / ambas) | ✅ Cerrada |
 | SPEC-20 | Índice multi-inquilino: varias BDs indexadas a la vez en Neo4j/pgvector | 🔮 Futuro (fuera del MVP) |
-| SPEC-21 | Experimento de confusión: tablas y columnas con nombres opacos, ¿quién sobrevive sin descripciones? | ✅ Cerrada (sin descripciones se hunden todos los modos; con ellas, GraphRAG 83% de equivalencia vs 17% del esquema entero — la recuperación hace la documentación usable) |
+| SPEC-21 | Experimento de confusión: tablas y columnas con nombres opacos, ¿quién sobrevive sin descripciones? | ✅ Cerrada (sin descripciones se hunden todos los modos; con ellas, GraphRAG resuelve 4 de 6 vs 0 de 6 del esquema entero — la recuperación hace la documentación usable; re-medido en 2 tiradas tras la auditoría 2026-07-09) |
 | SPEC-22 | Relaciones sintéticas en Neo4j: aristas curadas para BDs sin FKs declaradas | 🔮 Futuro (fuera del MVP; especificada) |
 | SPEC-23 | Plantillas parametrizadas: consultas aprobadas reutilizables con parámetros tipados | 🔮 Futuro (fuera del MVP; especificada) |
 | SPEC-24 | Widgets bajo demanda: SQL aprobada ejecutada sin LLM para dashboards | 🔮 Futuro (fuera del MVP; especificada) |
@@ -505,7 +505,8 @@ cd backend && npm run test:integration   # human review con checkpointer (opt-in
 - *Integración en el grafo.* Un nodo `memory` al empezar el ciclo (antes de generar) añade los ejemplos al estado; `generateSql` los recibe como bloque *few-shot* en el prompt (pregunta → SQL, N ejemplos). El enrutado no cambia: la memoria enriquece, no decide.
 - *Transparencia en la revisión.* Si se usaron ejemplos, la caja de la consulta lo dice ("apoyada en N consultas aprobadas similares"), para que el humano sepa de dónde viene el estilo de la SQL — mismo criterio de explicabilidad que la traza de recuperación (SPEC-13).
 - *Medir el aporte SIN trampa.* El arnés de evaluación gana un modo "con memoria", pero con **leave-one-out obligatorio**: al evaluar un caso se excluyen de la memoria ese mismo caso y cualquier pregunta idéntica — si no, sembrar la memoria con el golden set y evaluar sobre el golden set sería filtración (el ejemplo *es* la respuesta) y el número saldría inflado. Este sesgo se declara en la sección de sesgos de `arquitectura.md` §10 el día que se mida.
-- *Mantenimiento mínimo.* Una forma de vaciar la memoria (por BD o entera) desde el CLI o un script; sin edición fina de entradas en esta fase.
+- *Semilla manual y etiquetas (el "gestor de consultas").* Además de las aprobadas por el pipeline, puedo **sembrar** ejemplos a mano: una pregunta + su SQL (p. ej. una consulta que ya sé buena de mi ERP), con **etiquetas** opcionales ("facturación", "stock"…). Entran al mismo almacén con `source: manual` y el Memory Agent las usa igual que las aprobadas (few-shot por similitud; la etiqueta puede reforzar el filtrado). Y la otra dirección de uso: las entradas se pueden **listar y relanzar directamente como favoritas** desde el CLI (por etiqueta o búsqueda), sin pasar por el LLM — que es la puerta natural a convertirlas en plantillas parametrizadas (SPEC-23). Dos caminos, un almacén: el implícito (el agente se apoya en ellas cuando le hacen falta) y el explícito (yo las recupero de preferidos).
+- *Mantenimiento mínimo.* Una forma de vaciar la memoria (por BD o entera) desde el CLI o un script, y de borrar/editar una entrada sembrada; sin más gestión fina en esta fase.
 
 **Pasos**
 
@@ -523,6 +524,8 @@ cd backend && npm run test:integration   # human review con checkpointer (opt-in
 - [ ] Ante una pregunta parecida, el SQL Agent recibe como mucho `MAX_FEEDBACK_EXAMPLES` ejemplos de la MISMA BD por encima de `SIMILARITY_THRESHOLD`; sin ejemplos, el pipeline se comporta exactamente como hoy
 - [ ] La revisión muestra si la consulta se apoyó en ejemplos (transparencia)
 - [ ] El aporte se mide con leave-one-out y se declara el método (sin filtración golden set → memoria → golden set)
+- [ ] Puedo sembrar a mano una pregunta + SQL con etiquetas; entra al almacén como `manual` y el Memory Agent la usa igual que una aprobada
+- [ ] Puedo listar las consultas guardadas (filtrando por etiqueta o texto) y relanzar una directamente sin LLM
 - [ ] Suite unitaria verde con dobles, sin Docker ni LLM
 
 ---
