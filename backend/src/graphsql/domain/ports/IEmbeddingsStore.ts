@@ -25,6 +25,9 @@ export interface IEmbeddingsStore {
   /** Por similitud coseno, descendente. */
   searchSimilar(embedding: number[], limit: number): Promise<TableMatch[]>
 
+  /** Nombre + texto de búsqueda de todas las tablas, para el ranking léxico (híbrido, SPEC-26). */
+  getAllTableTexts(): Promise<{ tableName: string; searchText: string }[]>
+
   count(): Promise<number>
 
   close(): Promise<void>

@@ -1,9 +1,6 @@
 /**
- * Conexión a Neo4j.
- *
- * Envuelve el driver oficial y ofrece lo justo: ejecutar Cypher, comprobar que
- * la instancia responde y cerrar. Uso `disableLosslessIntegers` para recibir los
- * enteros como `number` de JS (Neo4j devuelve enteros sin pérdida por defecto).
+ * Conexión a Neo4j: envuelve el driver oficial (ejecutar Cypher, ping, cerrar).
+ * Uso `disableLosslessIntegers` para recibir los enteros como `number` de JS.
  */
 import neo4j, { type Driver } from 'neo4j-driver'
 

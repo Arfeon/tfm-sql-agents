@@ -66,6 +66,7 @@ En el CLI: primero **"Escanear el esquema"** (construye el grafo y el índice), 
 ## Qué sabe hacer
 
 - **Encuentra las tablas por significado**, no por nombre exacto: da con `customer` cuando preguntas por "clientes", casa español con un esquema en inglés, y localiza incluso tablas de nombre opaco (`t_042`) por su descripción.
+- **Aguanta esquemas grandes de verdad** (probado contra un ERP real de ~800 tablas): cuando la pregunta va dominada por un tema ("qué *abonado* tiene más líneas de *fibra*") y la tabla clave queda enterrada en el ranking, la rescatan tres capas extra — ranking híbrido (palabras + significado), caminos de FK en el grafo y un selector LLM que elige las tablas razonando. Explicado con ejemplos en [`arquitectura.md` §6](docs/design/arquitectura.md).
 - **Genera y valida la SQL** con un Judge por capas: seguridad determinista (solo `SELECT`/`WITH`), sintaxis real contra la BD (`EXPLAIN`) y un juez LLM que aconseja; si algo falla, reintenta solo hasta 3 veces antes de enseñártela.
 - **No ejecuta nada sin tu aprobación**: te muestra la SQL y el veredicto, y decides aprobar, rechazar, editarla a mano o **afinarla** con una indicación en lenguaje natural. La pausa se guarda y es recuperable.
 - **Ejecuta en solo lectura** (sesión read-only, tope de filas, timeout) y enseña el resultado como tabla o gráfico de barras en la terminal.
@@ -95,6 +96,7 @@ El objetivo es **on-premise**: GraphSQL se conecta a la base de datos corporativ
 Todo esto queda **fuera del MVP** pero está especificado; el detalle por componente está en [`docs/design/SPEC.md`](docs/design/SPEC.md) y la visión más amplia en [`arquitectura.md` §11](docs/design/arquitectura.md):
 
 - **Memory Agent (SPEC-09)** — reutilizar consultas ya aprobadas como ejemplos *few-shot* para el SQL Agent. Era el sexto objetivo original.
+- **Generador de descripciones de tabla (SPEC-27)** — auto-documentar un esquema grande con un LLM (una frase por tabla, anclada en sus columnas y FKs reales). Es la palanca medida con más impacto en la recuperación: una descripción sube una tabla del puesto ~60 al top del ranking.
 - **Relaciones sintéticas en el grafo (SPEC-22)** — aristas curadas a mano para bases de datos **sin claves foráneas declaradas** (un ERP viejo, una BD de un tercero que no puedo tocar): viven solo en Neo4j y el GraphRAG las usa como si fueran reales.
 - **Índice multi-inquilino (SPEC-20)** — tener varias bases de datos indexadas a la vez y cambiar entre ellas sin re-escanear.
 - **Continuidad conversacional (SPEC-16, SPEC-12)** — preguntas de seguimiento sobre una consulta, y nombrar/listar/reanudar conversaciones.

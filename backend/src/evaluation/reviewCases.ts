@@ -1,10 +1,7 @@
 /**
- * Revisión objetiva de equivalencia SIN juez LLM (opt-in). Para cada caso que NO pasa la
- * métrica justa, ejecuto la SQL de referencia y la generada contra su BD y comparo los
- * resultados como conjuntos de filas, ignorando orden y nombre de columna y con tolerancia
- * de redondeo. Si la referencia queda contenida en la candidata tras redondear, es un
- * artefacto (redondeo / columna de más) y el caso es equivalente; si no, imprimo una muestra
- * de ambas para juzgar a mano. Es la revisión objetiva SIN juez LLM: la ejecución real manda.
+ * Revisión objetiva de equivalencia SIN juez LLM: para cada caso que no pasa la métrica justa,
+ * ejecuto ambas SQL y comparo filas (con tolerancia de redondeo); si aun así divergen, imprimo
+ * una muestra de las dos para juzgar a mano. Manda la ejecución real, no un LLM.
  * Uso: npm run evaluate:review [ruta-al-casos.json]  (por defecto, escala-casos-coder14b.json)
  */
 import { config } from 'dotenv'

@@ -13,7 +13,8 @@ export interface SqlGenerationDependencies {
 }
 
 export const defaultSqlGenerationDependencies: SqlGenerationDependencies = {
-  createChatModel: () => ChatModelFactory.fromEnv(),
+  // Generación: escribir la SELECT.
+  createChatModel: () => ChatModelFactory.fromEnv('generation'),
 }
 
 /**

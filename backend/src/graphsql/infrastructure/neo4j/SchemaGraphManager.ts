@@ -1,12 +1,7 @@
 /**
- * Gestor del grafo de conocimiento del esquema en Neo4j.
- *
- * Modelo de datos:
+ * Gestor del grafo de conocimiento del esquema en Neo4j. Modelo de datos:
  *   (:Table)-[:HAS_COLUMN]->(:Column)
  *   (:Table)-[:REFERENCES {from_column, to_column}]->(:Table)   // por cada FK
- *
- * `importSchema` limpia el grafo de esquema y lo reconstruye desde cero a partir
- * del esquema leído de la BD objetivo.
  */
 import { fullTableName, type TableSchema, type ColumnSchema, type ForeignKeySchema } from '../../domain/schema/TableSchema'
 import type { Neo4jConnection } from './Neo4jConnection'
@@ -70,6 +65,32 @@ export class SchemaGraphManager {
       { names: tableNames },
     )
     return this.reconstructTables(expanded[0]?.names ?? [])
+  }
+
+  /**
+   * Tablas intermedias en el camino de FK más corto entre cada par de anclas (los "conectores"
+   * del JOIN: hubs, tablas de unión), sin las anclas. Complementa las vecinas a un salto de
+   * `getTablesWithForeignKeyNeighbors` con lo que la similitud no rescata.
+   */
+  async getConnectingTables(tableNames: string[], maxPathLength: number): Promise<TableSchema[]> {
+    if (tableNames.length < 2) {
+      return []
+    }
+    // Interpolo el rango (Neo4j no lo admite como parámetro); lo acoto a un entero pequeño.
+    const maxLen = Math.min(Math.max(Math.trunc(maxPathLength), 1), 6)
+    const rows = await this.neo4j.run<{ names: string[] }>(
+      `MATCH (a:Table), (b:Table)
+       WHERE a.name IN $names AND b.name IN $names AND a.name < b.name
+       MATCH path = shortestPath((a)-[:REFERENCES*1..${maxLen}]-(b))
+       UNWIND nodes(path) AS node
+       WITH collect(DISTINCT node.name) AS names
+       RETURN names`,
+      { names: tableNames },
+    )
+    const onPaths = rows[0]?.names ?? []
+    const anchors = new Set(tableNames)
+    const connectors = onPaths.filter((name) => !anchors.has(name))
+    return this.reconstructTables(connectors)
   }
 
   /**

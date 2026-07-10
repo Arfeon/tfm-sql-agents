@@ -18,6 +18,7 @@ import {
 } from '../domain/sql/JudgeVerdict'
 import { checkSqlSafety } from '../domain/sql/SqlSafetyPolicy'
 import { JudgeResponseError } from '../domain/sql/JudgeResponseError'
+import { extractJsonObject } from './llmReply'
 import { checkSqlSyntax, type SqlSyntaxCheck } from './sqlSyntaxCheck'
 
 export interface SqlJudgingDependencies {
@@ -26,7 +27,8 @@ export interface SqlJudgingDependencies {
 }
 
 export const defaultSqlJudgingDependencies: SqlJudgingDependencies = {
-  createChatModel: () => ChatModelFactory.fromEnv(),
+  // Generación: evaluar SQL es una tarea centrada en SQL, va con el modelo de la SELECT.
+  createChatModel: () => ChatModelFactory.fromEnv('generation'),
   checkSyntax: (sql) => checkSqlSyntax(sql),
 }
 
@@ -43,27 +45,12 @@ export function buildJudgeSystemPrompt(dialect: string): string {
 
 /** Lanza `JudgeResponseError` si la respuesta no trae un JSON con `valid` booleano. */
 export function parseJudgeVerdict(raw: string): JudgeVerdict {
-  const jsonText = raw.match(/\{[\s\S]*\}/)
-  if (!jsonText) {
+  const fields = extractJsonObject(raw)
+  if (!fields || typeof fields.valid !== 'boolean') {
     throw new JudgeResponseError(raw)
   }
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(jsonText[0])
-  } catch {
-    throw new JudgeResponseError(raw)
-  }
-
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new JudgeResponseError(raw)
-  }
-  if (typeof (parsed as { valid?: unknown }).valid !== 'boolean') {
-    throw new JudgeResponseError(raw)
-  }
-
-  const fields = parsed as Record<string, unknown>
-  const isValid = fields.valid as boolean
+  const isValid = fields.valid
   const errors = toStringArray(fields.errors)
   const tablePurposes = toTablePurposes(fields.table_purposes)
   // El aviso de las tablas usadas "por suposición" lo genero yo a partir de

@@ -88,6 +88,28 @@ export interface EvaluationDependencies {
   ): Promise<{ equivalent: boolean; reason: string }>
 }
 
+/** Caso que ni siquiera se llegó a ejecutar (falló la recuperación o la generación): todo a cero. */
+function failedCaseResult(
+  base: Pick<CaseResult, 'id' | 'difficulty' | 'mode'>,
+  referenceSql: string,
+  error: unknown,
+): CaseResult {
+  return {
+    ...base,
+    retrievedTables: [],
+    schemaLinkingRecall: 0,
+    contextTableCount: 0,
+    contextTokenEstimate: 0,
+    referenceSql,
+    generatedSql: '',
+    safe: false,
+    executionMatchStrict: false,
+    executionMatchFair: false,
+    executionMatchSemantic: false,
+    error: error instanceof Error ? error.message : String(error),
+  }
+}
+
 /** La SQL generada solo se ejecuta si pasa la comprobación de seguridad. */
 export async function evaluateCase(
   goldenCase: GoldenCase,
@@ -138,20 +160,7 @@ export async function evaluateCase(
     return result
   } catch (error) {
     // Un fallo de recuperación o generación no rompe la evaluación: cuenta como caso fallido.
-    return {
-      ...base,
-      retrievedTables: [],
-      schemaLinkingRecall: 0,
-      contextTableCount: 0,
-      contextTokenEstimate: 0,
-      referenceSql: goldenCase.sql,
-      generatedSql: '',
-      safe: false,
-      executionMatchStrict: false,
-      executionMatchFair: false,
-      executionMatchSemantic: false,
-      error: error instanceof Error ? error.message : String(error),
-    }
+    return failedCaseResult(base, goldenCase.sql, error)
   }
 }
 

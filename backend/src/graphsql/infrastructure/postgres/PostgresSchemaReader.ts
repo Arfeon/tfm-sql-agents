@@ -1,10 +1,7 @@
 /**
- * Lector de esquema para PostgreSQL.
- *
- * Consulta `information_schema` para reconstruir el esquema (tablas, columnas,
- * claves primarias y foráneas) usando la conexión de solo lectura
- * `ITargetDatabase`. Hago una consulta por aspecto sobre todo el esquema y
- * agrupo en memoria, en vez de una consulta por tabla.
+ * Lector de esquema para PostgreSQL: reconstruye tablas, columnas y claves desde
+ * `information_schema` vía la conexión `ITargetDatabase`. Una consulta por aspecto sobre
+ * todo el esquema, agrupando en memoria, en vez de una por tabla.
  */
 import type { ITargetDatabase } from '../../domain/ports/ITargetDatabase'
 import type { ISchemaReader } from '../../domain/ports/ISchemaReader'
