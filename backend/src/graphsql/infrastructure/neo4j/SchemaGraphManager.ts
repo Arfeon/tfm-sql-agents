@@ -136,6 +136,20 @@ export class SchemaGraphManager {
     }))
   }
 
+  /** Actualiza SOLO la descripción de las tablas dadas (SPEC-29): un SET, sin tocar la estructura. */
+  async updateTableDescriptions(changes: Map<string, string | null>): Promise<void> {
+    if (changes.size === 0) {
+      return
+    }
+    const rows = [...changes].map(([name, description]) => ({ name, description }))
+    await this.neo4j.run(
+      `UNWIND $rows AS row
+       MATCH (t:Table {name: row.name})
+       SET t.description = row.description`,
+      { rows },
+    )
+  }
+
   private async createConstraints(): Promise<void> {
     await this.neo4j.run('CREATE CONSTRAINT table_name IF NOT EXISTS FOR (t:Table) REQUIRE t.name IS UNIQUE')
     await this.neo4j.run('CREATE INDEX table_search IF NOT EXISTS FOR (t:Table) ON (t.name)')

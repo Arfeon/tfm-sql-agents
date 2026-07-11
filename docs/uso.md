@@ -169,10 +169,16 @@ y **cada vez que cambie el esquema** o quiera cambiar de BD/proveedor de embeddi
 ### Qué me pregunta (en este orden)
 
 1. **Qué BD escanear** — la lista sale del catálogo del `.env` (Arcadia, Nebula…).
-2. **Descripciones** — si hay un fichero de descripciones de tablas, me pregunta si incluirlas
+2. **Tipo de escaneo** (solo si ya hay índice de esa misma BD y fichero de descripciones):
+   **completo** (lo de siempre) o **solo actualizar descripciones** — compara el JSON con lo
+   indexado y re-vectoriza únicamente las tablas cuya descripción cambió (nuevas, modificadas
+   o eliminadas), actualizando Neo4j y pgvector a la vez. Sin cambios no gasta ni un embedding.
+   Es el modo barato para iterar descripciones en esquemas grandes; si cambió el *esquema*
+   (columnas o tablas), hace falta el completo.
+3. **Descripciones** — si hay un fichero de descripciones de tablas, me pregunta si incluirlas
    (mejoran la recuperación de tablas de nombre opaco). 
-3. **Proveedor de embeddings** — OpenAI (nube) o LM Studio (local).
-4. **Confirmación** — con su aviso de coste/tiempo. Si el índice actual usa otro modelo o
+4. **Proveedor de embeddings** — OpenAI (nube) o LM Studio (local).
+5. **Confirmación** — con su aviso de coste/tiempo. Si el índice actual usa otro modelo o
    dimensión, avisa de que lo reemplazará por completo.
 
 ### Importante
