@@ -6,7 +6,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import chalk from 'chalk'
-import { isSemanticPass } from '../graphsql/application/evaluationMetrics'
+import { isSemanticPass } from '../graphsql/application/evaluation/evaluationMetrics'
 
 const RUNS_DIR = join(__dirname, '../../../docs/evaluacion/tiradas')
 const OUTPUT_FILE = join(__dirname, '../../../docs/evaluacion/escala-tiradas.md')

@@ -6,8 +6,8 @@
  * y deja pasar las descripciones.
  */
 import { describe, it, expect } from 'vitest'
-import { ingestSchema } from '../../src/graphsql/application/schemaIngestion'
-import type { SchemaIngestionDependencies } from '../../src/graphsql/application/schemaIngestion'
+import { ingestSchema } from '../../src/graphsql/application/scan/schemaIngestion'
+import type { SchemaIngestionDependencies } from '../../src/graphsql/application/scan/schemaIngestion'
 import type { TableSchema } from '../../src/graphsql/domain/schema/TableSchema'
 import type { TargetDatabaseConfig } from '../../src/graphsql/infrastructure/config/targetDatabases'
 

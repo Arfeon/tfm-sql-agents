@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { EmbeddingsFactory } from '../../src/graphsql/infrastructure/embeddings/EmbeddingsFactory'
 import { EmbeddingProvider } from '../../src/graphsql/infrastructure/embeddings/EmbeddingProvider'
 import { OpenAICompatibleEmbeddings } from '../../src/graphsql/infrastructure/embeddings/OpenAICompatibleEmbeddings'
-import { composeSearchText } from '../../src/graphsql/application/schemaVectorization'
+import { composeSearchText } from '../../src/graphsql/application/scan/schemaVectorization'
 import { parseDescriptions } from '../../src/graphsql/infrastructure/config/descriptions'
 import type { TableSchema } from '../../src/graphsql/domain/schema/TableSchema'
 

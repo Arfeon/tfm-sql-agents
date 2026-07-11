@@ -3,11 +3,11 @@
  * COMPLEMENTARIA a la execution accuracy, nunca la titular: un LLM también se equivoca
  * juzgando equivalencia, así que la reporto al lado, no en su lugar.
  */
-import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
-import { loadAgentPrompt } from '../infrastructure/config/agentPrompts'
-import type { IChatModel } from '../domain/ports/IChatModel'
+import { ChatModelFactory } from '../../infrastructure/llm/ChatModelFactory'
+import { loadAgentPrompt } from '../../infrastructure/config/agentPrompts'
+import type { IChatModel } from '../../domain/ports/IChatModel'
 import type { ResultRow } from './evaluationMetrics'
-import { extractJsonObject } from './llmReply'
+import { extractJsonObject } from '../llmReply'
 
 export interface EquivalenceVerdict {
   equivalent: boolean

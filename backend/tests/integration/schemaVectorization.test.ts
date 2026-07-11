@@ -3,7 +3,7 @@
  * y el modelo correcto. Opt-in; se salta si falta el proveedor de embeddings.
  */
 import { describe, it, expect } from 'vitest'
-import { vectorizeSchema } from '../../src/graphsql/application/schemaVectorization'
+import { vectorizeSchema } from '../../src/graphsql/application/scan/schemaVectorization'
 import { EmbeddingsFactory } from '../../src/graphsql/infrastructure/embeddings/EmbeddingsFactory'
 import { EmbeddingProvider } from '../../src/graphsql/infrastructure/embeddings/EmbeddingProvider'
 import { TableEmbeddingsStore } from '../../src/graphsql/infrastructure/postgres/TableEmbeddingsStore'

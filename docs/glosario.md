@@ -84,8 +84,64 @@ El conjunto de preguntas de evaluación, cada una con su SQL de referencia y las
 tocar. Es el "examen" con el que mido el sistema.
 
 ### top-K
-Quedarse con los **K primeros** de una lista ordenada. Aquí: las K tablas más parecidas por
-significado que tomo como candidatas antes de expandir por el grafo.
+Quedarse con los **K primeros** de una lista ordenada. Aquí: las K tablas que ganan el ranking
+(híbrido) y que tomo como **anclas** antes de expandir por el grafo.
+
+### Ancla
+Una de las tablas **ganadoras del ranking**: las que más se parecen a la pregunta (por significado
+o por palabras). Las llamo anclas porque son el punto donde "echo el ancla" en el grafo: desde
+ellas salgo a buscar el resto de tablas necesarias siguiendo las claves foráneas. Si la pregunta
+es "¿qué abonado tiene más líneas de fibra?", las anclas serían las tablas de abonados y de líneas.
+
+### Tabla vecina
+Tabla que está a **una clave foránea de distancia** de un ancla (un "salto" en el grafo). Si
+`pedido.cliente_id` apunta a `cliente`, entonces `cliente` es vecina de `pedido` (y al revés).
+Las traigo porque la respuesta muchas veces no está en la tabla que se parece a la pregunta,
+sino en la de al lado.
+
+### Conector (o puente)
+Tabla **intermedia en el camino** entre dos anclas: sin ella, el JOIN entre las otras dos no se
+puede escribir. El caso típico es una tabla central muy conectada o una tabla de unión N-a-N —
+justo las que nunca "se parecen" a ninguna pregunta, por eso hay que rescatarlas por estructura
+y no por similitud. Si el grafo dice `datos_fiscales → abonado → línea`, `abonado` es el puente
+entre las otras dos.
+
+### Destino de FK (dimensión)
+La tabla **a la que apunta** una clave foránea de un ancla. Si el ancla es `línea` y tiene
+`línea.id_abonado → abonado`, entonces `abonado` es un destino de FK: ahí suele vivir el *nombre*
+de la cosa por la que se pregunta (la tabla con los datos descriptivos, lo que en almacenes de
+datos se llama "dimensión"). Se protege del recorte aunque su score sea bajísimo.
+
+### Ranking híbrido (denso + léxico, fusión RRF)
+Dos formas de ordenar las tablas por relevancia, fusionadas: el ranking **denso** compara
+*significados* (embeddings: "suscriptor" encuentra `abonados` aunque no compartan letras) y el
+**léxico** compara *letras* (trigramas: "abonado" casa con `abonats` aunque el embedding la
+entierre). Se fusionan con **RRF** (*Reciprocal Rank Fusion*), que ignora los scores —no son
+comparables entre sí— y suma puntos según la **posición** en cada lista: destacar en cualquiera
+de las dos te sube, sin ningún peso que calibrar a mano.
+
+### Pool de candidatas
+La lista de **~30 tablas** que sobreviven al ranking y a la expansión por grafo, y entre las que
+el selector LLM hace su elección. Es el equilibrio entre darle opciones de sobra (recall) y no
+darle un catálogo inabarcable.
+
+### Selector (LLM)
+El paso en que un LLM **lee la pregunta y el pool y elige** las tablas necesarias, razonando lo
+que la similitud no sabe: entre doce tablas de fibra igual de "parecidas", cuál hace falta para
+*esta* pregunta. Tiene tres límites de seguridad: no puede inventar tablas (su respuesta se filtra
+contra el pool), no puede bloquear (si falla o no elige nada, se usa el recorte por prioridad) y
+no puede quitar las tablas fijadas a mano.
+
+### Recorte por prioridad
+Cómo se reduce la lista al **presupuesto final** (8 tablas por defecto) cuando no decide el
+selector. No es un simple corte por score: primero manda el **motivo** por el que entró cada tabla
+(fijada a mano > ancla > conector > destino de FK > vecina genérica) y solo a igual motivo
+desempata el score. Sin ese orden, la similitud expulsaría justo a los puentes que la pregunta
+no menciona pero el JOIN necesita.
+
+### Tabla fijada (*pinned*)
+Tabla que el usuario **fuerza a mano** a entrar en el contexto (desde la revisión humana). Entra
+siempre: sobrevive a cualquier recorte y el selector no puede quitarla.
 
 ### Judge (juez)
 El agente que **valida** la SQL antes de ejecutarla: que sea de solo lectura y segura, que la

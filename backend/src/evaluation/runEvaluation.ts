@@ -9,7 +9,7 @@ config({ path: '../.env' })
 import { mkdirSync, writeFileSync } from 'node:fs'
 import chalk from 'chalk'
 import { sqlDialectFor, targetDatabaseLabel, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
-import { loadGoldenSet, goldenSetPathFor } from '../graphsql/application/goldenSet'
+import { loadGoldenSet, goldenSetPathFor } from '../graphsql/application/evaluation/goldenSet'
 import { selectEvalTarget } from '../graphsql/infrastructure/config/targetDatabases'
 import {
   evaluateGoldenSet,
@@ -17,7 +17,7 @@ import {
   RETRIEVAL_MODES,
   type ModeReport,
   type RetrievalMode,
-} from '../graphsql/application/evaluateGoldenSet'
+} from '../graphsql/application/evaluation/evaluateGoldenSet'
 
 const MODE_LABELS: Record<RetrievalMode, string> = {
   none: 'Sin recuperación',

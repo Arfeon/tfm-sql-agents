@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { parse } from 'yaml'
-import { parseGoldenCases } from '../../src/graphsql/application/goldenSet'
+import { parseGoldenCases } from '../../src/graphsql/application/evaluation/goldenSet'
 
 const YAML_OK = `
 - id: G-01

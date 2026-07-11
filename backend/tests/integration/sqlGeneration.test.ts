@@ -3,8 +3,8 @@
  * SELECT/WITH. Opt-in; requiere Docker y el esquema vectorizado.
  */
 import { describe, it, expect } from 'vitest'
-import { retrieveSchemaContext } from '../../src/graphsql/application/schemaRetrieval'
-import { generateSql } from '../../src/graphsql/application/sqlGeneration'
+import { retrieveSchemaContext } from '../../src/graphsql/application/retrieval/schemaRetrieval'
+import { generateSql } from '../../src/graphsql/application/sql/sqlGeneration'
 import { loadTargetDatabases, sqlDialectFor } from '../../src/graphsql/infrastructure/config/targetDatabases'
 import { LlmProvider } from '../../src/graphsql/infrastructure/llm/LlmProvider'
 

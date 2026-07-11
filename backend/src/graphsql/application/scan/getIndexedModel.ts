@@ -3,7 +3,7 @@
  * modelo antes de re-vectorizar). La dependencia es la operación completa, no el
  * almacén: `getIndexedModel` no forma parte del puerto `IEmbeddingsStore`.
  */
-import { TableEmbeddingsStore, type IndexedModel } from '../infrastructure/postgres/TableEmbeddingsStore'
+import { TableEmbeddingsStore, type IndexedModel } from '../../infrastructure/postgres/TableEmbeddingsStore'
 
 export interface GetIndexedModelDependencies {
   readIndexedModel(): Promise<IndexedModel | null>

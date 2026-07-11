@@ -3,7 +3,7 @@
  * "abonado" debe casar con la tabla `abonats` aunque su vector la entierre.
  */
 import { describe, it, expect } from 'vitest'
-import { tokenize, trigramSimilarity, rankLexically, fuseByReciprocalRank } from '../../src/graphsql/application/hybridRanking'
+import { tokenize, trigramSimilarity, rankLexically, fuseByReciprocalRank } from '../../src/graphsql/application/retrieval/hybridRanking'
 
 describe('tokenize', () => {
   it('minúsculas, sin acentos, sin palabras vacías ni ruido estructural, sin repes', () => {

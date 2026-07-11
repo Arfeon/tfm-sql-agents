@@ -8,7 +8,7 @@
  * El límite de filas real (cursor) se prueba en integración.
  */
 import { describe, it, expect } from 'vitest'
-import { executeQuery, type QueryExecutionDependencies } from '../../src/graphsql/application/queryExecution'
+import { executeQuery, type QueryExecutionDependencies } from '../../src/graphsql/application/sql/queryExecution'
 import { UnsafeQueryError } from '../../src/graphsql/domain/sql/UnsafeQueryError'
 import type { ITargetDatabase } from '../../src/graphsql/domain/ports/ITargetDatabase'
 import type { SqlStatement } from '../../src/graphsql/domain/sql/SqlStatement'

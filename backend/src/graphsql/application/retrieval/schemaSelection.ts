@@ -3,11 +3,11 @@
  * rescata el pivote, un LLM lee la pregunta y elige las tablas relevantes del pool. Devuelve
  * SOLO nombres del pool, nunca inventa; si algo falla, la recuperación cae al recorte por score.
  */
-import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
-import { loadAgentPrompt } from '../infrastructure/config/agentPrompts'
-import { extractJsonArray } from './llmReply'
-import type { IChatModel } from '../domain/ports/IChatModel'
-import type { TableSchema } from '../domain/schema/TableSchema'
+import { ChatModelFactory } from '../../infrastructure/llm/ChatModelFactory'
+import { loadAgentPrompt } from '../../infrastructure/config/agentPrompts'
+import { extractJsonArray } from '../llmReply'
+import type { IChatModel } from '../../domain/ports/IChatModel'
+import type { TableSchema } from '../../domain/schema/TableSchema'
 
 export interface SchemaSelectionDependencies {
   createChatModel(): IChatModel

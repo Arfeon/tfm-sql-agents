@@ -3,16 +3,16 @@
  * expansión por FK en el grafo y acotación final por similitud, para no arrastrar
  * todas las vecinas de una tabla muy conectada (p. ej. `customer`).
  */
-import { TableEmbeddingsStore } from '../infrastructure/postgres/TableEmbeddingsStore'
-import { EmbeddingsFactory } from '../infrastructure/embeddings/EmbeddingsFactory'
-import { Neo4jConnection } from '../infrastructure/neo4j/Neo4jConnection'
-import { SchemaGraphManager } from '../infrastructure/neo4j/SchemaGraphManager'
-import { buildSchemaContext, type SchemaContext } from '../domain/schema/SchemaContext'
+import { TableEmbeddingsStore } from '../../infrastructure/postgres/TableEmbeddingsStore'
+import { EmbeddingsFactory } from '../../infrastructure/embeddings/EmbeddingsFactory'
+import { Neo4jConnection } from '../../infrastructure/neo4j/Neo4jConnection'
+import { SchemaGraphManager } from '../../infrastructure/neo4j/SchemaGraphManager'
+import { buildSchemaContext, type SchemaContext } from '../../domain/schema/SchemaContext'
 import { rankLexically, fuseByReciprocalRank } from './hybridRanking'
 import { selectRelevantTables, defaultSchemaSelectionDependencies } from './schemaSelection'
-import type { TableSchema } from '../domain/schema/TableSchema'
-import type { TableMatch } from '../domain/ports/IEmbeddingsStore'
-import type { RetrievalTrace, RankedTable, ExpandedTable, ContextTable, InclusionReason } from '../domain/schema/RetrievalTrace'
+import type { TableSchema } from '../../domain/schema/TableSchema'
+import type { TableMatch } from '../../domain/ports/IEmbeddingsStore'
+import type { RetrievalTrace, RankedTable, ExpandedTable, ContextTable, InclusionReason } from '../../domain/schema/RetrievalTrace'
 
 /** Candidatas por significado antes de expandir por FK. */
 export const SEMANTIC_TOP_K = 5

@@ -7,7 +7,7 @@
  * que el render dibuja barras proporcionales tratando bien ceros, negativos y nulos.
  */
 import { describe, it, expect } from 'vitest'
-import { detectChart, renderBarChart, MAX_CHART_ROWS } from '../../src/graphsql/application/resultCharting'
+import { detectChart, renderBarChart, MAX_CHART_ROWS } from '../../src/graphsql/application/sql/resultCharting'
 import type { QueryResult } from '../../src/graphsql/domain/sql/QueryResult'
 
 function resultOf(columns: string[], rows: Array<Record<string, unknown>>): QueryResult {

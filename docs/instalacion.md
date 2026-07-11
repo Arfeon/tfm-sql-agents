@@ -68,20 +68,32 @@ incluidos los modelos concretos de cada proveedor.
 
 ## 3. Levantar las bases de datos con Docker
 
-Desde la raíz del proyecto:
+Hay dos maneras, y las dos acaban en el mismo sitio:
+
+**a) Arranque guiado (recomendado si Docker te suena a chino).** Sáltate este paso:
+cuando ejecutes el `npm start` del paso 6, el CLI comprueba solo si Docker está en
+marcha y si los contenedores existen, y si faltan se ofrece a crearlos con la
+configuración por defecto. Solo tienes que responder que sí.
+
+**b) Arranque manual.** Desde la raíz del proyecto:
 
 ```bash
-docker compose up -d
+docker compose up -d --wait
 ```
 
-La primera vez tarda un poco (descarga las imágenes). Esto arranca dos servicios:
+El `--wait` hace que el comando no termine hasta que los dos servicios están
+levantados **y sanos** (`healthy`): cuando te devuelve el prompt, ya puedes usar
+el CLI. El primer arranque tarda **unos 2-3 minutos** (crea las bases de datos y
+carga los datos de prueba; si además tiene que descargar las imágenes de Docker,
+algo más). Los siguientes arranques son cuestión de segundos. Esto arranca dos
+servicios:
 
 | Servicio   | Qué es                        | Dónde lo encuentras            |
 |------------|-------------------------------|--------------------------------|
 | `postgres` | PostgreSQL **con pgvector**   | `localhost:5432`               |
 | `neo4j`    | Base de datos de grafos Neo4j | `localhost:7474` (navegador)   |
 
-Comprueba que los dos están en marcha y sanos (`healthy`):
+Si en algún momento quieres comprobar su estado:
 
 ```bash
 docker compose ps
@@ -99,8 +111,8 @@ automáticamente la primera vez. Ese mismo script crea las tres bases de datos:
 
 ## 4. Verificar que la base de datos está lista
 
-El `docker compose up` del paso anterior **ya carga las tablas y los datos
-automáticamente**. No hay que ejecutar nada más. Al arrancar por primera vez,
+El arranque del paso anterior (da igual si guiado o manual) **ya carga las tablas
+y los datos automáticamente**. No hay que ejecutar nada más. Al arrancar por primera vez,
 Postgres detecta el volumen vacío y ejecuta en orden:
 
 1. `01-init.sh` — crea las BDs `arcadia` y `nebula`, y activa pgvector.

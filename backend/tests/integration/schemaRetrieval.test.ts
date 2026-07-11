@@ -4,7 +4,7 @@
  * Docker y el esquema vectorizado con descripciones.
  */
 import { describe, it, expect } from 'vitest'
-import { retrieveSchemaContext } from '../../src/graphsql/application/schemaRetrieval'
+import { retrieveSchemaContext } from '../../src/graphsql/application/retrieval/schemaRetrieval'
 import { EmbeddingProvider } from '../../src/graphsql/infrastructure/embeddings/EmbeddingProvider'
 
 const provider = (process.env.EMBEDDING_PROVIDER ?? EmbeddingProvider.OpenAI) as EmbeddingProvider

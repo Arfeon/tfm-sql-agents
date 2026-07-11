@@ -11,7 +11,7 @@ import {
   parseEquivalenceVerdict,
   formatResultForJudge,
   type SqlEquivalenceDependencies,
-} from '../../src/graphsql/application/sqlEquivalence'
+} from '../../src/graphsql/application/evaluation/sqlEquivalence'
 import type { ChatMessage } from '../../src/graphsql/domain/ports/IChatModel'
 
 function modelReturning(reply: string, capture?: (messages: ChatMessage[]) => void): SqlEquivalenceDependencies {

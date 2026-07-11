@@ -4,7 +4,7 @@
  * del modelo, que son lo que decide qué ve y qué se fija por defecto.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { resolveDefaultProvider, modelNameFor, providerLabel } from '../../src/cli/providerSelection'
+import { resolveDefaultProvider, modelNameFor, providerLabel } from '../../src/cli/startup/providerSelection'
 import { LlmProvider } from '../../src/graphsql/infrastructure/llm/LlmProvider'
 
 const savedEnv = { ...process.env }

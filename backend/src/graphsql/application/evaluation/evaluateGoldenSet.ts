@@ -4,18 +4,18 @@
  * expandir, graphrag = top-K + expansión por FK). La equivalencia semántica (D-11) es
  * complementaria a la execution accuracy, nunca la sustituye.
  */
-import { checkSqlSafety } from '../domain/sql/SqlSafetyPolicy'
+import { checkSqlSafety } from '../../domain/sql/SqlSafetyPolicy'
 import { schemaLinkingRecall, resultsMatch, resultsContain, isSemanticPass, estimateTokens, type ResultRow } from './evaluationMetrics'
-import { retrieveSchemaContext, defaultSchemaRetrievalDependencies, type SchemaRetrievalDependencies } from './schemaRetrieval'
-import { generateSql } from './sqlGeneration'
+import { retrieveSchemaContext, defaultSchemaRetrievalDependencies, type SchemaRetrievalDependencies } from '../retrieval/schemaRetrieval'
+import { generateSql } from '../sql/sqlGeneration'
 import { judgeQueryEquivalence, type ExecutedResults } from './sqlEquivalence'
-import { executeQuery } from './queryExecution'
-import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
-import { readTargetSchema } from './readTargetSchema'
-import { buildSchemaContext, type SchemaContext } from '../domain/schema/SchemaContext'
-import { Neo4jConnection } from '../infrastructure/neo4j/Neo4jConnection'
-import { SchemaGraphManager } from '../infrastructure/neo4j/SchemaGraphManager'
-import { sqlDialectFor, type TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
+import { executeQuery } from '../sql/queryExecution'
+import { TargetDatabaseFactory } from '../../infrastructure/targetdb/TargetDatabaseFactory'
+import { readTargetSchema } from '../scan/readTargetSchema'
+import { buildSchemaContext, type SchemaContext } from '../../domain/schema/SchemaContext'
+import { Neo4jConnection } from '../../infrastructure/neo4j/Neo4jConnection'
+import { SchemaGraphManager } from '../../infrastructure/neo4j/SchemaGraphManager'
+import { sqlDialectFor, type TargetDatabaseConfig } from '../../infrastructure/config/targetDatabases'
 import type { GoldenCase, GoldenDifficulty } from './goldenSet'
 
 export type RetrievalMode = 'none' | 'vector' | 'graphrag'

@@ -3,7 +3,7 @@
  * comprobación real contra la BD se prueba en integración.
  */
 import { describe, it, expect } from 'vitest'
-import { checkSqlSyntax, type SqlSyntaxCheckDependencies } from '../../src/graphsql/application/sqlSyntaxCheck'
+import { checkSqlSyntax, type SqlSyntaxCheckDependencies } from '../../src/graphsql/application/sql/sqlSyntaxCheck'
 import type { ITargetDatabase } from '../../src/graphsql/domain/ports/ITargetDatabase'
 import type { SqlStatement } from '../../src/graphsql/domain/sql/SqlStatement'
 

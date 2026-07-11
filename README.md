@@ -48,14 +48,18 @@ La pieza central es el **Schema Agent (GraphRAG)**: en vez de darle al LLM el es
 
 ## Puesta en marcha
 
-Necesitas **Node.js 20+**, **Docker Desktop** (Compose v2) y un proveedor de LLM (ver abajo). Cuatro pasos; el detalle está en la [guía de instalación](docs/instalacion.md):
+Necesitas **Node.js 20+**, **Docker Desktop** (Compose v2) y un proveedor de LLM (ver abajo). Tres pasos; el detalle está en la [guía de instalación](docs/instalacion.md):
 
 ```bash
 cp .env.example .env         # 1. contraseñas y proveedor de LLM/embeddings
-docker compose up -d         # 2. levanta Postgres (con las BDs de prueba) y Neo4j
-cd backend && npm install    # 3. el ÚNICO npm install del repo
-npm start                    # 4. abre el CLI
+cd backend && npm install    # 2. el ÚNICO npm install del repo
+npm start                    # 3. abre el CLI
 ```
+
+La infraestructura (Postgres con las BDs de prueba y Neo4j) se puede levantar de dos maneras, y las dos acaban en el mismo sitio:
+
+- **Guiada (por defecto)** — el propio `npm start` comprueba que Docker está en marcha y que los contenedores existen y están sanos; si falta algo, te avisa y se ofrece a crearlos con la configuración por defecto. No hace falta saber Docker.
+- **Manual** — `docker compose up -d --wait` desde la raíz, antes de arrancar el CLI. El `--wait` devuelve el prompt cuando los servicios están `healthy`.
 
 En el CLI: primero **"Escanear el esquema"** (construye el grafo y el índice), luego **"Consultar en lenguaje natural"**. Guía paso a paso en [`docs/uso.md`](docs/uso.md).
 

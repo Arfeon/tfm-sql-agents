@@ -6,8 +6,8 @@
  * la sentencia con su dialecto. La generación real se prueba en integración.
  */
 import { describe, it, expect } from 'vitest'
-import { generateSql, cleanSql } from '../../src/graphsql/application/sqlGeneration'
-import type { SqlGenerationDependencies, Revision } from '../../src/graphsql/application/sqlGeneration'
+import { generateSql, cleanSql } from '../../src/graphsql/application/sql/sqlGeneration'
+import type { SqlGenerationDependencies, Revision } from '../../src/graphsql/application/sql/sqlGeneration'
 import type { IChatModel, ChatMessage } from '../../src/graphsql/domain/ports/IChatModel'
 import type { SchemaContext } from '../../src/graphsql/domain/schema/SchemaContext'
 

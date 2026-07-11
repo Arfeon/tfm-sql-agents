@@ -8,8 +8,8 @@
  * siempre (también si falla un guardado).
  */
 import { describe, it, expect } from 'vitest'
-import { vectorizeSchema, composeSearchText } from '../../src/graphsql/application/schemaVectorization'
-import type { SchemaVectorizationDependencies } from '../../src/graphsql/application/schemaVectorization'
+import { vectorizeSchema, composeSearchText } from '../../src/graphsql/application/scan/schemaVectorization'
+import type { SchemaVectorizationDependencies } from '../../src/graphsql/application/scan/schemaVectorization'
 import type { IEmbeddingsStore } from '../../src/graphsql/domain/ports/IEmbeddingsStore'
 import type { IEmbeddings } from '../../src/graphsql/domain/ports/IEmbeddings'
 import type { TableSchema } from '../../src/graphsql/domain/schema/TableSchema'

@@ -23,10 +23,15 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./setup/infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d graphsql_memory"]
-      interval: 10s
+      # -h localhost fuerza TCP: el servidor temporal del init solo escucha por
+      # socket Unix, así que el check no da "healthy" hasta que el init ha acabado.
+      # El start_period cubre el primer arranque (crear las BDs y cargar Arcadia y
+      # Nebula tarda más de un minuto); durante ese periodo los fallos no cuentan.
+      test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d graphsql_memory"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 300s
 
   neo4j:
     image: neo4j:5-community
@@ -44,10 +49,12 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
     healthcheck:
+      # Neo4j tarda en arrancar (JVM + plugin APOC), sobre todo la primera vez.
       test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
-      interval: 15s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 120s
 
 volumes:
   postgres_data:

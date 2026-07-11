@@ -5,9 +5,9 @@
  */
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
-import { retrieveSchemaContext } from '../application/schemaRetrieval'
-import { generateSql } from '../application/sqlGeneration'
-import { judgeSql } from '../application/sqlJudging'
+import { retrieveSchemaContext } from '../application/retrieval/schemaRetrieval'
+import { generateSql } from '../application/sql/sqlGeneration'
+import { judgeSql } from '../application/sql/sqlJudging'
 import type { JudgeVerdict } from '../domain/sql/JudgeVerdict'
 import { loadTargetDatabases, sqlDialectFor } from '../infrastructure/config/targetDatabases'
 import { NO_RELEVANT_TABLES_MESSAGE } from './schemaTools'

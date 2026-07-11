@@ -3,8 +3,8 @@
  * nombres del pool (el selector no puede inventar tablas).
  */
 import { describe, it, expect } from 'vitest'
-import { parseSelectedTables, selectRelevantTables } from '../../src/graphsql/application/schemaSelection'
-import type { SchemaSelectionDependencies } from '../../src/graphsql/application/schemaSelection'
+import { parseSelectedTables, selectRelevantTables } from '../../src/graphsql/application/retrieval/schemaSelection'
+import type { SchemaSelectionDependencies } from '../../src/graphsql/application/retrieval/schemaSelection'
 import { table } from '../helpers/tableFixtures'
 
 describe('parseSelectedTables', () => {
