@@ -3,11 +3,11 @@
  * las comprobaciones deterministas invalidan; el juez LLM aconseja pero no bloquea,
  * porque da falsos positivos (D-07).
  */
-import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
-import { loadAgentPrompt } from '../infrastructure/config/agentPrompts'
-import type { IChatModel } from '../domain/ports/IChatModel'
-import type { SchemaContext } from '../domain/schema/SchemaContext'
-import type { SqlStatement } from '../domain/sql/SqlStatement'
+import { ChatModelFactory } from '../../infrastructure/llm/ChatModelFactory'
+import { loadAgentPrompt } from '../../infrastructure/config/agentPrompts'
+import type { IChatModel } from '../../domain/ports/IChatModel'
+import type { SchemaContext } from '../../domain/schema/SchemaContext'
+import type { SqlStatement } from '../../domain/sql/SqlStatement'
 import {
   type JudgeVerdict,
   type TablePurpose,
@@ -15,10 +15,10 @@ import {
   securityFailureVerdict,
   syntaxFailureVerdict,
   checksPassedVerdict,
-} from '../domain/sql/JudgeVerdict'
-import { checkSqlSafety } from '../domain/sql/SqlSafetyPolicy'
-import { JudgeResponseError } from '../domain/sql/JudgeResponseError'
-import { extractJsonObject } from './llmReply'
+} from '../../domain/sql/JudgeVerdict'
+import { checkSqlSafety } from '../../domain/sql/SqlSafetyPolicy'
+import { JudgeResponseError } from '../../domain/sql/JudgeResponseError'
+import { extractJsonObject } from '../llmReply'
 import { checkSqlSyntax, type SqlSyntaxCheck } from './sqlSyntaxCheck'
 
 export interface SqlJudgingDependencies {

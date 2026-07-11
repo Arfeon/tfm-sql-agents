@@ -7,8 +7,8 @@
  * búsqueda por descripción se prueban en integración (vectores reales).
  */
 import { describe, it, expect } from 'vitest'
-import { retrieveSchemaContext } from '../../src/graphsql/application/schemaRetrieval'
-import type { SchemaRetrievalDependencies } from '../../src/graphsql/application/schemaRetrieval'
+import { retrieveSchemaContext } from '../../src/graphsql/application/retrieval/schemaRetrieval'
+import type { SchemaRetrievalDependencies } from '../../src/graphsql/application/retrieval/schemaRetrieval'
 import type { TableSchema } from '../../src/graphsql/domain/schema/TableSchema'
 import { table, tableWithFk } from '../helpers/tableFixtures'
 

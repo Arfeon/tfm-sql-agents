@@ -2,12 +2,12 @@
  * Vectoriza el esquema de una BD objetivo en pgvector. Reconstruye el índice entero
  * y guarda el modelo y la dimensión usados junto a los vectores.
  */
-import { TableEmbeddingsStore } from '../infrastructure/postgres/TableEmbeddingsStore'
+import { TableEmbeddingsStore } from '../../infrastructure/postgres/TableEmbeddingsStore'
 import { readTargetSchema } from './readTargetSchema'
-import { fullTableName, type TableSchema } from '../domain/schema/TableSchema'
-import type { IEmbeddings } from '../domain/ports/IEmbeddings'
-import type { IEmbeddingsStore } from '../domain/ports/IEmbeddingsStore'
-import type { TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
+import { fullTableName, type TableSchema } from '../../domain/schema/TableSchema'
+import type { IEmbeddings } from '../../domain/ports/IEmbeddings'
+import type { IEmbeddingsStore } from '../../domain/ports/IEmbeddingsStore'
+import type { TargetDatabaseConfig } from '../../infrastructure/config/targetDatabases'
 
 export interface VectorizationSummary {
   count: number

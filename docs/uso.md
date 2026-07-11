@@ -12,8 +12,9 @@ schema-linking, Judge, execution accuracy…) están en el [glosario](glosario.m
 
 Para que todo funcione necesito, en este orden:
 
-1. **Las bases de datos levantadas** — `docker compose up -d` desde la raíz (PostgreSQL con
-   pgvector + Neo4j). Compruebo con `docker compose ps` que están `healthy`.
+1. **Las bases de datos levantadas** — el propio `npm start` lo comprueba y, si faltan,
+   se ofrece a levantarlas (PostgreSQL con pgvector + Neo4j). Si prefiero hacerlo a mano:
+   `docker compose up -d --wait` desde la raíz.
 2. **Dependencias instaladas** — `cd backend && npm install`.
 3. **El `.env` con un proveedor de LLM y de embeddings** — como mínimo `LLM_PROVIDER`
    (`openai` o `local`) con su clave/URL, y `EMBEDDING_PROVIDER`. Ver §5.
@@ -33,7 +34,16 @@ Desde `backend/`:
 npm start
 ```
 
-Sale una cabecera y, **antes de nada, el selector de proveedor LLM de la sesión**: elijo
+Sale la cabecera y lo primero que hace es **comprobar la infraestructura**: que Docker está
+en marcha y que los contenedores de Postgres y Neo4j existen y están `healthy`. Si todo está
+bien, pasa de largo con un `✔ Infraestructura lista` y no pregunta nada. Si falta algo, me guía:
+
+- **Docker apagado** → me avisa y me deja reintentarlo cuando lo haya arrancado.
+- **Contenedores inexistentes o parados** → me enseña el estado de cada uno y se ofrece a
+  levantarlos con `docker compose up -d --wait` (veo el progreso real de Docker). Al
+  terminar pinta el banner de *Infraestructura lista* y me pregunta si arranco la app.
+
+Con la infraestructura lista llega **el selector de proveedor LLM de la sesión**: elijo
 si trabajo con OpenAI (nube) o en local (LM Studio), y cada opción muestra el modelo
 concreto que usaría. El `.env` (`LLM_PROVIDER`) es solo el valor por defecto que sale
 preseleccionado; así nunca arranco sin saber con qué modelo estoy trabajando.
@@ -56,6 +66,12 @@ Tras elegir, el menú principal:
 
 Me muevo con las flechas, elijo con Enter. Salgo con *Salir* o con Ctrl+C (sale limpio, sin
 volcar el error). Cada opción vuelve al menú al terminar.
+
+> **La primera vez el menú marca el camino.** Si el esquema aún no está escaneado ni
+> vectorizado (no hay índice), el CLI lo avisa y el menú cambia: *Escanear el esquema*
+> pasa a la primera posición con la marca `← empieza por aquí (primera vez)`, y
+> *Consultar* y *Depurar* salen atenuadas y no seleccionables, con el motivo al lado.
+> En cuanto escaneas, el menú vuelve solo a la normalidad — no hace falta reiniciar.
 
 ---
 
@@ -137,8 +153,10 @@ número y sin barra (un cero es información, no se esconde).
 Neo4j y pgvector guardan **un solo esquema a la vez**: el de la última BD escaneada. Por eso,
 al elegir BD en la consulta, la indexada sale marcada como `(indexada)`. Si elijo otra, el
 sistema **avisa** (la recuperación devolvería tablas de otra BD) y ofrece **escanearla ahí
-mismo** con el mismo modelo de embeddings del índice, o cancelar. Nunca genera SQL con el
-índice de otra BD sin avisar. La evaluación multi-BD, en cambio, usa `EVAL_TARGET` (§7).
+mismo** con el mismo modelo de embeddings del índice, o cancelar — si cancelo, la consulta
+no sigue: nunca se genera SQL con el índice de otra BD. Este escaneo inline hace la **misma
+pregunta de descripciones** que el del menú cuando la BD es la principal; si no lo es, avisa
+de que las descripciones no le aplican. La evaluación multi-BD, en cambio, usa `EVAL_TARGET` (§7).
 
 ---
 
@@ -226,9 +244,9 @@ npm run evaluate:review         # revisión objetiva de equivalencia (sin juez L
 npm run seed -- --truncate      # repuebla Arcadia (seed=42)
 npm run seed:nebula -- --reset  # recrea y repuebla Nebula
 
-# Docker (desde la raíz del repo)
-docker compose up -d            # levanta Postgres + Neo4j
-docker compose ps               # ver que están 'healthy'
+# Docker (desde la raíz del repo) — normalmente no hace falta: npm start lo gestiona
+docker compose up -d --wait     # levanta Postgres + Neo4j y espera a que estén 'healthy'
+docker compose ps               # ver su estado
 docker compose down             # parar (conserva los datos)
 docker compose down -v          # borrar TODO, incluidos los datos (empezar de cero)
 ```
@@ -262,7 +280,8 @@ La lectura neutra y los **sesgos conocidos de las métricas** están en [`arquit
 
 - **"No encontré tablas relevantes" / la consulta falla al recuperar** → el esquema no está
   vectorizado (o se vectorizó con otro modelo). Escanéalo: menú → *Escanear el esquema* (§3).
-- **"No pude preparar el checkpointer"** → falta Postgres. `docker compose up -d` y reintenta.
+- **"No pude preparar el checkpointer"** → falta Postgres. Relanza `npm start` (se ofrecerá a
+  levantarlo) o hazlo a mano con `docker compose up -d --wait`.
 - **Con LM Studio no responde / respuesta vacía** → asegúrate de tener cargados el modelo de chat
   **y** el de embeddings en LM Studio, y que la URL del `.env` apunta a su servidor.
 - **Con OpenAI da error de credenciales** → revisa `OPENAI_API_KEY` en el `.env`.

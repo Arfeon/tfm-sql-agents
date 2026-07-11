@@ -2,11 +2,11 @@
  * Genera la SQL a partir de la pregunta y el DDL del contexto (SPEC-05). El dialecto
  * se inyecta en el prompt para que la sintaxis salga en el motor que toque.
  */
-import { ChatModelFactory } from '../infrastructure/llm/ChatModelFactory'
-import { loadAgentPrompt } from '../infrastructure/config/agentPrompts'
-import type { IChatModel } from '../domain/ports/IChatModel'
-import type { SchemaContext } from '../domain/schema/SchemaContext'
-import type { SqlStatement } from '../domain/sql/SqlStatement'
+import { ChatModelFactory } from '../../infrastructure/llm/ChatModelFactory'
+import { loadAgentPrompt } from '../../infrastructure/config/agentPrompts'
+import type { IChatModel } from '../../domain/ports/IChatModel'
+import type { SchemaContext } from '../../domain/schema/SchemaContext'
+import type { SqlStatement } from '../../domain/sql/SqlStatement'
 
 export interface SqlGenerationDependencies {
   createChatModel(): IChatModel

@@ -3,9 +3,9 @@
  * suyo, p. ej. EXPLAIN en PostgreSQL). La BD es la autoridad sobre si una consulta
  * es válida, no la opinión del juez LLM — esto corrige sus falsos positivos.
  */
-import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
-import type { ITargetDatabase } from '../domain/ports/ITargetDatabase'
-import type { SqlStatement } from '../domain/sql/SqlStatement'
+import { TargetDatabaseFactory } from '../../infrastructure/targetdb/TargetDatabaseFactory'
+import type { ITargetDatabase } from '../../domain/ports/ITargetDatabase'
+import type { SqlStatement } from '../../domain/sql/SqlStatement'
 
 export interface SqlSyntaxCheck {
   valid: boolean

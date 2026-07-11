@@ -14,7 +14,7 @@ import {
   judgeSqlWithLlm,
   judgeSql,
   type SqlJudgingDependencies,
-} from '../../src/graphsql/application/sqlJudging'
+} from '../../src/graphsql/application/sql/sqlJudging'
 import { JudgeResponseError } from '../../src/graphsql/domain/sql/JudgeResponseError'
 import type { IChatModel } from '../../src/graphsql/domain/ports/IChatModel'
 import type { SchemaContext } from '../../src/graphsql/domain/schema/SchemaContext'

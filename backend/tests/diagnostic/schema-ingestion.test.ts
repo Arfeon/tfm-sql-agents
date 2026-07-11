@@ -4,7 +4,7 @@
  */
 import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 import { Neo4jConnection } from '../../src/graphsql/infrastructure/neo4j/Neo4jConnection'
-import { ingestSchema } from '../../src/graphsql/application/schemaIngestion'
+import { ingestSchema } from '../../src/graphsql/application/scan/schemaIngestion'
 import { loadTargetDatabases } from '../../src/graphsql/infrastructure/config/targetDatabases'
 
 let neo4j: Neo4jConnection

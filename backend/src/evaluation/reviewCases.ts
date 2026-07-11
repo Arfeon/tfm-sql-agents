@@ -10,7 +10,7 @@ config({ path: '../.env' })
 import { readFileSync } from 'node:fs'
 import { loadTargetDatabases, sqlDialectFor, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
 import { TargetDatabaseFactory } from '../graphsql/infrastructure/targetdb/TargetDatabaseFactory'
-import { executeQuery } from '../graphsql/application/queryExecution'
+import { executeQuery } from '../graphsql/application/sql/queryExecution'
 
 const CASES_FILE = process.argv[2] ?? '../docs/evaluacion/escala-casos-coder14b.json'
 

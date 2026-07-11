@@ -5,8 +5,8 @@
  */
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
-import { ingestSchema, getSchemaSummary } from '../application/schemaIngestion'
-import { retrieveSchemaContext } from '../application/schemaRetrieval'
+import { ingestSchema, getSchemaSummary } from '../application/scan/schemaIngestion'
+import { retrieveSchemaContext } from '../application/retrieval/schemaRetrieval'
 import { loadTargetDatabases, targetDatabaseLabel } from '../infrastructure/config/targetDatabases'
 
 const ingestSchemaTool = tool(

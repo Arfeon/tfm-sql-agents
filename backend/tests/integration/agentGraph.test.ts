@@ -3,7 +3,7 @@
  * Opt-in; se salta si faltan credenciales.
  */
 import { describe, it, expect } from 'vitest'
-import { createConversationGraph, askGraph } from '../../src/graphsql/graph/agentGraph'
+import { createConversationGraph, askGraph } from '../../src/graphsql/orchestration/agentGraph'
 import { LlmProvider } from '../../src/graphsql/infrastructure/llm/LlmProvider'
 
 const provider = (process.env.LLM_PROVIDER ?? LlmProvider.OpenAI) as LlmProvider

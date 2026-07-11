@@ -5,13 +5,14 @@
  */
 import chalk from 'chalk'
 import { select, confirm } from '@inquirer/prompts'
-import { loadTargetDatabases, targetDatabaseLabel, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
-import { getIndexedModel } from '../graphsql/application/getIndexedModel'
-import { ingestSchema } from '../graphsql/application/schemaIngestion'
-import { vectorizeSchema } from '../graphsql/application/schemaVectorization'
-import { EmbeddingsFactory } from '../graphsql/infrastructure/embeddings/EmbeddingsFactory'
-import { hasDescriptionsFile, loadDescriptions } from '../graphsql/infrastructure/config/descriptions'
-import { withSpinner } from './ui'
+import { loadTargetDatabases, targetDatabaseLabel, type TargetDatabaseConfig } from '../../graphsql/infrastructure/config/targetDatabases'
+import { getIndexedModel } from '../../graphsql/application/scan/getIndexedModel'
+import { ingestSchema } from '../../graphsql/application/scan/schemaIngestion'
+import { vectorizeSchema } from '../../graphsql/application/scan/schemaVectorization'
+import { EmbeddingsFactory } from '../../graphsql/infrastructure/embeddings/EmbeddingsFactory'
+import { hasDescriptionsFile } from '../../graphsql/infrastructure/config/descriptions'
+import { askDescriptions } from './schemaScan'
+import { withSpinner } from '../ui'
 
 /** `null` = cancelado o índice sin preparar: quien llama vuelve al menú. */
 export async function chooseTargetForQuery(): Promise<TargetDatabaseConfig | null> {
@@ -68,8 +69,9 @@ async function resolveIndexMismatch(target: TargetDatabaseConfig, indexedName: s
 
 /**
  * Escaneo la BD con el MISMO modelo de embeddings del índice actual (no pregunto
- * proveedor: mezclar modelos en el índice no tiene sentido). Las descripciones se
- * incluyen si el fichero existe y es la BD principal (las descripciones son suyas).
+ * proveedor: mezclar modelos en el índice no tiene sentido). Las descripciones sí
+ * se preguntan — la misma pregunta que en el escaneo del menú, nada de decidirlo
+ * en silencio — y solo aplican a la BD principal (las descripciones son suyas).
  */
 async function scanTargetWithIndexedModel(target: TargetDatabaseConfig): Promise<boolean> {
   const indexed = await getIndexedModel().catch(() => null)
@@ -78,14 +80,16 @@ async function scanTargetWithIndexedModel(target: TargetDatabaseConfig): Promise
     console.log(chalk.dim('Escanea primero desde el menú → "Escanear el esquema" (ahí eliges proveedor).\n'))
     return false
   }
-  const isPrimaryTarget = loadTargetDatabases()[0].name === target.name
-  const descriptions = isPrimaryTarget && hasDescriptionsFile() ? loadDescriptions() : undefined
+  const descriptions = await askDescriptionsForTarget(target)
   const embeddings = EmbeddingsFactory.forIndexedModel(indexed)
   try {
-    await withSpinner(`Escaneando "${target.name}" (ingesta + vectorización con ${indexed.model})…`, async () => {
-      await ingestSchema(target, descriptions)
-      await vectorizeSchema(target, indexed.provider, embeddings, descriptions)
-    })
+    await withSpinner(
+      `Escaneando "${target.name}" (${descriptions ? 'con' : 'sin'} descripciones, vectorización con ${indexed.model})…`,
+      async () => {
+        await ingestSchema(target, descriptions)
+        await vectorizeSchema(target, indexed.provider, embeddings, descriptions)
+      },
+    )
     return true
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
@@ -93,4 +97,20 @@ async function scanTargetWithIndexedModel(target: TargetDatabaseConfig): Promise
     console.log(chalk.dim(`¿Están Docker y el proveedor de embeddings disponibles? Detalle: ${detail}\n`))
     return false
   }
+}
+
+/**
+ * A la BD principal le hago la misma pregunta de descripciones que el escaneo del menú.
+ * A las demás no les aplican (los ficheros de descriptions/ describen la principal),
+ * pero lo digo en vez de callármelo.
+ */
+async function askDescriptionsForTarget(target: TargetDatabaseConfig): Promise<Map<string, string> | undefined> {
+  const isPrimaryTarget = loadTargetDatabases()[0].name === target.name
+  if (isPrimaryTarget) {
+    return askDescriptions()
+  }
+  if (hasDescriptionsFile()) {
+    console.log(chalk.dim(`Las descripciones de descriptions/ son de la BD principal: no aplican a "${target.name}".`))
+  }
+  return undefined
 }

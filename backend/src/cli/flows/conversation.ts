@@ -2,9 +2,9 @@
 import { randomUUID } from 'node:crypto'
 import chalk from 'chalk'
 import { select, input } from '@inquirer/prompts'
-import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
-import { createConversationGraph, askGraph } from '../graphsql/graph/agentGraph'
-import { warnIfLocalModelMissing, withSpinner } from './ui'
+import { LlmProvider } from '../../graphsql/infrastructure/llm/LlmProvider'
+import { createConversationGraph, askGraph } from '../../graphsql/orchestration/agentGraph'
+import { warnIfLocalModelMissing, withSpinner } from '../ui'
 
 function askProvider(): Promise<LlmProvider> {
   return select({

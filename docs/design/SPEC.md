@@ -885,7 +885,7 @@ cd backend && npm run evaluate:scale    # prueba de escala sobre la BD grande (o
 
 **Pasos**
 
-1. `application/resultCharting.ts`: `detectChart` y `renderBarChart` como funciones puras, con TDD (formas graficables y no graficables, nulos, ceros, negativos, empates, anchura de etiquetas).
+1. `application/sql/resultCharting.ts`: `detectChart` y `renderBarChart` como funciones puras, con TDD (formas graficables y no graficables, nulos, ceros, negativos, empates, anchura de etiquetas).
 2. CLI (`sqlPipeline.presentResult`): si hay plan de gráfico, preguntar Tabla/Gráfico/Ambas y pintar según la elección; color con chalk en la capa CLI (el render puro devuelve texto sin ANSI).
 3. Documentar en la guía de uso (`docs/uso.md`).
 
@@ -1153,6 +1153,45 @@ cd backend && npm test    # unit de listar/reejecutar/renombrar/borrar favoritas
 
 ```bash
 cd backend && npm test    # unit del generador (con dobles de esquema y LLM)
+```
+
+---
+
+### SPEC-28 — Arranque guiado del CLI: preflight de infraestructura y primera vez sin índice ✅ *Hecho*
+
+**Objetivo.** Que `npm start` sea el único comando que necesita alguien que no sabe Docker, y que la primera vez el propio CLI le marque el camino. En las pruebas de usuario del circuito completo salieron dos fricciones: (1) tras `docker compose up` el log no da ninguna señal clara de "ya puedes usar el CLI" (el init de Postgres imprime paradas y arranques que parecen errores, y los checkpoints periódicos parecen actividad), y si los contenedores no están levantados el CLI muere con un stack trace de conexión; (2) con la infraestructura lista pero **sin el esquema escaneado ni vectorizado**, el menú deja entrar a "Consultar" y "Depurar", que solo pueden fallar con un error que un usuario nuevo no sabe interpretar. El arranque debe comprobar la infraestructura y el índice, y **guiar** al usuario para dejarlos listos, en vez de suponer que ya lo están.
+
+**Contrato.**
+
+- *Comprobación en dos niveles.* Primero el daemon (`docker info`): si Docker no está en marcha, aviso con instrucciones (abrir Docker Desktop, enlace de instalación) y bucle de "¿lo compruebo otra vez?" para seguir sin relanzar nada. Después los contenedores (`docker inspect` sobre los nombres fijos del compose) exigiendo `running healthy`, distinguiendo "no existen todavía" de "existen pero no están listos" (y en ese caso, mostrando el estado de cada uno).
+- *Oferta de creación, nunca acción silenciosa.* Si faltan contenedores, el CLI pregunta antes de tocar nada. Si acepto, ejecuta `docker compose up -d --wait postgres neo4j` heredando la salida de Docker (veo descargas y healthchecks reales), pinta un banner de *Infraestructura lista* y pregunta si arranco la aplicación. Si declino cualquier paso, sale limpio dejando impresa la instrucción manual equivalente.
+- *Camino feliz silencioso.* Con todo `healthy`, una sola línea de confirmación y directo al selector de proveedor: cero preguntas redundantes en el uso diario.
+- *Healthchecks como fuente de verdad.* La señal de "listo" son los healthchecks del compose, compartidos por el preflight y el arranque manual (`docker compose up -d --wait`). El de Postgres fuerza TCP (`pg_isready -h localhost`) para no dar `healthy` durante el servidor temporal del init del primer arranque, y ambos llevan `start_period` que cubre ese primer init completo (crear las BDs y cargar Arcadia y Nebula tarda ~2 min; medido, con margen ~2×): sin él, los fallos del check durante la carga marcan el contenedor `unhealthy` y el `--wait` aborta a mitad del init.
+- *El arranque manual sigue siendo de primera.* Nada del preflight es obligatorio: levantar la infraestructura con `docker compose up -d --wait` y entrar al CLI se comporta exactamente igual (camino feliz).
+- *Menú consciente del índice (primera vez).* Antes de pintar el menú, el CLI comprueba si existe el índice vectorial (`getIndexedModel`, ya existente de SPEC-18). Si no existe: aviso de qué falta y por qué, "Escanear el esquema" pasa a la primera posición con la marca *← empieza por aquí (primera vez)*, y "Consultar" y "Depurar" quedan **deshabilitadas y no seleccionables** con el motivo a la vista (*— necesita el esquema escaneado y vectorizado*). Tras escanear, el menú vuelve solo a la normalidad (se re-comprueba en cada vuelta al menú). Si el estado no se puede comprobar (pgvector inaccesible), **no se bloquea nada**: mejor un error honesto al usar la opción que un cerrojo en falso.
+
+**Pasos**
+
+1. Healthchecks del `docker-compose.yml`: TCP en Postgres, intervalos cortos (5s) con más reintentos para no retrasar la señal de listo.
+2. `cli/startup/infraPreflight.ts` con `ensureInfrastructureReady(): Promise<boolean>`: daemon → contenedores → oferta de `compose up` → banner → confirmación de arranque.
+3. Engancharlo en `cli/main.ts` antes del selector de proveedor; si devuelve `false`, despedida limpia.
+4. `cli/mainMenu.ts`: `buildMainMenuChoices(hasIndex)` como función pura (testable sin terminal) y `checkVectorIndexExists()` con los tres estados (sí / no / no se sabe); el menú de `main.ts` los usa en cada vuelta.
+5. Documentar los **dos sistemas de arranque** (guiado y manual): README (puesta en marcha en 3 pasos), `instalacion.md` §3 (las dos vías) y `uso.md` (§0, §1, chuleta de comandos y problemas frecuentes).
+
+**Criterios de aceptación**
+
+- [X] Con la infraestructura `healthy`, `npm start` muestra `✔ Infraestructura lista` y sigue sin preguntar nada
+- [X] Con contenedores parados o inexistentes, muestra el estado de cada uno y se ofrece a levantarlos; al aceptar, corre `compose up -d --wait` con progreso visible, banner y pregunta de arranque (verificado en vivo parando los contenedores)
+- [X] Con Docker apagado, avisa con instrucciones y permite reintentar; nunca un stack trace
+- [X] Declinar cualquier paso sale limpio con la instrucción manual impresa
+- [X] El arranque manual (`docker compose up -d --wait`) sigue funcionando igual, sin servicios extra en el compose
+- [X] Sin índice vectorial, el menú avisa, pone "Escanear" primero marcado y no deja seleccionar "Consultar" ni "Depurar" (motivo visible); tras escanear, el menú vuelve a la normalidad sin reiniciar (verificado en vivo ocultando la tabla del índice)
+- [X] Si el estado del índice no se puede comprobar, el menú no bloquea nada
+- [X] `buildMainMenuChoices` probada como función pura (los tres estados)
+- [X] Suite unitaria verde (223 tests)
+
+```bash
+cd backend && npm start   # con y sin los contenedores levantados; con y sin índice
 ```
 
 ---

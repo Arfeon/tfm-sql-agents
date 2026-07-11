@@ -3,7 +3,7 @@
  * si un resultado es graficable es determinista, no cosa del LLM (mismo criterio que
  * el Judge). El render devuelve texto plano sin ANSI: el color es de la capa CLI.
  */
-import type { QueryResult } from '../domain/sql/QueryResult'
+import type { QueryResult } from '../../domain/sql/QueryResult'
 
 export interface BarChartPlan {
   labelColumn: string

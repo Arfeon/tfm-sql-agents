@@ -5,11 +5,11 @@
  * sin visto bueno. Una SQL editada a mano nunca entra en el reintento automático.
  */
 import { StateGraph, Annotation, START, END, type BaseCheckpointSaver } from '@langchain/langgraph'
-import { retrieveSchemaContext, LIVE_RETRIEVAL_OPTIONS } from '../application/schemaRetrieval'
-import { generateSql, type Revision } from '../application/sqlGeneration'
-import { judgeSql, defaultSqlJudgingDependencies } from '../application/sqlJudging'
-import { executeQuery } from '../application/queryExecution'
-import { checkSqlSyntax } from '../application/sqlSyntaxCheck'
+import { retrieveSchemaContext, LIVE_RETRIEVAL_OPTIONS } from '../application/retrieval/schemaRetrieval'
+import { generateSql, type Revision } from '../application/sql/sqlGeneration'
+import { judgeSql, defaultSqlJudgingDependencies } from '../application/sql/sqlJudging'
+import { executeQuery } from '../application/sql/queryExecution'
+import { checkSqlSyntax } from '../application/sql/sqlSyntaxCheck'
 import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
 import type { TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
 import type { SchemaContext } from '../domain/schema/SchemaContext'

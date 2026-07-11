@@ -3,8 +3,8 @@
  * de cada tabla y los cortes (top-K y recorte del contexto).
  */
 import { describe, it, expect } from 'vitest'
-import { explainSchemaRetrieval } from '../../src/graphsql/application/schemaRetrieval'
-import type { SchemaRetrievalDependencies } from '../../src/graphsql/application/schemaRetrieval'
+import { explainSchemaRetrieval } from '../../src/graphsql/application/retrieval/schemaRetrieval'
+import type { SchemaRetrievalDependencies } from '../../src/graphsql/application/retrieval/schemaRetrieval'
 import { table, tableWithFk } from '../helpers/tableFixtures'
 
 describe('explainSchemaRetrieval', () => {

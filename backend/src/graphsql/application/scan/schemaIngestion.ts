@@ -1,9 +1,9 @@
 /** Ingiere el esquema de una BD objetivo en Neo4j. Lo usan la tool del agente y el CLI. */
-import { Neo4jConnection } from '../infrastructure/neo4j/Neo4jConnection'
-import { SchemaGraphManager, type SchemaSummary } from '../infrastructure/neo4j/SchemaGraphManager'
+import { Neo4jConnection } from '../../infrastructure/neo4j/Neo4jConnection'
+import { SchemaGraphManager, type SchemaSummary } from '../../infrastructure/neo4j/SchemaGraphManager'
 import { readTargetSchema } from './readTargetSchema'
-import type { TableSchema } from '../domain/schema/TableSchema'
-import type { TargetDatabaseConfig } from '../infrastructure/config/targetDatabases'
+import type { TableSchema } from '../../domain/schema/TableSchema'
+import type { TargetDatabaseConfig } from '../../infrastructure/config/targetDatabases'
 
 export interface SchemaIngestionDependencies {
   readSchema(target: TargetDatabaseConfig): Promise<TableSchema[]>

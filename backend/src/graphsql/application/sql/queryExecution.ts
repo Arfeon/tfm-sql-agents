@@ -3,12 +3,12 @@
  * última barrera de seguridad: re-compruebo que sea de solo lectura antes de tocar
  * la BD, además la sesión es read-only y hay tope de filas y statement_timeout.
  */
-import { TargetDatabaseFactory } from '../infrastructure/targetdb/TargetDatabaseFactory'
-import { checkSqlSafety } from '../domain/sql/SqlSafetyPolicy'
-import { UnsafeQueryError } from '../domain/sql/UnsafeQueryError'
-import type { ITargetDatabase } from '../domain/ports/ITargetDatabase'
-import type { SqlStatement } from '../domain/sql/SqlStatement'
-import type { QueryResult } from '../domain/sql/QueryResult'
+import { TargetDatabaseFactory } from '../../infrastructure/targetdb/TargetDatabaseFactory'
+import { checkSqlSafety } from '../../domain/sql/SqlSafetyPolicy'
+import { UnsafeQueryError } from '../../domain/sql/UnsafeQueryError'
+import type { ITargetDatabase } from '../../domain/ports/ITargetDatabase'
+import type { SqlStatement } from '../../domain/sql/SqlStatement'
+import type { QueryResult } from '../../domain/sql/QueryResult'
 
 /** Por encima de este tope, el resultado se marca como truncado. */
 export const MAX_RESULT_ROWS = 1000

@@ -5,8 +5,8 @@
  */
 import chalk from 'chalk'
 import { select } from '@inquirer/prompts'
-import { LlmProvider } from '../graphsql/infrastructure/llm/LlmProvider'
-import { resolveModelName } from '../graphsql/infrastructure/llm/modelSelection'
+import { LlmProvider } from '../../graphsql/infrastructure/llm/LlmProvider'
+import { resolveModelName } from '../../graphsql/infrastructure/llm/modelSelection'
 
 /**
  * Los modelos que usaría cada proveedor, para enseñarlos antes de elegir. Uso dos: el de

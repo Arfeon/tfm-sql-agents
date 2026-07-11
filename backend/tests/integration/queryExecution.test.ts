@@ -8,7 +8,7 @@
  * Opt-in (`npm run test:integration`). Requiere docker compose up -d.
  */
 import { describe, it, expect } from 'vitest'
-import { executeQuery } from '../../src/graphsql/application/queryExecution'
+import { executeQuery } from '../../src/graphsql/application/sql/queryExecution'
 import { PostgresTargetDatabase } from '../../src/graphsql/infrastructure/postgres/PostgresTargetDatabase'
 import { loadTargetDatabases } from '../../src/graphsql/infrastructure/config/targetDatabases'
 

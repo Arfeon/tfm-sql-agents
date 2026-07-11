@@ -3,7 +3,7 @@
  * pregunta cuando la frase la domina otro tema; el léxico casa las PALABRAS con el
  * nombre/columnas de cada tabla, y la fusión RRF combina ambos sin calibrar pesos.
  */
-import type { TableMatch } from '../domain/ports/IEmbeddingsStore'
+import type { TableMatch } from '../../domain/ports/IEmbeddingsStore'
 
 // Palabras vacías (es/ca) + ruido estructural del search_text ("Tabla:", "Columnas:"…),
 // que aparece en TODAS las filas y crearía coincidencias universales.

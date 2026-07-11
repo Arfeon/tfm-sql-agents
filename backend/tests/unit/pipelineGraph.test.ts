@@ -11,12 +11,12 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { MemorySaver } from '@langchain/langgraph'
-import { createSqlPipelineGraph, makePipelineDependencies, MAX_JUDGE_ATTEMPTS, type PipelineDependencies } from '../../src/graphsql/graph/pipelineGraph'
+import { createSqlPipelineGraph, makePipelineDependencies, MAX_JUDGE_ATTEMPTS, type PipelineDependencies } from '../../src/graphsql/orchestration/pipelineGraph'
 import { TargetDatabaseFactory } from '../../src/graphsql/infrastructure/targetdb/TargetDatabaseFactory'
 import type { TargetDatabaseConfig } from '../../src/graphsql/infrastructure/config/targetDatabases'
 import type { SchemaContext } from '../../src/graphsql/domain/schema/SchemaContext'
 import type { JudgeVerdict } from '../../src/graphsql/domain/sql/JudgeVerdict'
-import type { Revision } from '../../src/graphsql/application/sqlGeneration'
+import type { Revision } from '../../src/graphsql/application/sql/sqlGeneration'
 
 function contextFor(tableNames: string[]): SchemaContext {
   return { tables: [], tableNames, ddl: tableNames.map((name) => `CREATE TABLE ${name} (...);`).join('\n') }

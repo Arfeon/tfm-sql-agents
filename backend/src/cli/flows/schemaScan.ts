@@ -4,15 +4,15 @@
  */
 import chalk from 'chalk'
 import { select, confirm } from '@inquirer/prompts'
-import { loadTargetDatabases, targetDatabaseLabel, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
-import { ingestSchema } from '../graphsql/application/schemaIngestion'
-import { vectorizeSchema } from '../graphsql/application/schemaVectorization'
-import { getIndexedModel } from '../graphsql/application/getIndexedModel'
-import { EmbeddingsFactory } from '../graphsql/infrastructure/embeddings/EmbeddingsFactory'
-import { EmbeddingProvider } from '../graphsql/infrastructure/embeddings/EmbeddingProvider'
-import { hasDescriptionsFile, loadDescriptions, DESCRIPTIONS_DIR } from '../graphsql/infrastructure/config/descriptions'
-import type { IEmbeddings } from '../graphsql/domain/ports/IEmbeddings'
-import { warnIfLocalModelMissing, withSpinner } from './ui'
+import { loadTargetDatabases, targetDatabaseLabel, type TargetDatabaseConfig } from '../../graphsql/infrastructure/config/targetDatabases'
+import { ingestSchema } from '../../graphsql/application/scan/schemaIngestion'
+import { vectorizeSchema } from '../../graphsql/application/scan/schemaVectorization'
+import { getIndexedModel } from '../../graphsql/application/scan/getIndexedModel'
+import { EmbeddingsFactory } from '../../graphsql/infrastructure/embeddings/EmbeddingsFactory'
+import { EmbeddingProvider } from '../../graphsql/infrastructure/embeddings/EmbeddingProvider'
+import { hasDescriptionsFile, loadDescriptions, DESCRIPTIONS_DIR } from '../../graphsql/infrastructure/config/descriptions'
+import type { IEmbeddings } from '../../graphsql/domain/ports/IEmbeddings'
+import { warnIfLocalModelMissing, withSpinner } from '../ui'
 
 export async function runSchemaScan(): Promise<void> {
   const targets = loadTargetDatabases()
@@ -56,7 +56,8 @@ export async function runSchemaScan(): Promise<void> {
   }
 }
 
-async function askDescriptions(): Promise<Map<string, string> | undefined> {
+/** Compartida con el escaneo inline del guardián de índice (targetSelection): misma pregunta en los dos sitios. */
+export async function askDescriptions(): Promise<Map<string, string> | undefined> {
   if (!hasDescriptionsFile()) {
     return undefined
   }

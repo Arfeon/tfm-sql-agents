@@ -6,8 +6,8 @@
  * no se ejecuta, un fallo de ejecución que no rompe la evaluación, y los agregados.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { evaluateGoldenSet, makeEvaluationDependencies, type EvaluationDependencies } from '../../src/graphsql/application/evaluateGoldenSet'
-import type { GoldenCase } from '../../src/graphsql/application/goldenSet'
+import { evaluateGoldenSet, makeEvaluationDependencies, type EvaluationDependencies } from '../../src/graphsql/application/evaluation/evaluateGoldenSet'
+import type { GoldenCase } from '../../src/graphsql/application/evaluation/goldenSet'
 import type { SchemaContext } from '../../src/graphsql/domain/schema/SchemaContext'
 import { TargetDatabaseFactory } from '../../src/graphsql/infrastructure/targetdb/TargetDatabaseFactory'
 import type { TargetDatabaseConfig } from '../../src/graphsql/infrastructure/config/targetDatabases'

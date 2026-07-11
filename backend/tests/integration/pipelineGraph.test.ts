@@ -9,7 +9,7 @@
  * Opt-in (`npm run test:integration`). Requiere docker compose up -d (Postgres).
  */
 import { describe, it, expect } from 'vitest'
-import { createSqlPipelineGraph, type PipelineDependencies } from '../../src/graphsql/graph/pipelineGraph'
+import { createSqlPipelineGraph, type PipelineDependencies } from '../../src/graphsql/orchestration/pipelineGraph'
 import { CheckpointerFactory } from '../../src/graphsql/infrastructure/checkpoint/CheckpointerFactory'
 import type { SchemaContext } from '../../src/graphsql/domain/schema/SchemaContext'
 import type { JudgeVerdict } from '../../src/graphsql/domain/sql/JudgeVerdict'

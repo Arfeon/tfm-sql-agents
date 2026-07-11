@@ -6,9 +6,9 @@ import boxen from 'boxen'
 import chalk from 'chalk'
 import { highlight } from 'cli-highlight'
 import { input } from '@inquirer/prompts'
-import { explainSchemaRetrieval, LIVE_RETRIEVAL_OPTIONS } from '../graphsql/application/schemaRetrieval'
-import { isExitRequest, withSpinner } from './ui'
-import type { RetrievalTrace, ExpandedTable } from '../graphsql/domain/schema/RetrievalTrace'
+import { explainSchemaRetrieval, LIVE_RETRIEVAL_OPTIONS } from '../../graphsql/application/retrieval/schemaRetrieval'
+import { isExitRequest, withSpinner } from '../ui'
+import type { RetrievalTrace, ExpandedTable } from '../../graphsql/domain/schema/RetrievalTrace'
 
 export async function runRetrievalDebug(): Promise<void> {
   const question = await input({ message: chalk.green('Pregunta a depurar (o "salir" para volver):') })
