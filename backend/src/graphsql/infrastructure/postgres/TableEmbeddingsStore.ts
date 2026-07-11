@@ -56,6 +56,14 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
     return { provider: row.provider, model: row.model, dimensions: row.dimensions, targetName: row.target_name ?? null }
   }
 
+  /** La descripción guardada junto a cada vector (SPEC-29): es la base del diff incremental. */
+  async getIndexedDescriptions(): Promise<Map<string, string | null>> {
+    const result = await this.client.query<{ table_name: string; description: string | null }>(
+      'SELECT table_name, description FROM table_embeddings',
+    )
+    return new Map(result.rows.map((row) => [row.table_name, row.description ?? null]))
+  }
+
   /** Reconstruye la tabla de embeddings con la dimensión indicada, anotando de qué BD es. */
   async prepare(dimensions: number, targetName: string): Promise<void> {
     if (!Number.isInteger(dimensions) || dimensions <= 0) {

@@ -1196,6 +1196,43 @@ cd backend && npm start   # con y sin los contenedores levantados; con y sin ín
 
 ---
 
+### SPEC-29 — Actualización incremental de descripciones (re-vectorización acotada) ✅ *Hecho*
+
+**Objetivo.** Hoy cualquier cambio en `descriptions/*.json` obliga a un escaneo completo: `prepare()` tira la tabla de embeddings y se re-vectoriza TODO el esquema, aunque solo haya cambiado la descripción de una tabla. En Arcadia es irrelevante (17 embeddings), pero el flujo real de trabajo con el ERP de ~800 tablas es **iterar descripciones** (escribirlas a mano hoy, generarlas con SPEC-27 mañana), y cada iteración cuesta 800 embeddings en la nube. Quiero re-vectorizar **solo las tablas cuya descripción cambió**, detectándolo automáticamente: el índice ya guarda la descripción junto a cada vector, así que el diff sale de comparar el JSON contra lo indexado.
+
+**Contrato.**
+
+- *Caso de uso* `updateIndexedDescriptions(target, deps)` en `application/scan/`. Guardas de entrada: debe existir índice y ser de la MISMA BD (`targetName`); si no, error claro pidiendo escaneo completo. Siempre con el **modelo del índice** (nunca se mezclan espacios vectoriales).
+- *Diff automático.* Comparando el JSON con la columna `description` del índice, tres conjuntos: **nuevas** (tabla indexada que ahora tiene descripción), **modificadas** (texto distinto) y **eliminadas** (la tenía y ya no está en el JSON — se re-embebe sin ella). Las entradas del JSON que no corresponden a ninguna tabla indexada se ignoran con aviso (típico: descripciones de otra BD, los ficheros de `descriptions/` se fusionan).
+- *Coste mínimo.* Solo las tablas del diff pasan por el proveedor de embeddings; **sin cambios, cero llamadas**. El `search_text` se recompone con las columnas reales (`composeSearchText` + `readTargetSchema`, que es SQL gratis) y se hace `upsert` fila a fila — nunca `prepare()`.
+- *Neo4j se actualiza a la vez.* La descripción vive en los dos almacenes (escaneo atómico, §6 de arquitectura): el mismo paso actualiza `Table.description` en el grafo para las mismas tablas. No puede divergir lo que ve la búsqueda de lo que muestra la traza.
+- *Caso de uso testable (D-05).* Deps inyectadas (leer índice, leer esquema, embeber, upsert, actualizar grafo); reales por defecto, dobles en los tests.
+- *CLI dentro del flujo de escaneo.* Al elegir BD en "Escanear", si hay índice de esa misma BD y fichero de descripciones, se pregunta el modo: **escaneo completo** (lo de siempre) o **solo actualizar descripciones**. El resumen dice qué pasó: nuevas/modificadas/eliminadas y cuántos embeddings se gastaron de cuántas tablas.
+- *Fuera de alcance.* Detectar cambios de esquema (columnas o tablas nuevas): para eso está el escaneo completo, y el modo incremental no lo sustituye — el propio CLI lo dice al ofrecer el modo.
+
+**Pasos**
+
+1. `TableEmbeddingsStore.getIndexedDescriptions()` (tabla → descripción o null) y `SchemaGraphManager.updateTableDescriptions(cambios)` (un `UNWIND` + `SET`).
+2. `application/scan/updateDescriptions.ts`: `diffDescriptions(indexadas, entrantes)` como función pura + el caso de uso con deps inyectadas.
+3. CLI (`flows/schemaScan.ts`): la pregunta de modo cuando aplica, y el resumen del diff.
+4. Tests unitarios con dobles: el diff (nuevas/modificadas/eliminadas/desconocidas), que solo se embebe lo cambiado, que sin cambios no se llama al proveedor, y las guardas (sin índice / índice de otra BD).
+5. Documentar en `docs/uso.md` §3.
+
+**Criterios de aceptación**
+
+- [X] Cambiar UNA descripción y actualizar re-embebe solo esa tabla (verificado en vivo sobre Arcadia: 1 embedding de 17, y la restauración es idempotente — repetir da 0)
+- [X] Sin cambios en el JSON, la actualización no llama al proveedor de embeddings (verificado en vivo: 0 embeddings, con las descripciones de otra BD ignoradas con aviso)
+- [X] Quitar una descripción del JSON re-embebe esa tabla sin descripción
+- [X] Neo4j y pgvector quedan con la misma descripción tras actualizar (verificado en vivo leyendo los dos almacenes)
+- [X] Sin índice, o con índice de otra BD, el modo incremental no se ofrece / falla con mensaje claro
+- [X] Suite unitaria verde con dobles, sin Docker ni proveedor de embeddings (230 tests)
+
+```bash
+cd backend && npm test    # unit del diff y del caso de uso (con dobles)
+```
+
+---
+
 ## Mejoras futuras (backlog, sin SPEC todavía)
 
 Ideas que veo venir pero que aún no voy a implementar. Las aparco aquí en una línea cada una para no engordar el SDD con specs prematuras: cuando decida hacer una, la promociono a su SPEC-xx con contrato y criterios, y la borro de esta lista.
