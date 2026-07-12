@@ -79,9 +79,16 @@ que la consulta salga en la sintaxis correcta.
 El modelo de lenguaje. Aquí lo uso para **generar** la SQL a partir de la pregunta y el contexto, y
 como **juez** que la revisa.
 
+### Ground truth
+La respuesta que doy por **correcta** al medir: la SQL de referencia de cada pregunta del golden
+set (y las tablas que debería tocar). Es la vara de medir de la execution accuracy y el recall —
+pero no es intocable: la escribo yo a mano, así que también tiene bugs (interpretaciones
+ambiguas, agrupaciones que fusionan filas distintas...) y también hay que auditarla, no solo al
+sistema (detalle en [arquitectura §10](design/arquitectura.md)).
+
 ### Golden set
-El conjunto de preguntas de evaluación, cada una con su SQL de referencia y las tablas que debería
-tocar. Es el "examen" con el que mido el sistema.
+El conjunto de preguntas de evaluación, cada una con su SQL de referencia (su ground truth) y las
+tablas que debería tocar. Es el "examen" con el que mido el sistema.
 
 ### top-K
 Quedarse con los **K primeros** de una lista ordenada. Aquí: las K tablas que ganan el ranking
