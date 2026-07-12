@@ -91,7 +91,9 @@ npm start
 ```
 
 La primera vez detecta que no hay nada montado y se ofrece a montarlo. Responde
-que sí y espera (**2-3 minutos** la primera vez; luego, segundos).
+que sí y espera: **2-3 minutos** en un equipo normal, **bastante más en equipos
+modestos** (luego, segundos). No te preocupes por el tiempo: el programa enseña
+el progreso de la carga en directo y, mientras vea actividad, sigue esperando.
 
 **Deberías ver**, en este orden:
 
@@ -99,15 +101,20 @@ que sí y espera (**2-3 minutos** la primera vez; luego, segundos).
 ⚠ Los contenedores de GraphSQL (Postgres y Neo4j) todavía no existen.
 ? ¿Los levanto ahora con la configuración por defecto? (Y/n)   ← di que sí
 
-Levantando la infraestructura. El primer arranque tarda unos 2-3 minutos...
- Container graphsql_postgres  Healthy
- Container graphsql_neo4j     Healthy
+Levantando la infraestructura. El primer arranque carga las bases de datos...
+⠹ Esperando a graphsql_postgres (1:24)
+    company 60    franchise 96    game 320   customer 2810  session 41200
+✔ Postgres y Neo4j healthy (2:41).
 
 ╭──────────────────────────────────────╮
 │  ✔ Infraestructura lista             │
 ╰──────────────────────────────────────╯
 ? ¿Arranco GraphSQL? (Y/n)                                     ← di que sí
 ```
+
+Si la carga se queda **parada de verdad** (2 minutos sin actividad), el programa
+te enseña las últimas líneas del log y te deja elegir: seguir esperando, reiniciar
+desde cero o salir a mirarlo a mano.
 
 > ¿Dice **"Docker no está en marcha"**? Abre Docker Desktop, espera el
 > "Engine running" y responde que sí al "¿Lo compruebo otra vez?".
@@ -169,7 +176,11 @@ consultas, la traza de recuperación, los gráficos…).
   `docker` (`sudo usermod -aG docker $USER` y reinicia sesión). Reintenta.
 - **"La infraestructura quedó a medio inicializar"** → pasa si el primer arranque se
   interrumpió (un Ctrl+C durante la carga). El propio programa te ofrece **reiniciarla
-  desde cero**: dile que sí y espera los 2-3 minutos (las bases de prueba se regeneran solas).
+  desde cero**: dile que sí y espera (las bases de prueba se regeneran solas).
+- **El primer arranque va lentísimo** → es normal en portátiles modestos o con Docker
+  recién instalado: la carga puede pasar de los 2-3 minutos habituales. Mientras los
+  contadores del progreso cambien, va bien — el programa no da error por tardar, solo
+  si deja de ver actividad.
 - **El puerto 5432, 7474 o 7687 está ocupado** → tienes otro PostgreSQL/Neo4j corriendo
   en tu máquina; cómo resolverlo está en la [guía avanzada](instalacion-avanzada.md).
 - **Con LM Studio no responde o va vacío** → asegúrate de tener cargados el modelo de
