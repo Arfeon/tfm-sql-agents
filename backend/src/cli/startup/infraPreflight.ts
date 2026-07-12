@@ -114,6 +114,12 @@ export async function ensureInfrastructureReady(): Promise<boolean> {
   if (states === null) {
     console.log(chalk.yellow('⚠ Los contenedores de GraphSQL (Postgres y Neo4j) todavía no existen.'))
   } else {
+    // Atajo del caso "volumen a medias": si Postgres ya se saltó el init y no hay
+    // marcador, un `up --wait` solo puede acabar en unhealthy tras ~6 min de espera
+    // (start_period + reintentos). Mejor diagnosticarlo ya y ofrecer el reset.
+    if (await isInitIncomplete() && (await initWasSkippedOnDirtyVolume())) {
+      return recoverFromIncompleteInit(composeDir)
+    }
     console.log(chalk.yellow('⚠ Los contenedores de GraphSQL existen pero no están listos:'))
     CONTAINERS.forEach((name, i) => console.log(chalk.dim(`    ${name}: ${states[i]}`)))
   }
@@ -157,17 +163,34 @@ export async function ensureInfrastructureReady(): Promise<boolean> {
  */
 async function isInitIncomplete(): Promise<boolean> {
   try {
+    // to_regclass devuelve NULL si la tabla no existe: pregunta sin ensuciar el log
+    // de Postgres con ERRORs (a diferencia de un SELECT directo sobre la tabla).
     const { stdout } = await run('docker', [
       'exec', 'graphsql_postgres',
       'psql', '-U', 'postgres', '-d', 'graphsql_memory', '-tAc',
-      'SELECT 1 FROM setup_init_complete LIMIT 1',
+      "SELECT to_regclass('public.setup_init_complete') IS NOT NULL",
     ])
-    return !stdout.includes('1')
+    return !stdout.includes('t')
   } catch {
     // El contenedor no corre o la BD no existe: también cuenta como init incompleto
     // si el contenedor existe; si ni existe, el flujo normal ya lo cubre.
     const states = await getContainersState()
     return states !== null
+  }
+}
+
+/**
+ * La firma inequívoca del volumen sucio: Postgres dice "Skipping initialization" cuando
+ * el volumen NO está vacío (un init anterior interrumpido). Distingue este caso de un
+ * primer init legítimo EN CURSO (que diría "will be initialized"), donde el marcador
+ * tampoco existe aún pero no hay que tocar nada.
+ */
+async function initWasSkippedOnDirtyVolume(): Promise<boolean> {
+  try {
+    const { stdout, stderr } = await run('docker', ['logs', '--tail', '300', 'graphsql_postgres'])
+    return `${stdout}\n${stderr}`.includes('Skipping initialization')
+  } catch {
+    return false
   }
 }
 
