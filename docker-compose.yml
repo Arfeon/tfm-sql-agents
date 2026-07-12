@@ -25,9 +25,11 @@ services:
     healthcheck:
       # -h localhost fuerza TCP: el servidor temporal del init solo escucha por
       # socket Unix, así que el check no da "healthy" hasta que el init ha acabado.
-      # El start_period cubre el primer arranque (crear las BDs y cargar Arcadia y
-      # Nebula tarda más de un minuto); durante ese periodo los fallos no cuentan.
-      test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d graphsql_memory"]
+      # La segunda condición exige el marcador que 01-init.sh crea AL FINAL: un init
+      # interrumpido (volumen a medias, los scripts no se reintentan) queda unhealthy
+      # y visible, en vez de "sano" pero sin datos. El start_period cubre el primer
+      # arranque (crear las BDs y cargar Arcadia y Nebula tarda ~2 min).
+      test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d graphsql_memory && psql -U postgres -d graphsql_memory -tAc 'SELECT 1 FROM setup_init_complete LIMIT 1' | grep -q 1"]
       interval: 5s
       timeout: 5s
       retries: 12
