@@ -1,203 +1,147 @@
 # Guía de instalación
 
-Cómo dejar el entorno listo desde cero: los dos servidores (PostgreSQL + Neo4j) con
-Docker y las bases de pruebas **Arcadia** (17 tablas, la de uso diario) y **Nebula**
-(66 tablas, la de la prueba de escala) ya cargadas. Sigue los pasos en orden. Solo hay
-**un `npm install`** (en `backend/`); todo lo demás es Docker y el `.env`. Al terminar,
-la [guía de uso](uso.md) explica paso a paso cada función.
+De cero a la primera consulta **sin tocar Docker**: el propio programa comprueba y
+levanta su infraestructura, y te va guiando — tú solo respondes que sí. Cada paso
+termina con un *"deberías ver"* para que sepas que vas bien.
 
-## 1. Requisitos previos
+> ¿Prefieres controlar cada pieza a mano (docker compose, verificaciones, regenerar
+> datos)? Eso vive en la [guía avanzada](instalacion-avanzada.md). Para usar el
+> programa una vez instalado, la [guía de uso](uso.md).
 
-Instala estas tres cosas (si no las tienes ya):
+## 1. Instala los requisitos (una sola vez)
 
-- **Docker Desktop** — para levantar PostgreSQL y Neo4j sin instalarlos a mano.
-  https://www.docker.com/products/docker-desktop/
-- **Node.js 20 o superior** — para el seeder, el backend y los tests.
-- **Git** — para clonar el repositorio.
+- **Docker Desktop** — https://www.docker.com/products/docker-desktop/
+  Tras instalarlo, ábrelo y espera a que el icono diga **"Engine running"**. No
+  necesitas saber usarlo: el programa se encarga.
+- **Node.js 20 o superior** — https://nodejs.org (la versión LTS vale).
+- **Git** — https://git-scm.com
 
-Comprueba que Docker y Node responden:
+Comprueba que responden:
 
 ```bash
 docker --version
 node --version
 ```
 
-## 2. Clonar el proyecto y preparar el `.env`
+**Deberías ver** dos números de versión (p. ej. `Docker version 27...` y `v20...` o
+superior). Si alguno falla, revisa esa instalación antes de seguir.
+
+## 2. Descarga el proyecto y prepara la configuración
 
 ```bash
-git clone <url-del-repo>
+git clone https://github.com/Arfeon/tfm-sql-agents.git
 cd tfm-sql-agents
 cp .env.example .env
+cp descriptions/descriptions.example.json descriptions/descriptions.json
 ```
 
-Abre el `.env` y configura dos cosas:
+El segundo `cp` activa las **descripciones de tablas** de la base de prueba: mejoran
+mucho la búsqueda (verás por qué cuando preguntes por la "lista de deseos" y el
+sistema encuentre una tabla llamada `t_042`).
 
-**a) Las contraseñas de las bases de datos** (la que tú quieras, pero **apúntala**
-porque la usarás en Docker):
+Ahora abre el `.env` y configura **solo el proveedor de IA** — todo lo demás puede
+quedarse como está. Dos opciones:
 
-```ini
-POSTGRES_PASSWORD=TuContraseña
-NEO4J_PASSWORD=TuContraseña
-```
-
-> El `docker-compose.yml` ya viene con una contraseña por defecto. Si la cambias en
-> el `.env`, cámbiala también en `docker-compose.yml` para que coincidan.
-
-**b) El proveedor de LLM y de embeddings** — sin esto la base de datos se levanta,
-pero el CLI no puede generar SQL ni vectorizar el esquema. Dos opciones:
+**a) Nube (OpenAI)** — la rápida. Pega tu clave y listo (el resto ya viene puesto):
 
 ```ini
-# Opción nube (OpenAI): solo necesitas la API key
-LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
-EMBEDDING_PROVIDER=openai
+```
 
-# Opción local (LM Studio): sin coste ni API key, necesitas LM Studio corriendo
-# con un modelo de chat Y uno de embeddings cargados A LA VEZ (el CLI avisa si falta uno).
-# Modelo de chat local recomendado: Qwen2.5-Coder-14B (especialista en SQL, sin razonamiento lento).
+**b) 100% local (LM Studio)** — sin coste y sin que nada salga de tu máquina:
+instala https://lmstudio.ai, descarga y carga **a la vez** un modelo de chat
+(recomendado: `Qwen2.5-Coder-14B`) y uno de embeddings (`bge-m3`), arranca su
+servidor local, y en el `.env` cambia:
+
+```ini
 LLM_PROVIDER=local
-LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1
-LMSTUDIO_MODEL=qwen2.5-coder-14b-instruct
 EMBEDDING_PROVIDER=local
-LMSTUDIO_EMBEDDING_MODEL=text-embedding-bge-m3
 ```
 
-Se pueden mezclar (p. ej. chat en OpenAI y embeddings locales, que es como está
-medida la evaluación del proyecto). El `.env.example` documenta todas las variables,
-incluidos los modelos concretos de cada proveedor.
-
-## 3. Levantar las bases de datos con Docker
-
-Hay dos maneras, y las dos acaban en el mismo sitio:
-
-**a) Arranque guiado (recomendado si Docker te suena a chino).** Sáltate este paso:
-cuando ejecutes el `npm start` del paso 6, el CLI comprueba solo si Docker está en
-marcha y si los contenedores existen, y si faltan se ofrece a crearlos con la
-configuración por defecto. Solo tienes que responder que sí.
-
-**b) Arranque manual.** Desde la raíz del proyecto:
-
-```bash
-docker compose up -d --wait
-```
-
-El `--wait` hace que el comando no termine hasta que los dos servicios están
-levantados **y sanos** (`healthy`): cuando te devuelve el prompt, ya puedes usar
-el CLI. El primer arranque tarda **unos 2-3 minutos** (crea las bases de datos y
-carga los datos de prueba; si además tiene que descargar las imágenes de Docker,
-algo más). Los siguientes arranques son cuestión de segundos. Esto arranca dos
-servicios:
-
-| Servicio   | Qué es                        | Dónde lo encuentras            |
-|------------|-------------------------------|--------------------------------|
-| `postgres` | PostgreSQL **con pgvector**   | `localhost:5432`               |
-| `neo4j`    | Base de datos de grafos Neo4j | `localhost:7474` (navegador)   |
-
-Si en algún momento quieres comprobar su estado:
-
-```bash
-docker compose ps
-```
-
-### Sobre pgvector
-
-**No tienes que instalar nada.** La imagen `pgvector/pgvector:pg16` ya trae pgvector
-incluido, y un script de arranque (`setup/infra/postgres/init/01-init.sh`) lo activa
-automáticamente la primera vez. Ese mismo script crea las tres bases de datos:
-
-- `graphsql_memory` → memoria interna del sistema (índice vectorial y checkpoints).
-- `arcadia` → la base de pruebas que consultamos a diario (17 tablas).
-- `nebula` → la base grande sintética de la prueba de escala (66 tablas).
-
-## 4. Verificar que la base de datos está lista
-
-El arranque del paso anterior (da igual si guiado o manual) **ya carga las tablas
-y los datos automáticamente**. No hay que ejecutar nada más. Al arrancar por primera vez,
-Postgres detecta el volumen vacío y ejecuta en orden:
-
-Todo lo orquesta `01-init.sh`, que crea las BDs `arcadia` y `nebula`, activa pgvector, y
-lanza en este orden:
-
-1. `02-schema.sql` — crea las 17 tablas de `arcadia`.
-2. `04-nebula-schema.sql` + `05-nebula-dataset.sql` — esquema (66 tablas) y datos
-   ligeros de `nebula`, la BD grande sintética para la prueba de escala (SPEC-17).
-3. `03-dataset.sql` — inserta los datos de `arcadia` (60 compañías, 320 juegos, 5 000
-   clientes, 80 000 sesiones de juego…) **al final**, con un monitor de progreso en la
-   terminal (es el paso que tarda los 1-3 minutos del primer arranque).
-
-Puedes comprobarlo con:
-
-```bash
-docker exec graphsql_postgres psql -U postgres -d arcadia -c "SELECT COUNT(*) FROM game;"
-# Debe devolver 320
-```
-
-## 5. Instalar dependencias y verificar
-
-Un solo `npm install`, en `backend/` (los seeders y los scripts de evaluación usan
-estas mismas dependencias; no hay más `package.json` en el repo):
+## 3. Arranca — el programa hace el resto
 
 ```bash
 cd backend
 npm install
-npm test                  # tests unitarios (rápidos, no necesitan Docker)
-npm run test:diagnostic   # comprueba Postgres, las 17 tablas de arcadia y pgvector
+npm start
 ```
 
-Si los dos comandos salen en verde, el entorno está listo.
+La primera vez detecta que no hay nada montado y se ofrece a montarlo. Responde
+que sí y espera (**2-3 minutos** la primera vez; luego, segundos).
 
-## 6. Primer arranque: escanear el esquema
+**Deberías ver**, en este orden:
 
-Antes de la primera consulta hay que **escanear y vectorizar** el esquema (una vez,
-y cada vez que cambie):
+```
+⚠ Los contenedores de GraphSQL (Postgres y Neo4j) todavía no existen.
+? ¿Los levanto ahora con la configuración por defecto? (Y/n)   ← di que sí
 
-```bash
-npm start        # → menú → "Escanear el esquema de la BD objetivo"
+Levantando la infraestructura. El primer arranque tarda unos 2-3 minutos...
+ Container graphsql_postgres  Healthy
+ Container graphsql_neo4j     Healthy
+
+╭──────────────────────────────────────╮
+│  ✔ Infraestructura lista             │
+╰──────────────────────────────────────╯
+? ¿Arranco GraphSQL? (Y/n)                                     ← di que sí
 ```
 
-Elige Arcadia, acepta incluir las descripciones y confirma. A partir de ahí ya puedes
-consultar en lenguaje natural — el paso a paso está en la [guía de uso](uso.md).
+> ¿Dice **"Docker no está en marcha"**? Abre Docker Desktop, espera el
+> "Engine running" y responde que sí al "¿Lo compruebo otra vez?".
 
-## 7. (Opcional) Regenerar los datos
+Después elige tu proveedor de IA (sale preseleccionado el del `.env`) y llegas al
+menú principal.
 
-Los `*-dataset.sql` commiteados bastan para reproducir las BDs. Los seeders reproducibles
-(seed=42) viven en `backend/src/datasets/` (`seedArcadia.ts`, `seedNebula.ts`) y usan las
-dependencias del propio backend (un solo `npm install`). Solo necesitas tocarlos si cambias
-el esquema o el volumen de datos:
+## 4. Escanea el esquema (solo la primera vez)
 
-```bash
-# Desde el directorio backend/
-npm run seed -- --truncate          # repuebla arcadia (TARGET_DB_1)
-npm run seed:nebula -- --reset      # recrea el esquema de nebula y la repuebla (TARGET_DB_2)
+El menú te marca el camino — las opciones que aún no pueden funcionar salen
+apagadas con el motivo al lado:
 
-# Exportar los dataset.sql (arcadia y/o nebula)
-docker exec graphsql_postgres pg_dump -U postgres --data-only --column-inserts --no-comments arcadia \
-  > ../setup/infra/postgres/init/sql/03-dataset.sql
-docker exec graphsql_postgres pg_dump -U postgres --data-only --column-inserts --no-comments nebula \
-  > ../setup/infra/postgres/init/sql/05-nebula-dataset.sql
+```
+? ¿Qué quieres hacer?
+❯ Escanear el esquema de la BD objetivo ← empieza por aquí (primera vez)
+- Consultar en lenguaje natural — necesita el esquema escaneado y vectorizado
 ```
 
-Después haz commit de los archivos modificados y el próximo `docker compose up`
-desde cero ya usará los datos nuevos.
+Elige **Escanear** → base **arcadia** → incluye las descripciones (dile que sí) →
+confirma. Tarda unos segundos.
 
-## Comandos útiles
+**Deberías ver** algo como:
 
-```bash
-docker compose stop          # parar las bases de datos (conserva los datos)
-docker compose start         # volver a arrancarlas
-docker compose down          # parar y borrar los contenedores (conserva los datos)
-docker compose down -v       # borrar TODO, incluidos los datos (empezar de cero)
-docker compose logs -f neo4j # ver los logs de un servicio
+```
+✔ Escaneando "postgresql / arcadia" e ingiriendo en Neo4j…
+  17 tablas, ... columnas, ... relaciones en Neo4j.
+✔ Vectorizando el esquema en pgvector…
+  17 tablas vectorizadas (...)
 ```
 
-## Problemas frecuentes
+Lo importante: **17 tablas** en las dos líneas, y ningún error rojo.
 
-- **El puerto 5432 o 7687 está ocupado**: tienes otro PostgreSQL/Neo4j corriendo.
-  Páralo, o cambia el puerto en `docker-compose.yml` (lado izquierdo del `:`).
-- **Error de contraseña al poblar**: la contraseña del `.env` no coincide con la del
-  `docker-compose.yml`. Revisa que sean iguales.
-- **`npm install` falla con `node-gyp`**: asegúrate de tener Node.js 20+ y que
-  no hay versiones conflictivas instaladas.
-- **Cambié el init pero no se aplica**: los scripts de `setup/infra/postgres/init/` solo se
-  ejecutan cuando el volumen está vacío. Haz `docker compose down -v` y vuelve a
-  levantar para forzarlo.
+## 5. Tu primera consulta
+
+Menú → **Consultar en lenguaje natural** → escribe:
+
+> ¿Cuántos clientes hay en cada región?
+
+**Deberías ver** dos cajas — la consulta SQL propuesta y el veredicto del Judge — y
+un menú para decidir. Elige **Aprobar y ejecutar** y, como el resultado es
+"categoría → valor", te ofrecerá verlo como gráfico:
+
+```
+Oceania         ████████████████████████████ 883
+North America   ██████████████████████████ 835
+Europe          █████████████████████████ 823
+```
+
+**Listo.** A partir de aquí, la [guía de uso](uso.md) explica cada función (afinar
+consultas, la traza de recuperación, los gráficos…).
+
+## Si algo no cuadra
+
+- **"Docker no está en marcha"** → abre Docker Desktop, espera "Engine running", reintenta.
+- **El puerto 5432, 7474 o 7687 está ocupado** → tienes otro PostgreSQL/Neo4j corriendo
+  en tu máquina; cómo resolverlo está en la [guía avanzada](instalacion-avanzada.md).
+- **Con LM Studio no responde o va vacío** → asegúrate de tener cargados el modelo de
+  chat **y** el de embeddings a la vez, y su servidor arrancado.
+- **Error de credenciales con OpenAI** → revisa la `OPENAI_API_KEY` del `.env`.
+- Cualquier otra cosa → [guía avanzada](instalacion-avanzada.md), sección de problemas
+  frecuentes.

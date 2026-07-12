@@ -1,0 +1,133 @@
+# Guía avanzada de instalación e infraestructura
+
+Todo lo que la [guía de instalación](instalacion.md) hace por ti automáticamente,
+explicado para controlarlo a mano: levantar la infraestructura con Docker Compose,
+verificar cada pieza, entender el init y regenerar los datos. Nada de esto es
+necesario para usar GraphSQL — es para quien quiere mirar debajo del capó.
+
+## Levantar la infraestructura a mano
+
+Desde la raíz del proyecto:
+
+```bash
+docker compose up -d --wait
+```
+
+El `--wait` hace que el comando no termine hasta que los dos servicios están
+levantados **y sanos** (`healthy`): cuando te devuelve el prompt, ya puedes usar
+el CLI. El primer arranque tarda **unos 2-3 minutos** (crea las bases de datos y
+carga los datos de prueba; si además tiene que descargar las imágenes de Docker,
+algo más). Los siguientes arranques son cuestión de segundos.
+
+Esto arranca dos servicios:
+
+| Servicio   | Qué es                        | Dónde lo encuentras            |
+|------------|-------------------------------|--------------------------------|
+| `postgres` | PostgreSQL **con pgvector**   | `localhost:5432`               |
+| `neo4j`    | Base de datos de grafos Neo4j | `localhost:7474` (navegador)   |
+
+Para comprobar su estado en cualquier momento:
+
+```bash
+docker compose ps
+```
+
+Las contraseñas salen del `.env` de la raíz: Docker Compose y el backend leen el
+**mismo fichero**, así que siempre coinciden. Si cambias una contraseña con los
+volúmenes ya creados, tendrás que empezar de cero (`docker compose down -v`),
+porque Postgres/Neo4j se inicializan con la contraseña del primer arranque.
+
+### Sobre pgvector
+
+**No hay que instalar nada.** La imagen `pgvector/pgvector:pg16` ya trae pgvector
+incluido, y el script de arranque lo activa automáticamente la primera vez.
+
+## Qué hace el init (primer arranque)
+
+Al detectar el volumen vacío, Postgres ejecuta `setup/infra/postgres/init/01-init.sh`,
+que crea las tres bases de datos y lanza en este orden:
+
+1. `02-schema.sql` — crea las 17 tablas de `arcadia`.
+2. `04-nebula-schema.sql` + `05-nebula-dataset.sql` — esquema (66 tablas) y datos
+   ligeros de `nebula`, la BD grande sintética de la prueba de escala (SPEC-17).
+3. `03-dataset.sql` — inserta los datos de `arcadia` (60 compañías, 320 juegos, 5 000
+   clientes, 80 000 sesiones de juego…) **al final**, con un monitor de progreso en la
+   terminal (es el paso que tarda los 2-3 minutos del primer arranque).
+
+Las tres bases resultantes:
+
+- `graphsql_memory` → memoria interna del sistema (índice vectorial y checkpoints).
+- `arcadia` → la base de pruebas de uso diario (17 tablas).
+- `nebula` → la base grande sintética de la prueba de escala (66 tablas).
+
+## Verificar cada pieza
+
+```bash
+# ¿Los datos de Arcadia están cargados?
+docker exec graphsql_postgres psql -U postgres -d arcadia -c "SELECT COUNT(*) FROM game;"
+# Debe devolver 320
+
+# Tests unitarios (no necesitan Docker) y diagnóstico del entorno (sí lo necesita)
+cd backend
+npm test                  # 200+ tests en verde, en segundos
+npm run test:diagnostic   # comprueba Postgres, las 17 tablas de arcadia y pgvector
+```
+
+También puedes mirar el grafo del esquema en el navegador de Neo4j
+(`localhost:7474`, usuario y contraseña del `.env`):
+
+```cypher
+MATCH (t:Table)-[r:REFERENCES]->(other:Table) RETURN t, r, other
+```
+
+## Comandos útiles del día a día
+
+```bash
+docker compose stop          # parar las bases de datos (conserva los datos)
+docker compose start         # volver a arrancarlas
+docker compose down          # parar y borrar los contenedores (conserva los datos)
+docker compose down -v       # borrar TODO, incluidos los datos (empezar de cero)
+docker compose logs -f neo4j # ver los logs de un servicio
+```
+
+> Ojo con `docker compose up` **sin `-d`**: deja el log en primer plano y un Ctrl+C
+> ahí **detiene los contenedores**. Para el uso normal, `-d --wait` (o simplemente
+> deja que `npm start` lo gestione).
+
+## (Opcional) Regenerar los datos de prueba
+
+Los `*-dataset.sql` commiteados bastan para reproducir las BDs. Los seeders
+reproducibles (seed=42) viven en `backend/src/datasets/` y usan las dependencias del
+propio backend. Solo hacen falta si cambias el esquema o el volumen de datos:
+
+```bash
+# Desde backend/
+npm run seed -- --truncate          # repuebla arcadia (TARGET_DB_1)
+npm run seed:nebula -- --reset      # recrea el esquema de nebula y la repuebla (TARGET_DB_2)
+
+# Exportar los dataset.sql (arcadia y/o nebula)
+docker exec graphsql_postgres pg_dump -U postgres --data-only --column-inserts --no-comments arcadia \
+  > ../setup/infra/postgres/init/sql/03-dataset.sql
+docker exec graphsql_postgres pg_dump -U postgres --data-only --column-inserts --no-comments nebula \
+  > ../setup/infra/postgres/init/sql/05-nebula-dataset.sql
+```
+
+Después haz commit de los archivos modificados y el próximo arranque desde cero ya
+usará los datos nuevos.
+
+## Problemas frecuentes
+
+- **El puerto 5432 o 7687 está ocupado**: tienes otro PostgreSQL/Neo4j corriendo.
+  Páralo, o cambia el puerto publicado en `docker-compose.yml` (el lado izquierdo
+  del `:`) y su variable correspondiente en el `.env`.
+- **Error de contraseña al conectar**: cambiaste la contraseña del `.env` con los
+  volúmenes ya inicializados. `docker compose down -v` y vuelve a empezar (se pierden
+  los datos, que se regeneran solos).
+- **Cambié el init pero no se aplica**: los scripts de `setup/infra/postgres/init/`
+  solo se ejecutan cuando el volumen está vacío. `docker compose down -v` y arranca
+  de nuevo.
+- **`npm install` falla con `node-gyp`**: asegúrate de tener Node.js 20+ y de que no
+  hay versiones conflictivas instaladas.
+- **El contenedor sale `unhealthy` en el primer arranque**: el healthcheck de Postgres
+  da margen (`start_period`) para la carga inicial de datos; si tu máquina es muy
+  lenta y aborta, sube el `start_period` en `docker-compose.yml` y reinténtalo.
