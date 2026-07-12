@@ -39,8 +39,10 @@ El segundo `cp` activa las **descripciones de tablas** de la base de prueba: mej
 mucho la búsqueda (verás por qué cuando preguntes por la "lista de deseos" y el
 sistema encuentre una tabla llamada `t_042`).
 
-Ahora abre el `.env` y configura **solo el proveedor de IA** — todo lo demás puede
-quedarse como está. Dos opciones:
+El `.env` ya viene listo para las bases de demo **arcadia** y **nebula**: los nombres,
+las conexiones y las contraseñas (un valor local por defecto) están puestos y funcionan
+tal cual — no toques nada de eso. Lo **único** que tienes que configurar es el
+**proveedor de IA**. Dos opciones:
 
 **a) Nube (OpenAI)** — la rápida. Pega tu clave y listo (el resto ya viene puesto):
 
