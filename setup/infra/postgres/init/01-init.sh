@@ -88,7 +88,7 @@ echo "════════════════════════�
 echo "  arcadia — datos cargados (seed=42)"
 echo "══════════════════════════════════════"
 psql --username "$POSTGRES_USER" --dbname arcadia -c "
-    SELECT tablename AS tabla, n_live_tup AS filas
+    SELECT relname AS tabla, n_live_tup AS filas
     FROM   pg_stat_user_tables
     WHERE  schemaname = 'public'
     ORDER  BY filas DESC;

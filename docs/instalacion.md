@@ -137,6 +137,10 @@ consultas, la traza de recuperación, los gráficos…).
 
 ## Si algo no cuadra
 
+- **Docker Desktop pide instalar WSL2** → en Windows es un requisito del propio Docker
+  (necesita un backend Linux para correr los contenedores; en Windows Home es
+  obligatorio, no hay alternativa). Instálalo con `wsl --install` en una consola como
+  administrador, reinicia el ordenador y vuelve a abrir Docker Desktop.
 - **"Docker no está en marcha"** → abre Docker Desktop, espera "Engine running", reintenta.
 - **"La infraestructura quedó a medio inicializar"** → pasa si el primer arranque se
   interrumpió (un Ctrl+C durante la carga). El propio programa te ofrece **reiniciarla

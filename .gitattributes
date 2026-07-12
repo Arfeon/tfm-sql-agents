@@ -1,0 +1,5 @@
+# Los scripts de init de Postgres se ejecutan dentro de un contenedor Linux
+# (docker-entrypoint-initdb.d): con CRLF fallan con "bad interpreter". Fuerzo
+# LF pase lo que pase con el autocrlf de quien comitee, en vez de confiar en
+# la configuración local de cada uno.
+*.sh text eol=lf
