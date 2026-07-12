@@ -91,9 +91,10 @@ npm start
 ```
 
 La primera vez detecta que no hay nada montado y se ofrece a montarlo. Responde
-que sí y espera: **2-3 minutos** en un equipo normal, **bastante más en equipos
-modestos** (luego, segundos). No te preocupes por el tiempo: el programa enseña
-el progreso de la carga en directo y, mientras vea actividad, sigue esperando.
+que sí y espera **en torno a un minuto** (la primerísima vez se suma la descarga
+de las imágenes de Docker, que depende de tu conexión; luego, segundos). No te
+preocupes por el tiempo: el programa enseña el progreso en directo y, mientras
+vea actividad, sigue esperando.
 
 **Deberías ver**, en este orden:
 
@@ -102,9 +103,8 @@ el progreso de la carga en directo y, mientras vea actividad, sigue esperando.
 ? ¿Los levanto ahora con la configuración por defecto? (Y/n)   ← di que sí
 
 Levantando la infraestructura. El primer arranque carga las bases de datos...
-⠹ Esperando a graphsql_postgres (1:24)
-    company 60    franchise 96    game 320   customer 2810  session 41200
-✔ Postgres y Neo4j healthy (2:41).
+⠹ Esperando a graphsql_neo4j (0:38)
+✔ Postgres y Neo4j healthy (0:52).
 
 ╭──────────────────────────────────────╮
 │  ✔ Infraestructura lista             │
@@ -177,10 +177,9 @@ consultas, la traza de recuperación, los gráficos…).
 - **"La infraestructura quedó a medio inicializar"** → pasa si el primer arranque se
   interrumpió (un Ctrl+C durante la carga). El propio programa te ofrece **reiniciarla
   desde cero**: dile que sí y espera (las bases de prueba se regeneran solas).
-- **El primer arranque va lentísimo** → es normal en portátiles modestos o con Docker
-  recién instalado: la carga puede pasar de los 2-3 minutos habituales. Mientras los
-  contadores del progreso cambien, va bien — el programa no da error por tardar, solo
-  si deja de ver actividad.
+- **El primer arranque va lento** → en portátiles modestos o con Docker recién
+  instalado puede tardar más del minuto habitual. Mientras el progreso en pantalla
+  cambie, va bien — el programa no da error por tardar, solo si deja de ver actividad.
 - **El puerto 5432, 7474 o 7687 está ocupado** → tienes otro PostgreSQL/Neo4j corriendo
   en tu máquina; cómo resolverlo está en la [guía avanzada](instalacion-avanzada.md).
 - **Con LM Studio no responde o va vacío** → asegúrate de tener cargados el modelo de
