@@ -48,12 +48,13 @@ La pieza central es el **Schema Agent (GraphRAG)**: en vez de darle al LLM el es
 
 ## Puesta en marcha
 
-Necesitas **Node.js 20+**, **Docker Desktop** (Compose v2) y un proveedor de LLM (ver abajo). Tres pasos; el detalle está en la [guía de instalación](docs/instalacion.md):
+Necesitas **Node.js 20+**, **Docker Desktop** (Compose v2) y un proveedor de LLM (ver abajo). Cuatro comandos; el paso a paso con qué deberías ver en cada punto está en la [guía de instalación](docs/instalacion.md):
 
 ```bash
-cp .env.example .env         # 1. contraseñas y proveedor de LLM/embeddings
-cd backend && npm install    # 2. el ÚNICO npm install del repo
-npm start                    # 3. abre el CLI
+cp .env.example .env         # 1. proveedor de LLM/embeddings (lo demás ya funciona)
+cp descriptions/descriptions.example.json descriptions/descriptions.json   # 2. descripciones de la BD de prueba
+cd backend && npm install    # 3. el ÚNICO npm install del repo
+npm start                    # 4. abre el CLI, que levanta y comprueba el resto
 ```
 
 La infraestructura (Postgres con las BDs de prueba y Neo4j) se puede levantar de dos maneras, y las dos acaban en el mismo sitio:
@@ -111,7 +112,8 @@ Todo esto queda **fuera del MVP** pero está especificado; el detalle por compon
 
 ## Documentación
 
-- [`docs/instalacion.md`](docs/instalacion.md) — montar el entorno desde cero (Docker, `.env`, dependencias).
+- [`docs/instalacion.md`](docs/instalacion.md) — instalar desde cero por el camino guiado, sin tocar Docker, con un "deberías ver" en cada paso.
+- [`docs/instalacion-avanzada.md`](docs/instalacion-avanzada.md) — la infraestructura a mano: Docker Compose, verificaciones, el init y regenerar datos.
 - [`docs/uso.md`](docs/uso.md) — guía de uso paso a paso: consultar, escanear, depurar.
 - [`docs/design/arquitectura.md`](docs/design/arquitectura.md) — diseño y decisiones técnicas.
 - [`docs/design/SPEC.md`](docs/design/SPEC.md) — especificación por componente (SDD).
