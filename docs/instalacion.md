@@ -10,9 +10,8 @@ termina con un *"deberías ver"* para que sepas que vas bien.
 
 ## 1. Instala los requisitos (una sola vez)
 
-- **Docker Desktop** — https://www.docker.com/products/docker-desktop/
-  Tras instalarlo, ábrelo y espera a que el icono diga **"Engine running"**. No
-  necesitas saber usarlo: el programa se encarga.
+- **Docker** — para levantar PostgreSQL y Neo4j sin instalarlos a mano (ver la nota
+  de tu sistema operativo justo abajo).
 - **Node.js 20 o superior** — https://nodejs.org (la versión LTS vale).
 - **Git** — https://git-scm.com
 
@@ -25,6 +24,29 @@ node --version
 
 **Deberías ver** dos números de versión (p. ej. `Docker version 27...` y `v20...` o
 superior). Si alguno falla, revisa esa instalación antes de seguir.
+
+### Notas por sistema operativo
+
+**Windows**
+- **Docker Desktop** (https://www.docker.com/products/docker-desktop/): instálalo, ábrelo
+  y espera a que el icono diga **"Engine running"**. Pide **WSL2** — es requisito del
+  propio Docker; si te lo reclama, `wsl --install` en una consola como administrador,
+  reinicia y vuelve a abrir Docker Desktop.
+- **Abre el proyecto en PowerShell o en Windows Terminal**, **no en Git Bash**. Git Bash
+  se come los colores y puede romper los menús de flechas (no es un terminal nativo de
+  Windows). En PowerShell verás la interfaz completa.
+
+**macOS**
+- **Docker Desktop** (https://www.docker.com/products/docker-desktop/): instálalo y
+  ábrelo. La terminal nativa (Terminal o iTerm) va perfecta, sin nada extra.
+
+**Linux** — el entorno más suave (es el objetivo de despliegue del proyecto):
+- **Docker Engine + Compose v2** (no hace falta Docker Desktop): sigue
+  https://docs.docker.com/engine/install/.
+- Añade tu usuario al grupo `docker` (`sudo usermod -aG docker $USER` y reinicia la
+  sesión) para no necesitar `sudo`. Si no, los comandos `docker` fallan con *"permission
+  denied"* — y el programa lo verá como *"Docker no está en marcha"*, que despista.
+- Terminal nativa, colores y menús sin problemas.
 
 ## 2. Descarga el proyecto y prepara la configuración
 
@@ -139,11 +161,12 @@ consultas, la traza de recuperación, los gráficos…).
 
 ## Si algo no cuadra
 
-- **Docker Desktop pide instalar WSL2** → en Windows es un requisito del propio Docker
-  (necesita un backend Linux para correr los contenedores; en Windows Home es
-  obligatorio, no hay alternativa). Instálalo con `wsl --install` en una consola como
-  administrador, reinicia el ordenador y vuelve a abrir Docker Desktop.
-- **"Docker no está en marcha"** → abre Docker Desktop, espera "Engine running", reintenta.
+- **Lo veo sin colores, o los menús de flechas no responden** (Windows) → lo abriste en
+  Git Bash; ciérralo y ábrelo en **PowerShell o Windows Terminal** (ver la nota de Windows
+  arriba). No es un fallo del programa: Git Bash no expone un terminal nativo.
+- **"Docker no está en marcha"** → abre Docker Desktop y espera "Engine running" (Windows/Mac);
+  en **Linux**, si Docker sí está corriendo, casi seguro es que tu usuario no está en el grupo
+  `docker` (`sudo usermod -aG docker $USER` y reinicia sesión). Reintenta.
 - **"La infraestructura quedó a medio inicializar"** → pasa si el primer arranque se
   interrumpió (un Ctrl+C durante la carga). El propio programa te ofrece **reiniciarla
   desde cero**: dile que sí y espera los 2-3 minutos (las bases de prueba se regeneran solas).
