@@ -48,7 +48,7 @@ La pieza central es el **Schema Agent (GraphRAG)**: en vez de darle al LLM el es
 
 ## Puesta en marcha
 
-Necesitas **Node.js 20+**, **Docker Desktop** (Compose v2) y un proveedor de LLM (ver abajo). Cuatro comandos; el paso a paso con qué deberías ver en cada punto está en la [guía de instalación](docs/instalacion.md):
+Necesitas **Node.js 20+**, **Docker** (Desktop en Windows/Mac, Engine + Compose v2 en Linux) y un proveedor de LLM (ver abajo). Cuatro comandos; el paso a paso con qué deberías ver en cada punto, y las notas por sistema operativo, están en la [guía de instalación](docs/instalacion.md):
 
 ```bash
 cp .env.example .env         # 1. proveedor de LLM/embeddings (lo demás ya funciona)
