@@ -138,6 +138,9 @@ consultas, la traza de recuperación, los gráficos…).
 ## Si algo no cuadra
 
 - **"Docker no está en marcha"** → abre Docker Desktop, espera "Engine running", reintenta.
+- **"La infraestructura quedó a medio inicializar"** → pasa si el primer arranque se
+  interrumpió (un Ctrl+C durante la carga). El propio programa te ofrece **reiniciarla
+  desde cero**: dile que sí y espera los 2-3 minutos (las bases de prueba se regeneran solas).
 - **El puerto 5432, 7474 o 7687 está ocupado** → tienes otro PostgreSQL/Neo4j corriendo
   en tu máquina; cómo resolverlo está en la [guía avanzada](instalacion-avanzada.md).
 - **Con LM Studio no responde o va vacío** → asegúrate de tener cargados el modelo de

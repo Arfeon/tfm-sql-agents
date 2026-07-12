@@ -72,7 +72,17 @@ done
 # Esperar a que termine y propagar el código de salida
 wait "$DATA_PID"
 
-# ── 5. Resumen final ─────────────────────────────────────────────────────────
+# ── 5. Marcador de init completo ─────────────────────────────────────────────
+# El healthcheck del compose exige esta tabla: si el init se interrumpe a medias
+# (Ctrl+C durante la carga), el volumen queda no-vacío y Postgres NUNCA reintenta
+# los scripts — sin el marcador, el contenedor queda "unhealthy" y el fallo se ve,
+# en vez de arrancar sin datos y sin error. El preflight del CLI ofrece el reset.
+$PG --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE TABLE IF NOT EXISTS setup_init_complete (completed_at timestamptz NOT NULL DEFAULT now());
+    INSERT INTO setup_init_complete DEFAULT VALUES;
+EOSQL
+
+# ── 6. Resumen final ─────────────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════"
 echo "  arcadia — datos cargados (seed=42)"

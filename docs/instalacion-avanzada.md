@@ -54,6 +54,13 @@ que crea las tres bases de datos y lanza en este orden:
    clientes, 80 000 sesiones de juego…) **al final**, con un monitor de progreso en la
    terminal (es el paso que tarda los 2-3 minutos del primer arranque).
 
+Al terminar TODO, el script crea un **marcador** (`setup_init_complete` en
+`graphsql_memory`) que el healthcheck del compose exige: si el init se interrumpe a
+medias, el contenedor queda `unhealthy` **a propósito** — Postgres nunca reintenta los
+scripts sobre un volumen no vacío, y sin el marcador el fallo sería silencioso (servidor
+que responde, bases de prueba que no existen). La recuperación es empezar de cero:
+`docker compose down -v && docker compose up -d --wait` (el CLI lo ofrece él solo).
+
 Las tres bases resultantes:
 
 - `graphsql_memory` → memoria interna del sistema (índice vectorial y checkpoints).
@@ -128,6 +135,8 @@ usará los datos nuevos.
   de nuevo.
 - **`npm install` falla con `node-gyp`**: asegúrate de tener Node.js 20+ y de que no
   hay versiones conflictivas instaladas.
-- **El contenedor sale `unhealthy` en el primer arranque**: el healthcheck de Postgres
-  da margen (`start_period`) para la carga inicial de datos; si tu máquina es muy
-  lenta y aborta, sube el `start_period` en `docker-compose.yml` y reinténtalo.
+- **El contenedor sale `unhealthy` en el primer arranque**: dos causas posibles. (1) El
+  init anterior se **interrumpió a medias** — el healthcheck exige el marcador de init
+  completo y no lo encuentra: `docker compose down -v` y vuelve a empezar. (2) Tu máquina
+  es muy lenta y la carga inicial supera el margen del healthcheck: sube el
+  `start_period` en `docker-compose.yml` y reinténtalo tras un `down -v`.

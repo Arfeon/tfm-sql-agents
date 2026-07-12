@@ -50,15 +50,19 @@ async function getContainersState(): Promise<string[] | null> {
 }
 
 function runComposeUp(composeDir: string): Promise<void> {
+  return runCompose(composeDir, ['up', '-d', '--wait', 'postgres', 'neo4j'])
+}
+
+function runCompose(composeDir: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn('docker', ['compose', 'up', '-d', '--wait', 'postgres', 'neo4j'], {
+    const child = spawn('docker', ['compose', ...args], {
       cwd: composeDir,
       stdio: 'inherit',
     })
     child.on('error', reject)
     child.on('close', (code) => {
       if (code === 0) resolve()
-      else reject(new Error(`docker compose up terminó con código ${code}`))
+      else reject(new Error(`docker compose ${args[0]} terminó con código ${code}`))
     })
   })
 }
@@ -127,10 +131,61 @@ export async function ensureInfrastructureReady(): Promise<boolean> {
     await runComposeUp(composeDir)
   } catch (error) {
     console.log(chalk.red(`\n✖ No pude levantar la infraestructura: ${error instanceof Error ? error.message : String(error)}`))
+    if (await isInitIncomplete()) {
+      return recoverFromIncompleteInit(composeDir)
+    }
     console.log(chalk.dim('  Prueba a mano con `docker compose up` desde la raíz del repo para ver el detalle.'))
     return false
   }
 
+  showReadyBanner()
+  return confirm({ message: '¿Arranco GraphSQL?', default: true })
+}
+
+/**
+ * El caso silencioso que destapó una prueba de usuario: si el PRIMER init de Postgres
+ * se interrumpe (Ctrl+C durante la carga de datos), el volumen queda a medias y los
+ * scripts no se reintentan nunca — el servidor responde pero las BDs de prueba no
+ * existen. Lo delata el marcador que 01-init.sh crea al acabar: si el contenedor
+ * corre pero el marcador falta, el init no terminó.
+ */
+async function isInitIncomplete(): Promise<boolean> {
+  try {
+    const { stdout } = await run('docker', [
+      'exec', 'graphsql_postgres',
+      'psql', '-U', 'postgres', '-d', 'graphsql_memory', '-tAc',
+      'SELECT 1 FROM setup_init_complete LIMIT 1',
+    ])
+    return !stdout.includes('1')
+  } catch {
+    // El contenedor no corre o la BD no existe: también cuenta como init incompleto
+    // si el contenedor existe; si ni existe, el flujo normal ya lo cubre.
+    const states = await getContainersState()
+    return states !== null
+  }
+}
+
+/** Ofrezco el reset (borra SOLO las BDs de prueba autogeneradas y el índice) y reintento una vez. */
+async function recoverFromIncompleteInit(composeDir: string): Promise<boolean> {
+  console.log(chalk.yellow('\n⚠ La infraestructura quedó a medio inicializar (probablemente un primer'))
+  console.log(chalk.yellow('  arranque interrumpido): el servidor responde pero faltan las bases de prueba.'))
+  console.log(chalk.dim('  El init de Postgres solo corre sobre un volumen vacío, así que hay que empezar de cero.'))
+  const reset = await confirm({
+    message: '¿Reinicio la infraestructura desde cero? (borra y regenera las BDs de prueba; tardará 2-3 min)',
+    default: true,
+  })
+  if (!reset) {
+    console.log(chalk.dim('\nCuando quieras hacerlo a mano: docker compose down -v && docker compose up -d --wait\n'))
+    return false
+  }
+  try {
+    await runCompose(composeDir, ['down', '-v'])
+    await runComposeUp(composeDir)
+  } catch (error) {
+    console.log(chalk.red(`\n✖ El reinicio también falló: ${error instanceof Error ? error.message : String(error)}`))
+    console.log(chalk.dim('  Prueba a mano con `docker compose up` desde la raíz para ver el detalle.'))
+    return false
+  }
   showReadyBanner()
   return confirm({ message: '¿Arranco GraphSQL?', default: true })
 }
