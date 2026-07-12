@@ -91,6 +91,8 @@ Lo medible y sólido — el detalle y **cómo se interpretan las métricas** est
 
 **TypeScript** (Node.js 20+) · **LangGraph.js** (orquestación) · **Neo4j** (esquema como grafo de conocimiento) · **PostgreSQL + pgvector** (búsqueda semántica y checkpoints) · **LLM configurable** (OpenAI o LM Studio) · **CLI** (`@inquirer/prompts`, `boxen`, `chalk`).
 
+En desarrollo usé **LangSmith** (capa gratuita de la suite LangChain) para trazar y depurar los grafos; es opcional, se activa por variables de entorno y va **apagado por defecto** — con esquemas reales lo coherente con el despliegue on-premise es no encenderlo (o auto-alojar una alternativa como Langfuse). Detalle en [`arquitectura.md` §7](docs/design/arquitectura.md).
+
 ## Despliegue
 
 El objetivo es **on-premise**: GraphSQL se conecta a la base de datos corporativa y maneja su esquema y sus datos, así que su sitio es dentro del perímetro de la organización (por eso existe el modo local, para que nada salga de la red). No hay instancia en nube pública a propósito; la entrega es esta instalación reproducible con Docker Compose, base directa de un despliegue en Kubernetes sobre servidores propios. El razonamiento está en la decisión D-14 ([arquitectura.md §7](docs/design/arquitectura.md)).
@@ -105,7 +107,7 @@ Todo esto queda **fuera del MVP** pero está especificado; el detalle por compon
 - **Índice multi-inquilino (SPEC-20)** — tener varias bases de datos indexadas a la vez y cambiar entre ellas sin re-escanear.
 - **Continuidad conversacional (SPEC-16, SPEC-12)** — preguntas de seguimiento sobre una consulta, y nombrar/listar/reanudar conversaciones.
 - **Interfaz gráfica (fuera del CLI)** — una UI para el flujo pregunta → revisión → resultado, más allá de la terminal. La lógica ya está desacoplada de la presentación; falta decidir la tecnología (React, Flutter o Angular) y construirla.
-- **Validación a gran escala** — confirmar la ventaja de precisión sobre una BD real grande (200+ tablas), donde el esquema entero ya no cabe en el contexto.
+- **Golden set sobre el ERP real (backlog de SPEC-26)** — la recuperación por capas está validada contra el ERP real (~800 tablas) de forma cualitativa (fue el caso que la motivó); falta un golden set pequeño que mida con el mismo arnés la contribución de cada capa (léxico, grafo, selector).
 
 ## Documentación
 

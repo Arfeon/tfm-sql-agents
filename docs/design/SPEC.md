@@ -1233,6 +1233,39 @@ cd backend && npm test    # unit del diff y del caso de uso (con dobles)
 
 ---
 
+### SPEC-30 — Observabilidad local del pipeline (Phoenix + OpenTelemetry) 🔮 *Futuro (fuera del MVP)*
+
+**Objetivo.** LangSmith sirvió para depurar los grafos en desarrollo, pero es un servicio en la nube y quedó desactivado a propósito en cuanto el proyecto tocó esquemas reales (D-14). Para operar GraphSQL con usuarios de verdad hace falta observabilidad **dentro del perímetro**: cada ejecución del pipeline como una traza (nodos, prompts, salidas, tokens, latencias, reintentos) en una pieza auto-alojada. Elijo **Arize Phoenix** sobre Langfuse por el mismo criterio que pgvector sobre Qdrant: un solo contenedor frente a ~6 servicios, y estándar OpenTelemetry — las mismas trazas podrían ir mañana a un colector corporativo (Grafana/Jaeger) sin tocar el código.
+
+**Contrato.**
+
+- *Opt-in de infraestructura.* Phoenix va en el `docker-compose.yml` bajo el profile `observability`: el `docker compose up -d` de siempre NO lo arranca (el preflight de SPEC-28 no cambia); `docker compose --profile observability up -d` lo añade, con su UI y su endpoint OTLP en `localhost:6006`.
+- *Opt-in de aplicación.* La instrumentación se activa por variable de entorno; sin ella, cero overhead, cero conexiones salientes y cero dependencia cargada — el mismo patrón que LangSmith (que seguirá funcionando por sus propias variables, para quien lo prefiera en desarrollo).
+- *Qué se traza.* Cada run del grafo como árbol: los nodos del pipeline, cada llamada LLM con su prompt/salida/tokens, y los reintentos del Judge. Todo se queda en la máquina: es la respuesta on-premise a "¿qué está haciendo el sistema por dentro?".
+- *Bootstrap aislado.* La instrumentación vive en un módulo propio de infraestructura, importado solo desde el arranque del CLI: ni los casos de uso ni la orquestación saben que existe (mismo principio que el resto de recursos externos, D-05).
+- *Fuera de alcance.* Métricas y alertas de producción, dashboards, gestión de retención, y la evaluación de prompts dentro de Phoenix.
+
+**Pasos**
+
+1. Servicio `phoenix` en el compose con `profiles: ["observability"]` y healthcheck propio.
+2. Bootstrap OTel en `infrastructure/observability/` (SDK de Node + `@arizeai/openinference-instrumentation-langchain`), activado por variable de entorno e importado únicamente desde `cli/main.ts`.
+3. Documentar en `instalacion.md`/`uso.md`: cómo encenderlo, qué se ve en la UI y la nota de privacidad (todo local).
+4. Verificación en vivo: una consulta completa del pipeline aparece en Phoenix como árbol; sin la variable, ni instrumentación cargada ni tráfico hacia el 6006.
+
+**Criterios de aceptación**
+
+- [ ] `docker compose up -d` no arranca Phoenix ni altera el preflight; con `--profile observability`, sí
+- [ ] Con la variable activa, una consulta aparece en Phoenix como árbol completo (recuperación → generación → Judge → reintentos) con prompts y tokens
+- [ ] Sin la variable, no se carga la instrumentación ni hay conexiones salientes
+- [ ] Los casos de uso y la orquestación no importan nada de OTel (solo el arranque del CLI)
+- [ ] Docs actualizadas con la nota de privacidad
+
+```bash
+docker compose --profile observability up -d   # y una consulta desde el CLI
+```
+
+---
+
 ## Mejoras futuras (backlog, sin SPEC todavía)
 
 Ideas que veo venir pero que aún no voy a implementar. Las aparco aquí en una línea cada una para no engordar el SDD con specs prematuras: cuando decida hacer una, la promociono a su SPEC-xx con contrato y criterios, y la borro de esta lista.
