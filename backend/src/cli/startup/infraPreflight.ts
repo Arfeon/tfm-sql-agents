@@ -94,6 +94,12 @@ export async function ensureInfrastructureReady(): Promise<boolean> {
   // 2. ¿Están los contenedores levantados y healthy?
   const states = await getContainersState()
   if (states?.every((state) => state === 'running healthy')) {
+    // "Healthy" no basta si el contenedor es anterior al marcador de init (SPEC-28):
+    // su healthcheck viejo no lo exige, así que lo compruebo aquí también.
+    if (await isInitIncomplete()) {
+      const composeDir = findComposeDir()
+      return composeDir ? recoverFromIncompleteInit(composeDir) : false
+    }
     console.log(chalk.green('✔ Infraestructura lista (Postgres y Neo4j healthy)\n'))
     return true
   }
@@ -167,8 +173,8 @@ async function isInitIncomplete(): Promise<boolean> {
 
 /** Ofrezco el reset (borra SOLO las BDs de prueba autogeneradas y el índice) y reintento una vez. */
 async function recoverFromIncompleteInit(composeDir: string): Promise<boolean> {
-  console.log(chalk.yellow('\n⚠ La infraestructura quedó a medio inicializar (probablemente un primer'))
-  console.log(chalk.yellow('  arranque interrumpido): el servidor responde pero faltan las bases de prueba.'))
+  console.log(chalk.yellow('\n⚠ La infraestructura quedó a medio inicializar (un primer arranque interrumpido)'))
+  console.log(chalk.yellow('  o viene de una versión anterior: el servidor responde pero falta el marcador de init.'))
   console.log(chalk.dim('  El init de Postgres solo corre sobre un volumen vacío, así que hay que empezar de cero.'))
   const reset = await confirm({
     message: '¿Reinicio la infraestructura desde cero? (borra y regenera las BDs de prueba; tardará 2-3 min)',
