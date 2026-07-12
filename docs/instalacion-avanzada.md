@@ -15,16 +15,17 @@ docker compose up -d --wait
 
 El `--wait` hace que el comando no termine hasta que los dos servicios están
 levantados **y sanos** (`healthy`): cuando te devuelve el prompt, ya puedes usar
-el CLI. El primer arranque tarda **unos 2-3 minutos** (crea las bases de datos y
-carga los datos de prueba; si además tiene que descargar las imágenes de Docker,
-algo más). Los siguientes arranques son cuestión de segundos.
+el CLI. El primer arranque tarda **en torno a un minuto** (crea las bases de datos,
+carga los datos de prueba — los dumps van en lotes de 1000 filas, así que son
+segundos — y Neo4j descarga el plugin APOC; si además tiene que bajar las imágenes
+de Docker, algo más). Los siguientes arranques son cuestión de segundos.
 
-Ojo en **equipos lentos**: el `--wait` depende del `start_period` del healthcheck
-(300 s); si la carga inicial tarda más, el comando falla con la carga aún en marcha.
+Ojo en **equipos muy lentos**: el `--wait` depende del `start_period` del healthcheck
+(300 s); si el primer arranque tardara más, el comando falla con el init aún en marcha.
 El CLI (`npm start`) no tiene ese límite — vigila la **actividad** del init y sigue
 esperando mientras avance —, así que en un equipo modesto es la opción cómoda. Si
-prefieres hacerlo a mano, usa `docker compose up` en primer plano para ver la carga
-en directo, o sube el `start_period` en `docker-compose.yml`.
+prefieres hacerlo a mano, usa `docker compose up` en primer plano para verlo en
+directo, o sube el `start_period` en `docker-compose.yml`.
 
 Esto arranca dos servicios:
 
@@ -59,7 +60,9 @@ que crea las tres bases de datos y lanza en este orden:
    ligeros de `nebula`, la BD grande sintética de la prueba de escala (SPEC-17).
 3. `03-dataset.sql` — inserta los datos de `arcadia` (60 compañías, 320 juegos, 5 000
    clientes, 80 000 sesiones de juego…) **al final**, con un monitor de progreso en la
-   terminal (es el paso que tarda los 2-3 minutos del primer arranque).
+   terminal. Los dos datasets son dumps de `pg_dump --rows-per-insert=1000`: cada
+   INSERT confirma un lote de 1 000 filas, así que la carga entera son segundos
+   (fila a fila eran ~195 000 transacciones, y en discos lentos, decenas de minutos).
 
 Al terminar TODO, el script crea un **marcador** (`setup_init_complete` en
 `graphsql_memory`) que el healthcheck del compose exige: si el init se interrumpe a

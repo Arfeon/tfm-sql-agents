@@ -39,10 +39,12 @@ $PG --dbname nebula -q -f "$SCRIPT_DIR/sql/05-nebula-dataset.sql"
 echo "      Nebula lista (66 tablas, datos ligeros)."
 
 # ── 4. Datos (con monitor de progreso) ───────────────────────────────────────
+# El dump usa INSERTs por lotes de 1000 filas (pg_dump --rows-per-insert=1000):
+# cada lote se confirma con autocommit, así que el monitor ve crecer los
+# contadores y la carga completa tarda segundos, no minutos (antes era fila a
+# fila: 180k transacciones y varios minutos, media hora en equipos modestos).
 echo ""
-echo "  Cargando datos — 03-dataset.sql (esto tarda 1-3 minutos):"
-echo "  Puedes ver el progreso en tiempo real porque cada INSERT"
-echo "  se confirma con autocommit."
+echo "  Cargando datos — 03-dataset.sql (unos segundos):"
 echo ""
 
 # Lanzar la carga en background
