@@ -19,6 +19,13 @@ el CLI. El primer arranque tarda **unos 2-3 minutos** (crea las bases de datos y
 carga los datos de prueba; si además tiene que descargar las imágenes de Docker,
 algo más). Los siguientes arranques son cuestión de segundos.
 
+Ojo en **equipos lentos**: el `--wait` depende del `start_period` del healthcheck
+(300 s); si la carga inicial tarda más, el comando falla con la carga aún en marcha.
+El CLI (`npm start`) no tiene ese límite — vigila la **actividad** del init y sigue
+esperando mientras avance —, así que en un equipo modesto es la opción cómoda. Si
+prefieres hacerlo a mano, usa `docker compose up` en primer plano para ver la carga
+en directo, o sube el `start_period` en `docker-compose.yml`.
+
 Esto arranca dos servicios:
 
 | Servicio   | Qué es                        | Dónde lo encuentras            |
@@ -138,5 +145,10 @@ usará los datos nuevos.
 - **El contenedor sale `unhealthy` en el primer arranque**: dos causas posibles. (1) El
   init anterior se **interrumpió a medias** — el healthcheck exige el marcador de init
   completo y no lo encuentra: `docker compose down -v` y vuelve a empezar. (2) Tu máquina
-  es muy lenta y la carga inicial supera el margen del healthcheck: sube el
-  `start_period` en `docker-compose.yml` y reinténtalo tras un `down -v`.
+  es muy lenta y la carga inicial supera el margen del healthcheck (`start_period`, 300 s).
+  En este segundo caso **no hay que tocar nada si arrancas con el CLI**: `npm start` no
+  usa ese margen, vigila la actividad del init y espera lo que haga falta. Solo si
+  levantas a mano con `--wait` te afecta: sube el `start_period` en `docker-compose.yml`
+  o usa `docker compose up` en primer plano. Comprueba con
+  `docker logs -f graphsql_postgres` si los contadores siguen creciendo: si crecen, la
+  carga va bien aunque el estado diga `unhealthy` — al terminar pasará a `healthy` solo.
