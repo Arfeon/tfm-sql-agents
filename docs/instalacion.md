@@ -115,12 +115,15 @@ El arranque del paso anterior (da igual si guiado o manual) **ya carga las tabla
 y los datos automáticamente**. No hay que ejecutar nada más. Al arrancar por primera vez,
 Postgres detecta el volumen vacío y ejecuta en orden:
 
-1. `01-init.sh` — crea las BDs `arcadia` y `nebula`, y activa pgvector.
-2. `02-schema.sql` — crea las 17 tablas de `arcadia`.
-3. `03-dataset.sql` — inserta los datos de `arcadia` (60 compañías, 320 juegos, 5 000
-   clientes, 80 000 sesiones de juego…).
-4. `04-nebula-schema.sql` + `05-nebula-dataset.sql` — esquema (66 tablas) y datos
+Todo lo orquesta `01-init.sh`, que crea las BDs `arcadia` y `nebula`, activa pgvector, y
+lanza en este orden:
+
+1. `02-schema.sql` — crea las 17 tablas de `arcadia`.
+2. `04-nebula-schema.sql` + `05-nebula-dataset.sql` — esquema (66 tablas) y datos
    ligeros de `nebula`, la BD grande sintética para la prueba de escala (SPEC-17).
+3. `03-dataset.sql` — inserta los datos de `arcadia` (60 compañías, 320 juegos, 5 000
+   clientes, 80 000 sesiones de juego…) **al final**, con un monitor de progreso en la
+   terminal (es el paso que tarda los 1-3 minutos del primer arranque).
 
 Puedes comprobarlo con:
 

@@ -8,6 +8,43 @@ schema-linking, Judge, execution accuracy…) están en el [glosario](glosario.m
 
 ---
 
+## Qué hay en las bases de demo (Arcadia y Nebula)
+
+Antes de escribir la primera pregunta conviene saber qué modela cada BD — si no, es
+fácil quedarse mirando el prompt sin saber qué pedir. No hace falta mirar el
+[golden set](../setup/datasets/arcadia/golden_set.yaml) para esto.
+
+**Arcadia (17 tablas, la de uso diario)** — una plataforma de suscripción de
+videojuegos en streaming ("Netflix de videojuegos"): catálogo (`company`, `franchise`,
+`game`, `genre`, `platform`, `dlc`), negocio (`region`, `subscription_plan`, `customer`,
+`subscription`, `purchase`) y telemetría de uso (`play_session`, `rating`,
+`concurrent_snapshot`). Esquema completo, dominio y diagrama en
+[`setup/datasets/arcadia/README.md`](../setup/datasets/arcadia/README.md).
+
+Preguntas para arrancar:
+
+- «¿Cuántos juegos hay en el catálogo?»
+- «Dame los 5 juegos con mayor precio base»
+- «¿Qué 10 juegos se han jugado más minutos en total?»
+- «¿Qué 5 clientes tienen más juegos en su lista de deseos?» ← ver `t_042` abajo
+
+> **`t_042` no es un error de nombrado.** Es la tabla de lista de deseos (qué juegos ha
+> marcado un cliente sin comprar todavía), con un nombre **opaco a propósito**: no dice
+> nada de lo que contiene. Es el caso de prueba de que la recuperación encuentra tablas
+> por su **descripción**, no adivinando el nombre — pregunta algo de "lista de deseos" y
+> compara escaneando con y sin descripciones (§3): sin ellas, esta tabla es casi
+> invisible para el sistema por mucho que subas el número de tablas candidatas.
+
+**Nebula (66 tablas, la de la prueba de escala)** — el mismo universo de Arcadia
+extendido (más catálogo, comercio, telemetría, social, reseñas, eventos, soporte) para
+medir cómo se comporta la recuperación con un esquema mucho más grande. No está pensada
+para explorar preguntas de negocio a mano; existe para la evaluación de escala (§7). Si
+la escaneas y preguntas igualmente, funciona, pero el interés está en comparar el
+tamaño del contexto entre las dos BDs, no en el dominio en sí. Conserva su propia
+`t_042` (misma lista de deseos), por si quieres repetir la prueba de arriba a escala.
+
+---
+
 ## 0. Antes de empezar (lista rápida)
 
 Para que todo funcione necesito, en este orden:
@@ -193,16 +230,29 @@ y **cada vez que cambie el esquema** o quiera cambiar de BD/proveedor de embeddi
 ## 4. Depurar la recuperación (ver el circuito)
 
 Enseña **por qué** entran las tablas que entran, sin generar SQL. Útil para entender el GraphRAG
-o para afinar una pregunta. Escribo una pregunta y pinta tres tablas:
+o para afinar una pregunta. Escribo una pregunta y ejecuta la recuperación **con las mismas
+palancas que el pipeline en vivo** (ranking híbrido + expansión por caminos de FK + selector LLM,
+las tres capas de [`arquitectura.md` §6](design/arquitectura.md) — SPEC-26), así que lo que veo
+aquí es exactamente lo que vería el generador de SQL. Pinta, en orden:
 
-1. **Ranking semántico (coseno)** — todas las tablas ordenadas por parecido con la pregunta, con
-   su score; marca con ✓ las que entran en el top-K.
+1. **Ranking híbrido** — todas las tablas ordenadas por el score fusionado (denso + léxico, RRF),
+   con ✓ en las que entran en el top-K.
 2. **Añadidas por expansión de FK** — las que no salían por significado pero arrastra el grafo por
    una clave foránea (su score semántico suele ser bajo: por eso el vector solo no las pilla).
-3. **Contexto final** — las que acaban pasando al generador de SQL, con el **motivo** de cada una:
-   *semántica*, *expansión FK* o *fijada*.
+3. **Conectores por camino de FK** — tablas puente necesarias para el JOIN entre dos anclas.
+4. **Destinos de FK de las anclas** — las dimensiones que referencia un ancla (donde suele vivir
+   el nombre de la cosa por la que se pregunta).
+5. **Selección con LLM** — qué eligió el selector del pool de candidatas (o el aviso de que no
+   eligió nada válido y se usó el recorte por prioridad).
+6. **Contexto final** — las tablas que acaban pasando al generador, con el **motivo** de cada una:
+   *semántica*, *expansión FK*, *conector (puente)*, *destino FK (dimensión)*, *elegida por el LLM*
+   o *fijada*.
 
-Así se ve de un vistazo si una tabla se recupera por su significado o la rescata el grafo.
+Y al final, el **DDL que recibe el generador**: exactamente lo que ve el modelo, útil para detectar
+si una columna que aparece en la SQL generada en realidad se la inventó.
+
+Así se ve de un vistazo si una tabla se recupera por su significado, la rescata el grafo, o la
+elige el razonamiento del selector.
 
 ---
 
@@ -212,6 +262,7 @@ Así se ve de un vistazo si una tabla se recupera por su significado o la rescat
 |----------|----------|
 | `TARGET_DB_1_*` | La **BD objetivo principal** (Arcadia por defecto): la que consulto en el CLI. |
 | `TARGET_DB_2_*` | Una **segunda BD** del catálogo (Nebula, la grande de la prueba de escala). Aparece para escanear/evaluar. |
+| `TARGET_DB_n_TYPE` | Motor de esa BD: `postgresql` (por defecto) o `mssql` (SQL Server; puerto/schema por defecto 1433/`dbo`). El dialecto sale del motor y se inyecta en el prompt del SQL Agent, así que la consulta generada usa la sintaxis correcta de cada uno. |
 | `TARGET_DB_n_PUBLIC` | `true` si la BD es pública (muestra un aviso de posible contaminación del LLM). |
 | `EVAL_TARGET` | Qué BD evalúa `npm run evaluate` (por defecto Arcadia). |
 | `LLM_PROVIDER` | `openai` o `local` (LM Studio). Es el **valor por defecto** del selector que sale al arrancar; puedo cambiarlo por sesión ahí sin tocar el `.env`. |
