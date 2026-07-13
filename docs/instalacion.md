@@ -15,7 +15,7 @@ Hay cuatro maneras de poner GraphSQL en marcha:
 |-----|------------|-----------|-------|
 | **Instalador, un comando** (recomendada) | Instalarlo como herramienta y usarlo | Node 20+, Docker, Git | [Justo debajo](#instalación-en-un-comando) |
 | **Guiada paso a paso** | Lo mismo, pero viendo (y controlando) cada paso | Node 20+, Docker, Git | Esta guía, §1–§5 |
-| **Demo solo con Docker** | Evaluarlo sin instalar Node | Docker, Git | [Sección al final](#alternativa-la-demo-solo-con-docker-sin-instalar-node) |
+| **Demo solo con Docker** | Evaluarlo sin instalar Node (ni clonar el repo) | Docker | [Sección al final](#alternativa-la-demo-solo-con-docker-sin-instalar-node) |
 | **Manual avanzada** | Mirar debajo del capó (compose, verificaciones, regenerar datos) | Node 20+, Docker, Git | [Guía avanzada](instalacion-avanzada.md) |
 
 Para usar el programa una vez instalado, la [guía de uso](uso.md).
@@ -256,10 +256,27 @@ consultas, la traza de recuperación, los gráficos…).
 
 ## Alternativa: la demo solo con Docker (sin instalar Node)
 
-Si solo quieres **evaluar la demo** y no tienes (ni quieres) Node en la máquina, el
-proyecto incluye una imagen Docker del CLI: la aplicación entera corre en un
-contenedor y habla con Postgres y Neo4j por la red interna de Docker. Solo
-necesitas **Docker y Git**:
+Si solo quieres **evaluar la demo**, las imágenes están publicadas en Docker Hub
+([`pclota/graphsql-cli`](https://hub.docker.com/r/pclota/graphsql-cli) y
+[`pclota/graphsql-postgres-demo`](https://hub.docker.com/r/pclota/graphsql-postgres-demo),
+esta última con las bases de prueba sintéticas ya incluidas). No hace falta Node
+**ni clonar el repo** — solo Docker y un fichero:
+
+```bash
+curl -fsSL -O https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml
+export OPENAI_API_KEY=sk-...     # o elige LM Studio en el menú al arrancar
+docker compose -f docker-compose.hub.yml run --rm cli
+```
+
+(En Windows/PowerShell: `irm -OutFile docker-compose.hub.yml https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml`
+y `$env:OPENAI_API_KEY = "sk-..."`.)
+
+El `run` descarga las imágenes, levanta Postgres y Neo4j, espera a que estén sanos
+(el primer arranque carga las bases de prueba; después, segundos) y abre el mismo
+menú de siempre. Desde ahí, sigue por [Escanea el esquema](#4-escanea-el-esquema-solo-la-primera-vez).
+
+Si prefieres **construir la imagen tú** en vez de usar la publicada (o estás
+tocando el código), el repo trae el mismo montaje como profile del compose:
 
 ```bash
 git clone https://github.com/Arfeon/tfm-sql-agents.git
@@ -268,10 +285,6 @@ cp .env.example .env            # pon tu OPENAI_API_KEY (o LLM_PROVIDER=local)
 docker compose --profile demo build
 docker compose --profile demo run --rm cli
 ```
-
-El `run` levanta Postgres y Neo4j si hacen falta (el primer arranque carga las
-bases de prueba, igual que en el camino normal), espera a que estén sanos y abre
-el mismo menú de siempre. Desde ahí, sigue por [Escanea el esquema](#4-escanea-el-esquema-solo-la-primera-vez).
 
 Dos matices de esta vía:
 

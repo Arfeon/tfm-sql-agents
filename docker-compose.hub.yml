@@ -1,0 +1,88 @@
+# Demo de GraphSQL SIN clonar el repo: todas las piezas vienen de Docker Hub.
+# Es el mismo sistema que docker-compose.yml, autocontenido: el init de Postgres
+# va horneado en la imagen (setup/infra/postgres/Dockerfile) en vez de montado
+# desde el clon. Uso — solo necesitas Docker y este fichero:
+#
+#   curl -fsSL -O https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml
+#   docker compose -f docker-compose.hub.yml run --rm cli
+#
+# Proveedor de IA: exporta OPENAI_API_KEY antes del run (o elige LM Studio en el
+# menú, servido en http://host.docker.internal:1234/v1). Las contraseñas traen el
+# valor local de demo; puedes cambiarlas exportando POSTGRES_PASSWORD/NEO4J_PASSWORD.
+
+services:
+  postgres:
+    image: pclota/graphsql-postgres-demo:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
+      POSTGRES_DB: ${POSTGRES_DB:-graphsql_memory}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Igual que en el compose del repo: healthy = servidor respondiendo Y el
+      # marcador que el init crea AL FINAL (un init interrumpido queda visible).
+      test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d graphsql_memory && psql -U postgres -d graphsql_memory -tAc \"SELECT to_regclass('public.setup_init_complete') IS NOT NULL\" | grep -q t"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 300s
+
+  neo4j:
+    image: neo4j:5-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-graphsql_local}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+
+  cli:
+    image: pclota/graphsql-cli:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    environment:
+      # Hosts de la red interna de compose y credenciales con las MISMAS expresiones
+      # con las que se crean postgres y neo4j, para que siempre cuadren.
+      POSTGRES_HOST: postgres
+      NEO4J_URI: neo4j://neo4j:7687
+      TARGET_DB_1_HOST: postgres
+      TARGET_DB_2_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
+      TARGET_DB_1_USER: ${POSTGRES_USER:-postgres}
+      TARGET_DB_1_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
+      TARGET_DB_2_USER: ${POSTGRES_USER:-postgres}
+      TARGET_DB_2_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-graphsql_local}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LMSTUDIO_BASE_URL: http://host.docker.internal:1234/v1
+    extra_hosts:
+      # En Docker Desktop (Windows/Mac) ya existe; esta línea lo añade también en Linux.
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
