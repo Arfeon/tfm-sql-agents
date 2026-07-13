@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import chalk from 'chalk'
 import { select, input } from '@inquirer/prompts'
 import { LlmProvider } from '../../graphsql/infrastructure/llm/LlmProvider'
+import { resolveModelName } from '../../graphsql/infrastructure/llm/modelSelection'
 import { createConversationGraph, askGraph } from '../../graphsql/orchestration/agentGraph'
 import { warnIfLocalModelMissing, withSpinner } from '../ui'
 
@@ -19,7 +20,7 @@ function askProvider(): Promise<LlmProvider> {
 export async function runConversation(): Promise<void> {
   const provider = await askProvider()
   if (provider === LlmProvider.Local) {
-    await warnIfLocalModelMissing('chat', process.env.LMSTUDIO_MODEL ?? 'local-model')
+    await warnIfLocalModelMissing('chat', resolveModelName(LlmProvider.Local))
   }
 
   const graph = createConversationGraph(provider)

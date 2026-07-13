@@ -13,6 +13,7 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { confirm, select } from '@inquirer/prompts'
 import { PROJECT_ROOT } from '../../graphsql/infrastructure/config/projectRoot'
+import { loadEnv } from '../../graphsql/infrastructure/config/env'
 
 const run = promisify(execFile)
 
@@ -115,7 +116,7 @@ export async function ensureInfrastructureReady(): Promise<boolean> {
   // 0. Cuando el propio CLI corre DENTRO de un contenedor (la demo Docker), no hay
   // CLI de docker con el que comprobar ni levantar nada: la infraestructura la
   // garantiza compose con `depends_on: service_healthy` antes de arrancar este proceso.
-  if (process.env.GRAPHSQL_SKIP_INFRA_PREFLIGHT === 'true') {
+  if (loadEnv().GRAPHSQL_SKIP_INFRA_PREFLIGHT) {
     console.log(chalk.dim('Preflight de infraestructura omitido (GRAPHSQL_SKIP_INFRA_PREFLIGHT=true): la gestiona docker compose.\n'))
     return true
   }

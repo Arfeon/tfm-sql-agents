@@ -3,14 +3,13 @@
  * modo que la pausa de la revisión humana sobrevive al proceso (recuperable por thread_id).
  */
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres'
+import { loadEnv } from '../config/env'
 
 function memoryConnectionString(env: NodeJS.ProcessEnv = process.env): string {
-  const host = env.POSTGRES_HOST ?? 'localhost'
-  const port = env.POSTGRES_PORT ?? '5432'
-  const database = env.POSTGRES_DB ?? 'graphsql_memory'
-  const user = env.POSTGRES_USER ?? 'postgres'
-  const password = env.POSTGRES_PASSWORD ?? 'postgres'
-  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`
+  const vars = loadEnv(env)
+  const user = encodeURIComponent(vars.POSTGRES_USER)
+  const password = encodeURIComponent(vars.POSTGRES_PASSWORD)
+  return `postgresql://${user}:${password}@${vars.POSTGRES_HOST}:${vars.POSTGRES_PORT}/${vars.POSTGRES_DB}`
 }
 
 export class CheckpointerFactory {

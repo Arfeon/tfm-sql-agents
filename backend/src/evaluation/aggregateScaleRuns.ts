@@ -3,10 +3,11 @@
  * por caso. Lee docs/evaluacion/tiradas/escala-casos-run*.json y escribe
  * docs/evaluacion/escala-tiradas.md. Uso: npm run evaluate:aggregate
  */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import chalk from 'chalk'
 import { isSemanticPass } from '../graphsql/application/evaluation/evaluationMetrics'
+import { loadScaleRun, type ScaleRun } from './scaleRunFile'
 
 const RUNS_DIR = join(__dirname, '../../../docs/evaluacion/tiradas')
 const OUTPUT_FILE = join(__dirname, '../../../docs/evaluacion/escala-tiradas.md')
@@ -17,23 +18,8 @@ const MODE_LABELS: Record<string, string> = {
   graphrag: 'GraphRAG',
 }
 
-interface RunCase {
-  id: string
-  difficulty: string
-  recall: number
-  executionMatchFair: boolean
-  executionMatchSemantic: boolean
-  error?: string
-}
-
-interface RunTarget {
-  name: string
-  tableCount: number
-  modes: Array<{ mode: string; cases: RunCase[] }>
-}
-
-/** Una tirada completa: el contenido de un escala-casos-runN.json. */
-type Run = RunTarget[]
+/** Una tirada completa: el contenido de un escala-casos-runN.json (validado con zod al leerlo). */
+type Run = ScaleRun
 
 function main(): void {
   const runs = loadRuns()
@@ -100,7 +86,7 @@ function loadRuns(): Run[] {
   const files = readdirSync(RUNS_DIR)
     .filter((name) => name.startsWith('escala-casos-run') && name.endsWith('.json'))
     .sort()
-  return files.map((name) => JSON.parse(readFileSync(join(RUNS_DIR, name), 'utf8')) as Run)
+  return files.map((name) => loadScaleRun(join(RUNS_DIR, name)))
 }
 
 function targetNames(runs: Run[]): string[] {

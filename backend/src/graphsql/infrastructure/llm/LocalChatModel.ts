@@ -5,6 +5,7 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 import type { ChatMessage, IChatModel } from '../../domain/ports/IChatModel'
+import { loadEnv } from '../config/env'
 import { LlmProvider } from './LlmProvider'
 import { resolveModelName, type LlmRole } from './modelSelection'
 
@@ -18,11 +19,9 @@ export class LocalChatModel implements IChatModel {
   }
 
   static fromEnv(role?: LlmRole): LocalChatModel {
-    const baseUrl = process.env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234/v1'
-    const apiKey = process.env.LMSTUDIO_API_KEY ?? 'lm-studio'
+    const vars = loadEnv()
     const model = resolveModelName(LlmProvider.Local, role)
-    const temperature = process.env.LLM_TEMPERATURE ? Number(process.env.LLM_TEMPERATURE) : undefined
-    return new LocalChatModel(baseUrl, apiKey, model, temperature)
+    return new LocalChatModel(vars.LMSTUDIO_BASE_URL, vars.LMSTUDIO_API_KEY, model, vars.LLM_TEMPERATURE)
   }
 
   async chat(messages: ChatMessage[]): Promise<string> {

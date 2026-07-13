@@ -4,6 +4,7 @@
  */
 import type { ChatOpenAI } from '@langchain/openai'
 import type { IChatModel } from '../../domain/ports/IChatModel'
+import { loadEnv } from '../config/env'
 import { LlmProvider } from './LlmProvider'
 import type { LlmRole } from './modelSelection'
 import { OpenAIChatModel } from './OpenAIChatModel'
@@ -16,7 +17,7 @@ export class ChatModelFactory {
 
   /** El proveedor sale de `LLM_PROVIDER`; el rol elige entre el modelo de razonamiento o el de generación. */
   static fromEnv(role?: LlmRole): IChatModel {
-    const provider = (process.env.LLM_PROVIDER ?? LlmProvider.OpenAI) as LlmProvider
+    const provider = (loadEnv().LLM_PROVIDER ?? LlmProvider.OpenAI) as LlmProvider
     return ChatModelFactory.create(provider, role)
   }
 

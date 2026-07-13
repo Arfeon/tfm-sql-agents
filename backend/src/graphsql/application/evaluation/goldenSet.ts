@@ -5,18 +5,23 @@
  */
 import { readFileSync } from 'node:fs'
 import { parse } from 'yaml'
+import { z } from 'zod'
 
-export type GoldenDifficulty = 'easy' | 'medium' | 'hard'
-
-export interface GoldenCase {
-  id: string
-  question: string
-  difficulty: GoldenDifficulty
+/** Una dificultad desconocida o ausente se trata como "hard" (conservador). */
+const goldenCaseSchema = z.object({
+  id: z.string().optional(),
+  question: z.string(),
+  difficulty: z.enum(['easy', 'medium', 'hard']).catch('hard'),
   /** Tablas que la SQL correcta debe tocar (schema-linking recall). */
-  tables: string[]
+  tables: z.array(z.string()),
   /** SQL de referencia; se compara el RESULTADO, no el texto. */
-  sql: string
-}
+  sql: z.string(),
+})
+
+export type GoldenDifficulty = z.infer<typeof goldenCaseSchema>['difficulty']
+
+/** Un caso ya validado, con el `id` siempre presente (si falta en el YAML, se numera). */
+export type GoldenCase = z.infer<typeof goldenCaseSchema> & { id: string }
 
 /** Rutas relativas a la raíz del repo (donde arranca el runner). */
 export const GOLDEN_SET_PATH = '../setup/datasets/arcadia/golden_set.yaml'
@@ -49,24 +54,11 @@ export function parseGoldenCases(raw: unknown): GoldenCase[] {
 }
 
 function toGoldenCase(item: unknown, index: number): GoldenCase {
-  const fields = item as Record<string, unknown>
-  const id = typeof fields.id === 'string' ? fields.id : `#${index + 1}`
-  if (typeof fields.question !== 'string' || typeof fields.sql !== 'string' || !Array.isArray(fields.tables)) {
-    throw new Error(`Caso ${id} del golden set incompleto: faltan question, sql o tables.`)
+  const fallbackId = `#${index + 1}`
+  const parsed = goldenCaseSchema.safeParse(item)
+  if (!parsed.success) {
+    const id = z.object({ id: z.string() }).safeParse(item).data?.id ?? fallbackId
+    throw new Error(`Caso ${id} del golden set incompleto o mal formado:\n${z.prettifyError(parsed.error)}`)
   }
-  return {
-    id,
-    question: fields.question,
-    difficulty: normalizeDifficulty(fields.difficulty),
-    tables: fields.tables.map(String),
-    sql: fields.sql,
-  }
-}
-
-/** Una dificultad desconocida la trato como "hard" (conservador). */
-function normalizeDifficulty(value: unknown): GoldenDifficulty {
-  if (value === 'easy' || value === 'medium' || value === 'hard') {
-    return value
-  }
-  return 'hard'
+  return { ...parsed.data, id: parsed.data.id ?? fallbackId }
 }

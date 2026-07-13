@@ -3,25 +3,27 @@
  * solo cambian `baseUrl` y si paso la dimensión al API.
  */
 import type { IEmbeddings } from '../../domain/ports/IEmbeddings'
+import { loadEnv } from '../config/env'
 import { EmbeddingProvider } from './EmbeddingProvider'
 import { OpenAICompatibleEmbeddings } from './OpenAICompatibleEmbeddings'
 
 export class EmbeddingsFactory {
   static create(provider: EmbeddingProvider, env: NodeJS.ProcessEnv = process.env): IEmbeddings {
+    const vars = loadEnv(env)
     switch (provider) {
       case EmbeddingProvider.OpenAI:
         return new OpenAICompatibleEmbeddings({
-          apiKey: env.OPENAI_API_KEY ?? '',
-          model: env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small',
-          dimensions: parseInt(env.OPENAI_EMBEDDING_DIMENSIONS ?? '1536', 10),
+          apiKey: vars.OPENAI_API_KEY,
+          model: vars.OPENAI_EMBEDDING_MODEL,
+          dimensions: vars.OPENAI_EMBEDDING_DIMENSIONS,
           sendDimensions: true, // text-embedding-3 admite reducir dimensión
         })
       case EmbeddingProvider.Local:
         return new OpenAICompatibleEmbeddings({
-          apiKey: env.LMSTUDIO_API_KEY ?? 'lm-studio',
-          model: env.LMSTUDIO_EMBEDDING_MODEL ?? 'text-embedding-bge-m3',
-          dimensions: parseInt(env.LMSTUDIO_EMBEDDING_DIMENSIONS ?? '1024', 10),
-          baseUrl: env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234/v1',
+          apiKey: vars.LMSTUDIO_API_KEY,
+          model: vars.LMSTUDIO_EMBEDDING_MODEL,
+          dimensions: vars.LMSTUDIO_EMBEDDING_DIMENSIONS,
+          baseUrl: vars.LMSTUDIO_BASE_URL,
           sendDimensions: false, // el modelo local tiene su dimensión nativa fija
         })
       default:
@@ -33,7 +35,7 @@ export class EmbeddingsFactory {
 
   /** Proveedor por defecto (para tests/usos no interactivos); el CLI lo pregunta. */
   static fromEnv(env: NodeJS.ProcessEnv = process.env): IEmbeddings {
-    const provider = (env.EMBEDDING_PROVIDER ?? EmbeddingProvider.OpenAI) as EmbeddingProvider
+    const provider = (loadEnv(env).EMBEDDING_PROVIDER ?? EmbeddingProvider.OpenAI) as EmbeddingProvider
     return EmbeddingsFactory.create(provider, env)
   }
 
@@ -45,21 +47,22 @@ export class EmbeddingsFactory {
     indexed: { provider: string; model: string; dimensions: number },
     env: NodeJS.ProcessEnv = process.env,
   ): IEmbeddings {
+    const vars = loadEnv(env)
     const provider = indexed.provider as EmbeddingProvider
     switch (provider) {
       case EmbeddingProvider.OpenAI:
         return new OpenAICompatibleEmbeddings({
-          apiKey: env.OPENAI_API_KEY ?? '',
+          apiKey: vars.OPENAI_API_KEY,
           model: indexed.model,
           dimensions: indexed.dimensions,
           sendDimensions: true,
         })
       case EmbeddingProvider.Local:
         return new OpenAICompatibleEmbeddings({
-          apiKey: env.LMSTUDIO_API_KEY ?? 'lm-studio',
+          apiKey: vars.LMSTUDIO_API_KEY,
           model: indexed.model,
           dimensions: indexed.dimensions,
-          baseUrl: env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234/v1',
+          baseUrl: vars.LMSTUDIO_BASE_URL,
           sendDimensions: false,
         })
       default:

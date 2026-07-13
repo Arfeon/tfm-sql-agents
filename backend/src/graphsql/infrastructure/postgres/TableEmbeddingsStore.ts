@@ -4,6 +4,8 @@
  * `prepare` reconstruye la tabla desde cero: cada vectorización re-vectoriza todo.
  */
 import { Client } from 'pg'
+import { z } from 'zod'
+import { loadEnv } from '../config/env'
 import type { IEmbeddingsStore, TableMatch } from '../../domain/ports/IEmbeddingsStore'
 
 export interface IndexedModel {
@@ -14,6 +16,17 @@ export interface IndexedModel {
   targetName: string | null
 }
 
+/**
+ * Fila con el modelo del índice: decide en qué espacio vectorial se consulta (SPEC-04),
+ * así que la valido en vez de fiarme del tipo. `target_name` falta antes de SPEC-18 (→ null).
+ */
+const indexedModelRow = z.object({
+  provider: z.string(),
+  model: z.string(),
+  dimensions: z.number().int().positive(),
+  target_name: z.string().nullable(),
+})
+
 /** Representación textual de un vector para pgvector: `[v1,v2,…]`. */
 function toVectorLiteral(embedding: number[]): string {
   return `[${embedding.join(',')}]`
@@ -23,12 +36,13 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
   private constructor(private readonly client: Client) {}
 
   static async fromEnv(env: NodeJS.ProcessEnv = process.env): Promise<TableEmbeddingsStore> {
+    const vars = loadEnv(env)
     const client = new Client({
-      host: env.POSTGRES_HOST ?? 'localhost',
-      port: parseInt(env.POSTGRES_PORT ?? '5432', 10),
-      database: env.POSTGRES_DB ?? 'graphsql_memory',
-      user: env.POSTGRES_USER ?? 'postgres',
-      password: env.POSTGRES_PASSWORD ?? 'postgres',
+      host: vars.POSTGRES_HOST,
+      port: vars.POSTGRES_PORT,
+      database: vars.POSTGRES_DB,
+      user: vars.POSTGRES_USER,
+      password: vars.POSTGRES_PASSWORD,
     })
     await client.connect()
     return new TableEmbeddingsStore(client)
@@ -44,16 +58,16 @@ export class TableEmbeddingsStore implements IEmbeddingsStore {
     }
     // `target_name` no existía antes de SPEC-18: en un índice viejo la columna falta,
     // así que la leo de forma tolerante y la devuelvo como null ("desconocido").
-    const result = await this.client.query<{ provider: string; model: string; dimensions: number; target_name?: string | null }>(
+    const result = await this.client.query(
       `SELECT provider, model, dimensions,
               (to_jsonb(table_embeddings) ->> 'target_name') AS target_name
        FROM table_embeddings LIMIT 1`,
     )
-    const row = result.rows[0]
-    if (!row) {
+    if (!result.rows[0]) {
       return null
     }
-    return { provider: row.provider, model: row.model, dimensions: row.dimensions, targetName: row.target_name ?? null }
+    const row = indexedModelRow.parse(result.rows[0])
+    return { provider: row.provider, model: row.model, dimensions: row.dimensions, targetName: row.target_name }
   }
 
   /** La descripción guardada junto a cada vector (SPEC-29): es la base del diff incremental. */

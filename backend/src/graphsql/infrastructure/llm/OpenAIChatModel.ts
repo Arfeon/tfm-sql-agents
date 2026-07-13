@@ -5,6 +5,7 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 import type { ChatMessage, IChatModel } from '../../domain/ports/IChatModel'
+import { loadEnv } from '../config/env'
 import { LlmProvider } from './LlmProvider'
 import { resolveModelName, type LlmRole } from './modelSelection'
 
@@ -18,10 +19,9 @@ export class OpenAIChatModel implements IChatModel {
   }
 
   static fromEnv(role?: LlmRole): OpenAIChatModel {
-    const apiKey = process.env.OPENAI_API_KEY ?? ''
+    const vars = loadEnv()
     const model = resolveModelName(LlmProvider.OpenAI, role)
-    const temperature = process.env.LLM_TEMPERATURE ? Number(process.env.LLM_TEMPERATURE) : undefined
-    return new OpenAIChatModel(apiKey, model, temperature)
+    return new OpenAIChatModel(vars.OPENAI_API_KEY, model, vars.LLM_TEMPERATURE)
   }
 
   async chat(messages: ChatMessage[]): Promise<string> {

@@ -50,6 +50,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | D-14 | Despliegue objetivo **on-premise** (dentro del perímetro de la organización); la entrega se materializa como instalación reproducible con Docker Compose, **sin instancia en nube pública** | GraphSQL se conecta a la BD corporativa y maneja su esquema, sus descripciones y los resultados de las consultas: exactamente el tipo de pieza que una empresa no despliega en una nube de terceros (lo veo en mi propio entorno laboral: las aplicaciones y las bases de datos corren en servidores propios, orquestadas con Kubernetes y Docker, minimizando lo expuesto a la nube). El proveedor LLM local (LM Studio) existe justo para eso: que ni las preguntas ni el esquema salgan del perímetro; publicar una instancia en un VPS iría contra esa decisión de diseño y demostraría el sistema en un entorno donde ningún usuario real lo usaría. Como aplicación CLI cuya infraestructura ya está empaquetada en contenedores, la entrega natural es la instalación documentada y reproducible (`docker compose up` + guía), y ese mismo compose es la base directa de un despliegue productivo en un orquestador (Kubernetes) sobre servidores de la organización — queda como mejora futura junto al servidor MCP | ✅ Cerrada |
 | D-15 | Consultas guardadas: **una sola tabla `saved_queries` con flags** (`use_as_example`, `is_favorite`) y **guardado explícito tras ver el resultado**, no automático al aprobar; una columna `user_id` (hoy un valor por defecto) deja la puerta abierta al futuro por-usuario | La memoria *few-shot* (SPEC-09) y las consultas favoritas (SPEC-25) comparten la forma de fila (pregunta, SQL, BD objetivo, tablas, fecha) y el MISMO momento natural de guardado: "he visto el resultado y es bueno". Guardarlo una vez en una tabla con dos flags es más simple que dos tablas duplicadas, evita el `if (tipo)` en la capa de aplicación (un solo puerto/adaptador/factory, D-05) y hace el por-usuario futuro una columna, no una migración doble. Los dos comportamientos quedan separados por flag: la recuperación semántica filtra `use_as_example = true` (+ misma BD + umbral, D-06); la lista de favoritas filtra `is_favorite = true`. Cambio el disparador de SPEC-09 de automático-al-aprobar a **explícito**: aprobar la SQL valida el texto, pero ver el resultado valida la RESPUESTA — es un mejor sello de calidad para un corpus de ejemplos, y evita sembrarlo de consultas exploratorias o casi-duplicadas que ensuciarían los *few-shot*. El coste (un paso más y menos ejemplos) lo asumo a cambio de un corpus que el humano cura, no que se llena solo | ✅ Cerrada |
 | D-16 | Distribución **pública** en dos canales: **comando global `gsql`** (campo `bin` de npm + `npm link`, entregado con el instalador bootstrap de SPEC-32) e **imágenes Docker publicadas en Docker Hub** (`pclota/graphsql-cli` y `pclota/graphsql-postgres-demo`, SPEC-33), con instalación de la demo sin clonar el repo; sin ejecutable standalone. La frontera de confidencialidad son los **datos del cliente**, no la distribución | Dos públicos, dos canales (SPEC-31): quien trabaja con el proyecto quiere invocar el CLI desde cualquier carpeta (para eso las rutas a recursos se resuelven desde el código, no desde el cwd), y quien solo quiere evaluar la demo no debería necesitar Node — con Docker le basta. Un ejecutable standalone (pkg/SEA) no resuelve nada real: la aplicación necesita el repo al lado igualmente (compose, scripts de init, prompts editables como texto). Sobre publicar: primero lo descarté por prudencia con el on-premise y lo revisé el mismo día — el repo ya es público; lo que no puede salir nunca son los datos del cliente (esquemas, descripciones, resultados de sus bases de datos) ni ninguna clave. Los artefactos publicados se auditan antes de subir: la imagen del CLI lleva solo la config de ejemplo y los `*.example.json` de `descriptions/` (la carpeta real queda excluida por partida doble: COPY explícito fichero a fichero + `.dockerignore`), y la de Postgres solo las bases sintéticas generadas por seed | ✅ Cerrada |
+| D-17 | Zod como validador único en tres fronteras: variables de entorno (`env.ts`), respuestas JSON del LLM (Judge, juez de equivalencia) y filas de Neo4j/Postgres/ficheros de evaluación en el borde de infraestructura | Antes cada factory repetía `env.X ?? 'default'` a mano, y los parsers de respuestas del LLM eran ~50 líneas de funciones sueltas (`toStringArray`, `toConfidence`, `toTablePurposes`…) reinventando la misma tolerancia (campo mal formado → valor neutro, nunca tumbar todo el veredicto). Un esquema declarativo dice lo mismo en menos código y falla con un mensaje claro en el momento en que la variable o la respuesta no cuadra, en vez de un `NaN` o un `undefined` silencioso más abajo. Uso `.catch()` para mantener la misma tolerancia de antes (un campo opcional mal formado no debe invalidar el resto), y solo valido donde de verdad entran datos que no controlo (entorno, LLM, fila externa) — no meto Zod en los tipos internos del dominio, que ya los valida TypeScript | ✅ Cerrada |
 
 ### 3.1 Patrón obligatorio: acceso a recursos externos (puerto + adaptador + factory)
 
@@ -98,6 +99,15 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-23 | Plantillas parametrizadas: consultas aprobadas reutilizables con parámetros tipados | 🔮 Futuro (fuera del MVP; especificada) |
 | SPEC-24 | Widgets bajo demanda: SQL aprobada ejecutada sin LLM para dashboards | 🔮 Futuro (fuera del MVP; especificada) |
 | SPEC-25 | Consultas favoritas: guardar con nombre, listar y reejecutar directamente (sin agentes, con la barrera de seguridad) | 🔮 Futuro (fuera del MVP; comparte la tabla `saved_queries` con SPEC-09, D-15) |
+| SPEC-26 | Recuperación por capas para esquemas grandes: ranking léxico + expansión por grafo + selector LLM, sobre el ERP real (~800 tablas) | ✅ Cerrada |
+| SPEC-27 | Generador automático de descripciones de tabla (con un LLM, a partir del esquema ya escaneado) | 🔮 Futuro (fuera del MVP; especificada) |
+| SPEC-28 | Arranque guiado del CLI: preflight de infraestructura (Docker, contenedores healthy) y primera vez sin índice vectorial | ✅ Cerrada |
+| SPEC-29 | Actualización incremental de descripciones: re-vectoriza solo las tablas cuya descripción cambió | ✅ Cerrada |
+| SPEC-30 | Observabilidad local del pipeline con Arize Phoenix + OpenTelemetry, auto-alojado y opt-in | 🔮 Futuro (fuera del MVP) |
+| SPEC-31 | Distribución: comando global `gsql` (`npm link`) e imagen Docker de demo (profile `demo` del compose) | ✅ Cerrada |
+| SPEC-32 | Instalador bootstrap de un comando para Windows y Linux/macOS (`install.ps1` / `install.sh`) | ✅ Cerrada |
+| SPEC-33 | Imágenes publicadas en Docker Hub e instalación de la demo sin clonar el repo | ✅ Cerrada |
+| SPEC-34 | Zod como validador único en las fronteras externas (entorno, respuestas del LLM, filas de infraestructura) | ✅ Cerrada |
 
 > **Caso para evaluar las descripciones (hecho en SPEC-04, queda cuantificar en SPEC-11).** Para comprobar que las descripciones aportan de verdad, Arcadia incluye `t_042`, una tabla con **nombre opaco** (no delata que guarda las listas de deseos) y una pregunta del golden set que la necesita (G-25). En SPEC-04 ya validé a mano que con descripciones se recupera y sin ellas no. Lo que queda para SPEC-11 es **medirlo sobre todo el golden set** (con/sin descripciones, además de con/sin grafo). El porqué, en [arquitectura.md §10](arquitectura.md).
 
@@ -1364,6 +1374,39 @@ curl -fsSL .../install.sh | bash   # o: irm .../install.ps1 | iex — y después
 ```bash
 curl -fsSL -O https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml
 docker compose -f docker-compose.hub.yml run --rm cli
+```
+
+---
+
+### SPEC-34 — Zod como validador único en las fronteras externas (D-17) ✅ *Hecho*
+
+**Objetivo.** El `.env` y el fichero de descripciones ya se validaban con Zod, pero el resto de fronteras externas (variables de entorno leídas ad-hoc por cada factory, respuestas JSON del LLM, filas de Neo4j/Postgres) seguían con `env.X ?? 'default'` repetido y funciones sueltas reinventando la misma tolerancia (`toStringArray`, `toConfidence`, `toTablePurposes`…). Quiero un catálogo único de entorno y esquemas declarativos en las otras dos fronteras, para que un valor mal formado falle con un mensaje claro en el sitio donde entra, no como un `NaN` o un `undefined` silencioso más abajo.
+
+**Contrato.**
+
+- *Catálogo único de entorno* (`infrastructure/config/env.ts`): un `envSchema` con el nombre, el default y el formato de cada variable estática; `loadEnv()` se evalúa en cada llamada (nada de singleton), porque el selector del CLI muta `process.env.LLM_PROVIDER` en caliente y los tests inyectan su propio `env`. Las variables numeradas por BD objetivo (`TARGET_DB_N_*`) quedan fuera, las sigue gestionando `targetDatabases.ts` porque sus claves son dinámicas.
+- *Respuestas del LLM* (Judge, juez de equivalencia): esquemas con `.catch()` que mantienen la MISMA tolerancia de antes campo a campo (una fuente desconocida → `assumed`; una confianza fuera de rango → recortada; un campo ilegible → valor neutro), pero solo `valid`/`equivalent` invalida la respuesta entera.
+- *Filas de infraestructura*: `Neo4jConnection.runValidated(schema, cypher, params)` valida cada fila Cypher contra un esquema (protege el contexto que llega al generador de SQL de un alias de RETURN desalineado); la fila del modelo indexado en `TableEmbeddingsStore` y el fichero `escala-casos*.json` de las tiradas de evaluación (`scaleRunFile.ts`) siguen el mismo patrón.
+- *Dónde NO entra Zod.* Los tipos internos del dominio ya los valida TypeScript en compilación; Zod solo donde la forma del dato depende de algo externo (entorno, LLM, fila de infraestructura, fichero editado a mano entre tiradas).
+- *Decisión de diseño en D-17*, no en el código: los comentarios de cada esquema explican el comportamiento local (qué tolera, por qué), no el porqué de elegir Zod — eso vive en `arquitectura.md` §7 y en la propia D-17.
+
+**Pasos**
+
+1. `infrastructure/config/env.ts` (`envSchema` + `loadEnv`) y migrar las factories/adaptadores que leían `process.env` a mano (`CheckpointerFactory`, `EmbeddingsFactory`, `Neo4jConnection`, `TableEmbeddingsStore`, `ChatModelFactory`, `OpenAIChatModel`, `LocalChatModel`, `modelSelection`, `ui.ts`, `infraPreflight.ts`, `conversation.ts`).
+2. Esquemas tolerantes en `sqlJudging.ts` (`judgeReplySchema`, con las listas y el `table_purposes` tolerantes) y `sqlEquivalence.ts` (`equivalenceReplySchema`), sustituyendo los helpers manuales.
+3. `Neo4jConnection.runValidated` + esquemas de fila en `SchemaGraphManager`; `indexedModelRow` en `TableEmbeddingsStore`; `modelsResponseSchema` en `lmStudio.ts`; `embeddingsResponseSchema` en `OpenAICompatibleEmbeddings`.
+4. `evaluation/scaleRunFile.ts` (`loadScaleRun`) para leer los `escala-casos*.json`, adoptado por `aggregateScaleRuns.ts` y `reviewCases.ts`.
+5. D-17 en la tabla de decisiones y su prosa en `arquitectura.md` §7.
+
+**Criterios de aceptación**
+
+- [X] Ninguna factory ni adaptador lee `process.env.<VARIABLE_DEL_CATÁLOGO>` directamente; solo `loadEnv()` (verificado por grep sobre `backend/src`)
+- [X] Una respuesta del Judge con un campo mal formado (p. ej. `confidence` fuera de 0-1, una `source` desconocida en `table_purposes`) sigue devolviendo un veredicto usable, con el mismo comportamiento tolerante que antes del refactor
+- [X] Un alias de RETURN desalineado en una consulta de `SchemaGraphManager` falla con un error de Zod en vez de propagar `undefined`
+- [X] Typecheck y suite unitaria verdes (230 tests) tras migrar los 19 ficheros afectados
+
+```bash
+cd backend && npm run typecheck && npm test
 ```
 
 ---

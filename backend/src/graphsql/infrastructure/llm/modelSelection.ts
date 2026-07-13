@@ -4,6 +4,7 @@
  * así "pueden ser el mismo" sin configurar nada. Centralizado para que el adaptador y la
  * pantalla de selección de proveedor no diverjan.
  */
+import { loadEnv, type BackendEnv } from '../config/env'
 import { LlmProvider } from './LlmProvider'
 
 /** Para qué se usa el modelo: pensar tablas (reasoning) o escribir/evaluar SQL (generation). */
@@ -13,23 +14,23 @@ const DEFAULT_LOCAL_MODEL = 'local-model'
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
 
 /** Modelos del proveedor: el base (fallback) y el específico de cada rol si está configurado. */
-function modelsFor(provider: LlmProvider, env: NodeJS.ProcessEnv) {
+function modelsFor(provider: LlmProvider, vars: BackendEnv) {
   if (provider === LlmProvider.Local) {
     return {
-      base: env.LMSTUDIO_MODEL ?? DEFAULT_LOCAL_MODEL,
-      reasoning: env.LMSTUDIO_MODEL_REASONING,
-      generation: env.LMSTUDIO_MODEL_GENERATION,
+      base: vars.LMSTUDIO_MODEL ?? DEFAULT_LOCAL_MODEL,
+      reasoning: vars.LMSTUDIO_MODEL_REASONING,
+      generation: vars.LMSTUDIO_MODEL_GENERATION,
     }
   }
   return {
-    base: env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
-    reasoning: env.OPENAI_MODEL_REASONING,
-    generation: env.OPENAI_MODEL_GENERATION,
+    base: vars.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
+    reasoning: vars.OPENAI_MODEL_REASONING,
+    generation: vars.OPENAI_MODEL_GENERATION,
   }
 }
 
 /** Sin rol (o rol sin variable propia) devuelve el modelo base: el comportamiento de siempre. */
 export function resolveModelName(provider: LlmProvider, role?: LlmRole, env: NodeJS.ProcessEnv = process.env): string {
-  const models = modelsFor(provider, env)
+  const models = modelsFor(provider, loadEnv(env))
   return (role && models[role]) || models.base
 }

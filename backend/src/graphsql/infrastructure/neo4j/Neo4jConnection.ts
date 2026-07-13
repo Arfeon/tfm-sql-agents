@@ -3,6 +3,8 @@
  * Uso `disableLosslessIntegers` para recibir los enteros como `number` de JS.
  */
 import neo4j, { type Driver } from 'neo4j-driver'
+import type { z } from 'zod'
+import { loadEnv } from '../config/env'
 
 export class Neo4jConnection {
   private readonly driver: Driver
@@ -19,12 +21,8 @@ export class Neo4jConnection {
   }
 
   static fromEnv(env: NodeJS.ProcessEnv = process.env): Neo4jConnection {
-    return new Neo4jConnection(
-      env.NEO4J_URI ?? 'neo4j://localhost:7687',
-      env.NEO4J_USER ?? 'neo4j',
-      env.NEO4J_PASSWORD ?? 'neo4j',
-      env.NEO4J_DATABASE ?? 'neo4j',
-    )
+    const vars = loadEnv(env)
+    return new Neo4jConnection(vars.NEO4J_URI, vars.NEO4J_USER, vars.NEO4J_PASSWORD, vars.NEO4J_DATABASE)
   }
 
   async run<T = Record<string, unknown>>(cypher: string, params: Record<string, unknown> = {}): Promise<T[]> {
@@ -35,6 +33,19 @@ export class Neo4jConnection {
     } finally {
       await session.close()
     }
+  }
+
+  /**
+   * Como `run`, pero valida cada fila con un esquema: si un alias del RETURN deja de
+   * cuadrar, falla aquí con un error claro en vez de propagar `undefined` río abajo.
+   */
+  async runValidated<Row>(
+    rowSchema: z.ZodType<Row>,
+    cypher: string,
+    params: Record<string, unknown> = {},
+  ): Promise<Row[]> {
+    const rows = await this.run(cypher, params)
+    return rows.map((row) => rowSchema.parse(row))
   }
 
   /** Comprueba que la instancia responde. */
