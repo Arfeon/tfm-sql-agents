@@ -60,7 +60,7 @@ irm https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.ps1 | i
 curl -fsSL https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.sh | bash
 ```
 
-Después, escribe `gsql`: la primera vez, el propio CLI levanta y comprueba su infraestructura (contenedores y datos de prueba) guiándote. La misma instalación **hecha a mano** (cuatro comandos, con qué deberías ver en cada punto y las notas por sistema operativo) está en la [guía de instalación](docs/instalacion.md):
+Después, escribe `gsql`: la primera vez, el propio CLI levanta y comprueba su infraestructura (contenedores y datos de prueba) guiándote. La misma instalación **hecha a mano** (cuatro comandos, con qué deberías ver en cada punto y las notas por sistema operativo) está en la [guía paso a paso](docs/instalacion-paso-a-paso.md):
 
 ```bash
 cp .env.example .env         # 1. proveedor de LLM/embeddings (lo demás ya funciona)
@@ -76,7 +76,7 @@ curl -fsSL -O https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docke
 docker compose -f docker-compose.hub.yml run --rm cli
 ```
 
-Detalle (y la variante construyendo la imagen desde el repo) en la [guía de instalación](docs/instalacion.md).
+Detalle (y la variante construyendo la imagen desde el repo) en la [guía de la demo con Docker](docs/instalacion-docker.md).
 
 La infraestructura (Postgres con las BDs de prueba y Neo4j) se puede levantar de dos maneras, y las dos acaban en el mismo sitio:
 
@@ -133,7 +133,9 @@ Todo esto queda **fuera del MVP** pero está especificado; el detalle por compon
 
 ## Documentación
 
-- [`docs/instalacion.md`](docs/instalacion.md) — instalar desde cero por el camino guiado, sin tocar Docker, con un "deberías ver" en cada paso.
+- [`docs/instalacion.md`](docs/instalacion.md) — índice de instalación (qué vía elegir) y el instalador de un comando.
+- [`docs/instalacion-paso-a-paso.md`](docs/instalacion-paso-a-paso.md) — la misma instalación hecha a mano, con un "deberías ver" en cada paso.
+- [`docs/instalacion-docker.md`](docs/instalacion-docker.md) — evaluar la demo solo con Docker, sin instalar Node ni clonar el repo.
 - [`docs/instalacion-avanzada.md`](docs/instalacion-avanzada.md) — la infraestructura a mano: Docker Compose, verificaciones, el init y regenerar datos.
 - [`docs/uso.md`](docs/uso.md) — guía de uso paso a paso: consultar, escanear, depurar.
 - [`docs/design/arquitectura.md`](docs/design/arquitectura.md) — diseño y decisiones técnicas.
