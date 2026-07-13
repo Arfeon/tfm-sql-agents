@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
       POSTGRES_DB: ${POSTGRES_DB:-graphsql_memory}
     ports:
       - "5432:5432"
@@ -40,7 +40,7 @@ services:
     container_name: graphsql_neo4j
     restart: unless-stopped
     environment:
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-Patata1234$$}
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-graphsql_local}
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_server_memory_heap_initial__size: 512m
       NEO4J_server_memory_heap_max__size: 1G
@@ -84,13 +84,13 @@ services:
       # Credenciales: las MISMAS expresiones con las que se crean postgres y neo4j,
       # para que siempre cuadren, haya o no un .env en la máquina anfitriona.
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
       TARGET_DB_1_USER: ${POSTGRES_USER:-postgres}
-      TARGET_DB_1_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      TARGET_DB_1_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
       TARGET_DB_2_USER: ${POSTGRES_USER:-postgres}
-      TARGET_DB_2_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      TARGET_DB_2_PASSWORD: ${POSTGRES_PASSWORD:-graphsql_local}
       NEO4J_USER: ${NEO4J_USER:-neo4j}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-Patata1234$$}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-graphsql_local}
       # Proveedor de LLM: se toma del .env del anfitrión si existe (compose lo lee para
       # interpolar). Para OpenAI basta con OPENAI_API_KEY; para LM Studio, el servidor
       # corre en el anfitrión, de ahí el host.docker.internal.
