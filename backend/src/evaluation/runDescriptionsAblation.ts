@@ -3,8 +3,10 @@
  * Re-vectoriza el índice a mitad y SIEMPRE lo restaura con descripciones al final.
  * Opt-in (npm run evaluate:descriptions): requiere Docker, embeddings y LLM.
  */
+import { join } from 'node:path'
 import { config } from 'dotenv'
-config({ path: '../.env' })
+import { PROJECT_ROOT } from '../graphsql/infrastructure/config/projectRoot'
+config({ path: join(PROJECT_ROOT, '.env') })
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import chalk from 'chalk'

@@ -12,6 +12,7 @@ import boxen from 'boxen'
 import chalk from 'chalk'
 import ora from 'ora'
 import { confirm, select } from '@inquirer/prompts'
+import { PROJECT_ROOT } from '../../graphsql/infrastructure/config/projectRoot'
 
 const run = promisify(execFile)
 
@@ -25,10 +26,9 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 /** Resultado de esperar a la infraestructura, midiendo actividad y no tiempo total. */
 type WaitOutcome = 'ready' | 'dirty' | 'stalled'
 
-/** El compose vive en la raíz del repo; `npm start` se ejecuta desde backend/. */
+/** El compose vive en la raíz del repo, resuelta desde el código (el CLI puede arrancar desde cualquier carpeta). */
 function findComposeDir(): string | null {
-  const candidates = [path.resolve(process.cwd(), '..'), process.cwd()]
-  return candidates.find((dir) => existsSync(path.join(dir, 'docker-compose.yml'))) ?? null
+  return existsSync(path.join(PROJECT_ROOT, 'docker-compose.yml')) ? PROJECT_ROOT : null
 }
 
 async function isDockerRunning(): Promise<boolean> {
@@ -140,7 +140,7 @@ export async function ensureInfrastructureReady(): Promise<boolean> {
   const composeDir = findComposeDir()
   if (!composeDir) {
     console.log(chalk.red('✖ No encuentro el docker-compose.yml en la raíz del repo.'))
-    console.log(chalk.dim('  ¿Estás ejecutando npm start desde la carpeta backend/ del proyecto?'))
+    console.log(chalk.dim(`  Esperaba encontrarlo en ${PROJECT_ROOT}; forma parte del repo, restáuralo si lo borraste.`))
     return false
   }
 

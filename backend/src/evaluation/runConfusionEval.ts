@@ -4,8 +4,10 @@
  * Renombra y SIEMPRE revierte al terminar; restaura Arcadia en el índice.
  * Opt-in (npm run evaluate:confusion): requiere Docker, embeddings y LLM.
  */
+import { join } from 'node:path'
 import { config } from 'dotenv'
-config({ path: '../.env' })
+import { PROJECT_ROOT } from '../graphsql/infrastructure/config/projectRoot'
+config({ path: join(PROJECT_ROOT, '.env') })
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { Client } from 'pg'

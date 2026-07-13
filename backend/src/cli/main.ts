@@ -1,6 +1,8 @@
-/** Punto de entrada del CLI: carga el entorno y enruta el menú a cada flujo. Arrancar con: npm start */
+/** Punto de entrada del CLI: carga el entorno y enruta el menú a cada flujo. Arrancar con: npm start (o el comando global `gsql`) */
+import { join } from 'node:path'
 import { config } from 'dotenv'
-config({ path: '../.env' })
+import { PROJECT_ROOT } from '../graphsql/infrastructure/config/projectRoot'
+config({ path: join(PROJECT_ROOT, '.env') })
 
 import chalk from 'chalk'
 import { select } from '@inquirer/prompts'

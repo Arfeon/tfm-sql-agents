@@ -5,9 +5,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { PROJECT_ROOT } from './projectRoot'
 
-/** Carpeta de descripciones, relativa al directorio de ejecución (backend/). */
-export const DESCRIPTIONS_DIR = '../descriptions'
+/** Carpeta de descripciones, en la raíz del repo (independiente de desde dónde se ejecute). */
+export const DESCRIPTIONS_DIR = join(PROJECT_ROOT, 'descriptions')
 
 const descriptionsSchema = z.array(
   z.object({

@@ -6,9 +6,10 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { PROJECT_ROOT } from './projectRoot'
 
-/** Carpeta de prompts, relativa al directorio de ejecución (backend/). */
-export const AGENTS_DIR = '../agents'
+/** Carpeta de prompts, en la raíz del repo (independiente de desde dónde se ejecute). */
+export const AGENTS_DIR = join(PROJECT_ROOT, 'agents')
 
 export type AgentPromptName = 'sql-generator' | 'equivalence-judge' | 'judge' | 'chat' | 'schema-selector'
 
