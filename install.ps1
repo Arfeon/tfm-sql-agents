@@ -151,5 +151,6 @@ Write-Host '  Para arrancar: gsql        (o: cd backend; npm start, desde esa ca
 Write-Host '                 La primera vez, el propio programa monta su infraestructura'
 Write-Host '                 (contenedores y datos de prueba) guiandote paso a paso.'
 Write-Host '  Actualizar:    vuelve a ejecutar este instalador (hace git pull).'
-Write-Host '  Desinstalar:   npm unlink -g graphsql-backend  y borra la carpeta.'
+Write-Host '  Desinstalar:   docs/instalacion.md#desinstalar (docker compose down -v,'
+Write-Host '                 npm unlink -g y borrar la carpeta).'
 Write-Host ''

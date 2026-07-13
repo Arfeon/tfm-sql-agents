@@ -107,13 +107,57 @@ directamente el código de tu carpeta de instalación, así que cuando el proyec
 se actualiza (re-ejecutando el instalador o con `git pull`), `gsql` ya es la
 versión nueva sin reinstalar nada.
 
-### Actualizar y desinstalar
+### Actualizar
 
-- **Actualizar**: vuelve a ejecutar el comando del instalador. Detecta la
-  instalación, hace `git pull`, actualiza dependencias y conserva tu `.env`.
-- **Desinstalar**: `npm unlink -g graphsql-backend` (quita el comando `gsql`) y
-  borra la carpeta de instalación. Los contenedores y sus datos se quitan aparte,
-  si quieres: `docker compose down -v` desde esa carpeta antes de borrarla.
+Vuelve a ejecutar el comando del instalador. Detecta la instalación, hace
+`git pull`, actualiza dependencias y conserva tu `.env`.
+
+### Desinstalar
+
+No hay un comando de desinstalación: son tres pasos independientes, y como cada
+uno deja rastro en un sitio distinto (Docker, npm, el disco), lo más seguro es
+hacerlos a mano, en este orden y desde la carpeta de instalación.
+
+1. **Baja los contenedores y borra sus datos** (Postgres y Neo4j, con el esquema
+   escaneado y las bases de prueba):
+
+   ```bash
+   docker compose down -v
+   ```
+
+   El `-v` es lo que borra los volúmenes; sin él, los contenedores desaparecen
+   pero los datos quedan guardados para la próxima vez. Si no piensas volver a
+   instalar GraphSQL, este paso es el que de verdad libera espacio en disco.
+
+2. **Quita el comando global `gsql`** (si lo registraste con el instalador o con
+   `npm link`):
+
+   ```bash
+   npm unlink -g graphsql-backend
+   ```
+
+   - **Windows** — esto borra los lanzadores `gsql.cmd`/`gsql.ps1`/`gsql` de
+     `%APPDATA%\npm`. Compruébalo con `where.exe gsql`: no debería encontrar nada.
+   - **Linux / macOS** — borra el enlace simbólico `gsql` del `bin` de tu prefix
+     global de npm (`~/.nvm/versions/node/vXX/bin` con nvm, o el que hayas
+     configurado). Compruébalo con `which gsql`.
+
+   Si nunca registraste el comando global, este paso no hace nada (ni falla).
+
+3. **Borra la carpeta de instalación** — el `.git` clonado, el `.env` con tu
+   clave de API y todo lo demás. Es una carpeta corriente, así que basta con
+   borrarla como cualquier otra:
+
+   - **Windows**: borra la carpeta desde el Explorador, o `Remove-Item -Recurse
+     -Force` en PowerShell.
+   - **Linux / macOS**: `rm -rf` sobre la carpeta.
+
+   Por defecto es `%LOCALAPPDATA%\GraphSQL` (Windows) o `~/graphsql`
+   (Linux/macOS) — o la que hayas elegido al instalar.
+
+El orden importa poco entre el paso 1 y el 2, pero haz el 3 el último: los pasos
+1 y 2 necesitan el `docker-compose.yml` y el `package.json` que hay dentro de esa
+carpeta.
 
 ## Si algo no cuadra
 
