@@ -7,7 +7,7 @@ necesario para usar GraphSQL — es para quien quiere mirar debajo del capó.
 
 Los comandos son los mismos en Windows (PowerShell), Linux y macOS; los requisitos
 y las diferencias por sistema operativo están en la
-[guía de instalación, §1](instalacion.md#1-instala-los-requisitos-una-sola-vez).
+[guía paso a paso, §1](instalacion-paso-a-paso.md#1-instala-los-requisitos-una-sola-vez).
 
 ## Levantar la infraestructura a mano
 
@@ -41,7 +41,7 @@ Esto arranca dos servicios:
 Hay un tercer servicio, `cli`, bajo el profile `demo`: la aplicación empaquetada en
 una imagen Docker para evaluar la demo sin Node (`docker compose --profile demo run
 --rm cli`). El `up -d` de siempre no lo toca; el detalle está en la
-[guía de instalación](instalacion.md).
+[guía de la demo con Docker](instalacion-docker.md).
 
 Para comprobar su estado en cualquier momento:
 
