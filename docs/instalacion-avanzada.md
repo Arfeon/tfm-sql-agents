@@ -5,6 +5,10 @@ explicado para controlarlo a mano: levantar la infraestructura con Docker Compos
 verificar cada pieza, entender el init y regenerar los datos. Nada de esto es
 necesario para usar GraphSQL — es para quien quiere mirar debajo del capó.
 
+Los comandos son los mismos en Windows (PowerShell), Linux y macOS; los requisitos
+y las diferencias por sistema operativo están en la
+[guía de instalación, §1](instalacion.md#1-instala-los-requisitos-una-sola-vez).
+
 ## Levantar la infraestructura a mano
 
 Desde la raíz del proyecto:
