@@ -4,9 +4,23 @@ De cero a la primera consulta **sin tocar Docker**: el propio programa comprueba
 levanta su infraestructura, y te va guiando — tú solo respondes que sí. Cada paso
 termina con un *"deberías ver"* para que sepas que vas bien.
 
-> ¿Prefieres controlar cada pieza a mano (docker compose, verificaciones, regenerar
-> datos)? Eso vive en la [guía avanzada](instalacion-avanzada.md). Para usar el
-> programa una vez instalado, la [guía de uso](uso.md).
+Todo funciona igual en **Windows, Linux y macOS**; donde hay alguna diferencia
+(terminal, permisos, rutas), la guía lo señala en el momento.
+
+## ¿Qué vía elijo?
+
+Hay tres maneras de poner GraphSQL en marcha. Esta guía cubre la primera de
+principio a fin; las otras dos tienen su sección o su guía propia:
+
+| Vía | Para quién | Necesitas | Dónde |
+|-----|------------|-----------|-------|
+| **Guiada** (recomendada) | Uso normal del proyecto | Node 20+, Docker, Git | Esta guía, §1–§5 |
+| **Demo solo con Docker** | Evaluarlo sin instalar Node | Docker, Git | [Sección al final](#alternativa-la-demo-solo-con-docker-sin-instalar-node) |
+| **Manual avanzada** | Controlar cada pieza a mano (compose, verificaciones, regenerar datos) | Node 20+, Docker, Git | [Guía avanzada](instalacion-avanzada.md) |
+
+Además, la vía guiada tiene un complemento opcional: registrar el **comando global
+`gsql`** para invocar el CLI desde cualquier carpeta ([§3](#opcional-el-comando-gsql-para-invocarlo-desde-cualquier-carpeta)).
+Para usar el programa una vez instalado, la [guía de uso](uso.md).
 
 ## 1. Instala los requisitos (una sola vez)
 
@@ -56,6 +70,9 @@ cd tfm-sql-agents
 cp .env.example .env
 cp descriptions/descriptions.example.json descriptions/descriptions.json
 ```
+
+Los comandos valen tal cual en cualquier sistema: en Windows, PowerShell entiende
+`cp` y las barras `/` sin cambiar nada.
 
 El segundo `cp` activa las **descripciones de tablas** de la base de prueba: mejoran
 mucho la búsqueda (verás por qué cuando preguntes por la "lista de deseos" y el
@@ -132,9 +149,8 @@ cd backend
 npm link
 ```
 
-Eso instala el comando `gsql` en la carpeta global de npm (en Windows,
-`%APPDATA%\npm`; en macOS/Linux, el prefix de npm), que ya está en el PATH. A
-partir de ahí, abre cualquier terminal en cualquier carpeta y escribe:
+Eso instala el comando `gsql` en la carpeta global de npm, que ya está en el
+PATH. A partir de ahí, abre cualquier terminal en cualquier carpeta y escribe:
 
 ```bash
 gsql
@@ -144,6 +160,17 @@ Es exactamente el mismo programa que `npm start` (mismo menú, misma
 configuración del `.env` del proyecto). El comando queda **enlazado** al repo:
 si actualizas el código con `git pull`, `gsql` ya ejecuta la versión nueva sin
 reinstalar nada. Para quitarlo: `npm unlink -g graphsql-backend`.
+
+Notas por sistema operativo:
+
+- **Windows** — el comando queda en `%APPDATA%\npm` (npm lo añade al PATH al
+  instalar Node). Como siempre, úsalo desde PowerShell o Windows Terminal, no
+  desde Git Bash.
+- **Linux / macOS** — queda en el prefix global de npm. Si instalaste Node con
+  **nvm** (lo habitual), funciona sin más; si usas el Node del sistema (apt/dnf)
+  puede pedir permisos — mejor que un `sudo npm link`, configura un prefix de
+  usuario: `npm config set prefix ~/.local` (y asegúrate de que `~/.local/bin`
+  está en tu PATH).
 
 ## 4. Escanea el esquema (solo la primera vez)
 
@@ -188,6 +215,43 @@ Europe          █████████████████████�
 
 **Listo.** A partir de aquí, la [guía de uso](uso.md) explica cada función (afinar
 consultas, la traza de recuperación, los gráficos…).
+
+## Alternativa: la demo solo con Docker (sin instalar Node)
+
+Si solo quieres **evaluar la demo** y no tienes (ni quieres) Node en la máquina, el
+proyecto incluye una imagen Docker del CLI: la aplicación entera corre en un
+contenedor y habla con Postgres y Neo4j por la red interna de Docker. Solo
+necesitas **Docker y Git**:
+
+```bash
+git clone https://github.com/Arfeon/tfm-sql-agents.git
+cd tfm-sql-agents
+cp .env.example .env            # pon tu OPENAI_API_KEY (o LLM_PROVIDER=local)
+docker compose --profile demo build
+docker compose --profile demo run --rm cli
+```
+
+El `run` levanta Postgres y Neo4j si hacen falta (el primer arranque carga las
+bases de prueba, igual que en el camino normal), espera a que estén sanos y abre
+el mismo menú de siempre. Desde ahí, sigue por [Escanea el esquema](#4-escanea-el-esquema-solo-la-primera-vez).
+
+Dos matices de esta vía:
+
+- El proveedor **local** (LM Studio) corre en tu máquina, no en el contenedor; el
+  contenedor lo alcanza solo en `http://host.docker.internal:1234/v1`, así que en
+  LM Studio activa la opción de servir en la red local si no responde.
+- La imagen lleva la configuración de ejemplo. Tu `.env` de la raíz se respeta
+  para lo esencial (proveedor, API key, contraseñas); para afinar el resto de
+  variables dentro del contenedor, edita el servicio `cli` del `docker-compose.yml`.
+
+Notas por sistema operativo:
+
+- **Windows** — necesitas Docker Desktop con el "Engine running" (ver la nota de
+  Windows del §1). Los comandos de arriba funcionan tal cual en PowerShell (`cp`
+  existe como alias).
+- **Linux** — Docker Engine + Compose v2 y tu usuario en el grupo `docker` (§1).
+  El `host.docker.internal` para LM Studio también funciona: el compose lo mapea
+  con `host-gateway`, que en Windows/macOS ya existe de serie.
 
 ## Si algo no cuadra
 

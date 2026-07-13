@@ -112,6 +112,14 @@ function showReadyBanner(): void {
  * (o Docker no está disponible), devuelve false y quien llama sale limpiamente.
  */
 export async function ensureInfrastructureReady(): Promise<boolean> {
+  // 0. Cuando el propio CLI corre DENTRO de un contenedor (la demo Docker), no hay
+  // CLI de docker con el que comprobar ni levantar nada: la infraestructura la
+  // garantiza compose con `depends_on: service_healthy` antes de arrancar este proceso.
+  if (process.env.GRAPHSQL_SKIP_INFRA_PREFLIGHT === 'true') {
+    console.log(chalk.dim('Preflight de infraestructura omitido (GRAPHSQL_SKIP_INFRA_PREFLIGHT=true): la gestiona docker compose.\n'))
+    return true
+  }
+
   // 1. ¿Está el daemon de Docker en marcha?
   while (!(await isDockerRunning())) {
     console.log(chalk.yellow('⚠ Docker no está en marcha (o no está instalado).'))

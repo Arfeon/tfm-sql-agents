@@ -1,0 +1,19 @@
+# Contexto mínimo para el Dockerfile de la demo. Dos objetivos: no subir basura
+# (node_modules pesa cientos de MB) y, sobre todo, que NUNCA entre en el contexto
+# nada confidencial o local.
+
+# Confidencial / local: el .env real y las descripciones de BDs reales (esquema de
+# empresa). Al contexto solo pasan los .example, que es lo único que copia la imagen.
+.env
+.env.*
+!.env.example
+descriptions/*
+!descriptions/*.example.json
+
+# Pesado o irrelevante para la imagen
+**/node_modules
+.git
+docs
+backend/tests
+backend/.husky
+*.md

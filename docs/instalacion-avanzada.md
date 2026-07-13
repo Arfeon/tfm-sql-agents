@@ -5,6 +5,10 @@ explicado para controlarlo a mano: levantar la infraestructura con Docker Compos
 verificar cada pieza, entender el init y regenerar los datos. Nada de esto es
 necesario para usar GraphSQL — es para quien quiere mirar debajo del capó.
 
+Los comandos son los mismos en Windows (PowerShell), Linux y macOS; los requisitos
+y las diferencias por sistema operativo están en la
+[guía de instalación, §1](instalacion.md#1-instala-los-requisitos-una-sola-vez).
+
 ## Levantar la infraestructura a mano
 
 Desde la raíz del proyecto:
@@ -33,6 +37,11 @@ Esto arranca dos servicios:
 |------------|-------------------------------|--------------------------------|
 | `postgres` | PostgreSQL **con pgvector**   | `localhost:5432`               |
 | `neo4j`    | Base de datos de grafos Neo4j | `localhost:7474` (navegador)   |
+
+Hay un tercer servicio, `cli`, bajo el profile `demo`: la aplicación empaquetada en
+una imagen Docker para evaluar la demo sin Node (`docker compose --profile demo run
+--rm cli`). El `up -d` de siempre no lo toca; el detalle está en la
+[guía de instalación](instalacion.md).
 
 Para comprobar su estado en cualquier momento:
 

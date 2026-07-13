@@ -49,6 +49,7 @@ Fijo estos principios **desde el inicio** porque son mi metodología de trabajo,
 | D-13 | Golden set: interpretación **inclusiva** de las agregaciones "por/cada categoría" — la SQL de referencia incluye las categorías con 0/NULL (LEFT JOIN), no solo las que tienen actividad | Revisando a mano los fallos vi que varias referencias usaban INNER JOIN y ocultaban categorías sin actividad (regiones sin clientes, géneros sin valoraciones, planes sin suscripciones, plataformas sin sesiones, regiones sin ingresos). Pero una pregunta "por/cada X" pregunta por TODAS las X, y un 0 es información (una región sin ventas es una señal, no una fila a ocultar; el front la etiqueta "sin datos"). Así que la respuesta fiel incluye las vacías, y penalizar al modelo por generarla era un error de la ground truth, no del modelo. Aplico la regla por el ENUNCIADO y de forma uniforme (puede perjudicar a un candidato que usara INNER), no para favorecer al modelo, y mantengo los números anteriores para transparencia. Límite conocido: cualquier referencia única fija una interpretación; para preguntas ambiguas es intrínseco a la execution accuracy (por eso está D-11) | ✅ Cerrada |
 | D-14 | Despliegue objetivo **on-premise** (dentro del perímetro de la organización); la entrega se materializa como instalación reproducible con Docker Compose, **sin instancia en nube pública** | GraphSQL se conecta a la BD corporativa y maneja su esquema, sus descripciones y los resultados de las consultas: exactamente el tipo de pieza que una empresa no despliega en una nube de terceros (lo veo en mi propio entorno laboral: las aplicaciones y las bases de datos corren en servidores propios, orquestadas con Kubernetes y Docker, minimizando lo expuesto a la nube). El proveedor LLM local (LM Studio) existe justo para eso: que ni las preguntas ni el esquema salgan del perímetro; publicar una instancia en un VPS iría contra esa decisión de diseño y demostraría el sistema en un entorno donde ningún usuario real lo usaría. Como aplicación CLI cuya infraestructura ya está empaquetada en contenedores, la entrega natural es la instalación documentada y reproducible (`docker compose up` + guía), y ese mismo compose es la base directa de un despliegue productivo en un orquestador (Kubernetes) sobre servidores de la organización — queda como mejora futura junto al servidor MCP | ✅ Cerrada |
 | D-15 | Consultas guardadas: **una sola tabla `saved_queries` con flags** (`use_as_example`, `is_favorite`) y **guardado explícito tras ver el resultado**, no automático al aprobar; una columna `user_id` (hoy un valor por defecto) deja la puerta abierta al futuro por-usuario | La memoria *few-shot* (SPEC-09) y las consultas favoritas (SPEC-25) comparten la forma de fila (pregunta, SQL, BD objetivo, tablas, fecha) y el MISMO momento natural de guardado: "he visto el resultado y es bueno". Guardarlo una vez en una tabla con dos flags es más simple que dos tablas duplicadas, evita el `if (tipo)` en la capa de aplicación (un solo puerto/adaptador/factory, D-05) y hace el por-usuario futuro una columna, no una migración doble. Los dos comportamientos quedan separados por flag: la recuperación semántica filtra `use_as_example = true` (+ misma BD + umbral, D-06); la lista de favoritas filtra `is_favorite = true`. Cambio el disparador de SPEC-09 de automático-al-aprobar a **explícito**: aprobar la SQL valida el texto, pero ver el resultado valida la RESPUESTA — es un mejor sello de calidad para un corpus de ejemplos, y evita sembrarlo de consultas exploratorias o casi-duplicadas que ensuciarían los *few-shot*. El coste (un paso más y menos ejemplos) lo asumo a cambio de un corpus que el humano cura, no que se llena solo | ✅ Cerrada |
+| D-16 | Distribución: **comando global `gsql`** (campo `bin` de npm + `npm link`) e **imagen Docker de demo** (profile `demo` del compose), sin ejecutable standalone ni publicación en un registro público | Dos públicos, dos canales (SPEC-31): quien trabaja con el proyecto quiere invocar el CLI desde cualquier carpeta (para eso las rutas a recursos se resuelven desde el código, no desde el cwd), y quien solo quiere evaluar la demo no debería necesitar Node — con Docker le basta. Un ejecutable standalone (pkg/SEA) no resuelve nada real: la aplicación necesita el repo al lado igualmente (compose, scripts de init, prompts editables como texto). Y no publico la imagen en un registro a propósito: un artefacto pre-construido invita a ejecutarlo fuera del perímetro (D-14) y se desalinea del código; construirla desde el repo clonado la mantiene sincronizada. La imagen copia SOLO los `*.example.json` de `descriptions/` — las descripciones de una BD real son esquema confidencial y no entran jamás en un artefacto distribuible | ✅ Cerrada |
 
 ### 3.1 Patrón obligatorio: acceso a recursos externos (puerto + adaptador + factory)
 
@@ -1264,6 +1265,43 @@ cd backend && npm test    # unit del diff y del caso de uso (con dobles)
 
 ```bash
 docker compose --profile observability up -d   # y una consulta desde el CLI
+```
+
+---
+
+### SPEC-31 — Distribución: comando global `gsql` e imagen Docker de demo ✅ *Hecho*
+
+**Objetivo.** Hasta ahora la única forma de arrancar GraphSQL era `cd backend && npm start`, con todas las rutas a recursos (`agents/`, `descriptions/`, `.env`, el compose) relativas al directorio de ejecución. Quiero dos canales de instalación (la decisión y sus alternativas descartadas, en D-16): el comando global **`gsql`**, invocable desde cualquier carpeta, para quien trabaja con el proyecto; y una **imagen Docker del CLI** para quien quiere evaluar la demo solo con Docker, sin instalar Node.
+
+**Contrato.**
+
+- *Rutas independientes del cwd.* La raíz del proyecto se resuelve desde el código (`projectRoot.ts`, con realpath para deshacer el junction de `npm link`), y de ella cuelgan `agents/`, `descriptions/`, `.env` y la búsqueda del `docker-compose.yml` del preflight. Ningún recurso depende de desde dónde se ejecute el proceso.
+- *Comando global.* El campo `bin` del `package.json` registra `gsql` (lanzador en `backend/bin/gsql.js` que arranca tsx sobre el CLI real); `npm link` desde `backend/` lo instala en la carpeta global de npm y `npm unlink -g graphsql-backend` lo quita. Mismo programa que `npm start`: mismo menú, mismo `.env`, mismo preflight. Al ser un enlace, `git pull` actualiza el comando sin reinstalar.
+- *Imagen de demo.* `Dockerfile` en la raíz (la app con sus dependencias de producción, los prompts y la config de ejemplo) + servicio `cli` en el compose bajo el profile `demo`: el `docker compose up -d` de siempre NO lo arranca ni cambia el preflight local. Dentro del contenedor el preflight se omite (`GRAPHSQL_SKIP_INFRA_PREFLIGHT=true`): no hay CLI de Docker dentro, y la infraestructura la garantiza compose con `depends_on: service_healthy`.
+- *Credenciales que siempre cuadran.* El servicio `cli` recibe hosts de la red interna (`postgres`, `neo4j://neo4j:7687`) y las MISMAS expresiones de interpolación de credenciales con las que el compose crea Postgres y Neo4j, haya o no `.env` en el anfitrión. El proveedor LLM llega del `.env` del anfitrión (interpolación) y LM Studio se alcanza vía `host.docker.internal` (con `host-gateway` para Linux).
+- *Confidencialidad.* La imagen copia SOLO `descriptions/*.example.json` (fichero a fichero) y el `.dockerignore` excluye la carpeta entera, el `.env` real y el resto de material local: las descripciones de una BD real (esquema de empresa) no entran jamás en un artefacto distribuible.
+- *Fuera de alcance.* Publicar la imagen en un registro (descartado en D-16), ejecutable standalone, y auto-actualización del comando.
+
+**Pasos**
+
+1. `projectRoot.ts` y migrar a él `agentPrompts`, `descriptions`, la carga del `.env` (CLI y scripts de evaluación) y `findComposeDir` del preflight.
+2. `backend/bin/gsql.js` + campo `bin` en `package.json`; `tsx` pasa a dependencia de producción (es el runtime del CLI).
+3. Skip del preflight por `GRAPHSQL_SKIP_INFRA_PREFLIGHT` en `ensureInfrastructureReady`.
+4. `Dockerfile` + `.dockerignore` + servicio `cli` (profile `demo`) en el compose.
+5. Documentar: README, `instalacion.md` (comando `gsql` y demo Docker) y D-15 en arquitectura.
+
+**Criterios de aceptación**
+
+- [X] `gsql` desde una carpeta ajena al repo arranca igual que `npm start`: preflight, proveedor y menú con el índice detectado (verificado en vivo desde `%TEMP%`)
+- [X] `npm start` desde `backend/` sigue funcionando exactamente igual
+- [X] `docker compose --profile demo run --rm cli` llega al menú funcional conectando a Postgres y Neo4j por la red interna (verificado en vivo)
+- [X] `docker compose up -d` (sin profile) no arranca el servicio `cli` ni cambia el preflight local
+- [X] En la imagen no hay NINGÚN fichero de `descriptions/` salvo el ejemplo, ni `.env` del anfitrión (verificado inspeccionando la imagen construida con el `erp.json` real presente en local)
+- [X] Typecheck y suite unitaria verdes (230 tests)
+
+```bash
+cd backend && npm link && cd /tmp && gsql        # canal 1: comando global
+docker compose --profile demo build && docker compose --profile demo run --rm cli   # canal 2: demo Docker
 ```
 
 ---
