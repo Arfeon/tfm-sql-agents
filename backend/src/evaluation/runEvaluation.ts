@@ -3,8 +3,10 @@
  * docs/evaluacion/. Opt-in (npm run evaluate): requiere Docker con el esquema
  * escaneado/vectorizado y el LLM configurado.
  */
+import { join } from 'node:path'
 import { config } from 'dotenv'
-config({ path: '../.env' })
+import { PROJECT_ROOT } from '../graphsql/infrastructure/config/projectRoot'
+config({ path: join(PROJECT_ROOT, '.env') })
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import chalk from 'chalk'

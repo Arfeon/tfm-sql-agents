@@ -4,8 +4,10 @@
  * una muestra de las dos para juzgar a mano. Manda la ejecución real, no un LLM.
  * Uso: npm run evaluate:review [ruta-al-casos.json]  (por defecto, escala-casos-coder14b.json)
  */
+import { join } from 'node:path'
 import { config } from 'dotenv'
-config({ path: '../.env' })
+import { PROJECT_ROOT } from '../graphsql/infrastructure/config/projectRoot'
+config({ path: join(PROJECT_ROOT, '.env') })
 
 import { readFileSync } from 'node:fs'
 import { loadTargetDatabases, sqlDialectFor, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'

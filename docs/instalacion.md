@@ -122,6 +122,29 @@ desde cero o salir a mirarlo a mano.
 Después elige tu proveedor de IA (sale preseleccionado el del `.env`) y llegas al
 menú principal.
 
+### Opcional: el comando `gsql`, para invocarlo desde cualquier carpeta
+
+Si vas a usar GraphSQL a menudo, puedes registrarlo como un comando global y
+olvidarte del `cd backend && npm start`:
+
+```bash
+cd backend
+npm link
+```
+
+Eso instala el comando `gsql` en la carpeta global de npm (en Windows,
+`%APPDATA%\npm`; en macOS/Linux, el prefix de npm), que ya está en el PATH. A
+partir de ahí, abre cualquier terminal en cualquier carpeta y escribe:
+
+```bash
+gsql
+```
+
+Es exactamente el mismo programa que `npm start` (mismo menú, misma
+configuración del `.env` del proyecto). El comando queda **enlazado** al repo:
+si actualizas el código con `git pull`, `gsql` ya ejecuta la versión nueva sin
+reinstalar nada. Para quitarlo: `npm unlink -g graphsql-backend`.
+
 ## 4. Escanea el esquema (solo la primera vez)
 
 El menú te marca el camino — las opciones que aún no pueden funcionar salen

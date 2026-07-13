@@ -57,6 +57,8 @@ cd backend && npm install    # 3. el ÚNICO npm install del repo
 npm start                    # 4. abre el CLI, que levanta y comprueba el resto
 ```
 
+Opcionalmente, `npm link` desde `backend/` registra el comando global **`gsql`**: el mismo CLI, invocable desde cualquier carpeta sin `cd` previo (detalle en la [guía de instalación](docs/instalacion.md)).
+
 La infraestructura (Postgres con las BDs de prueba y Neo4j) se puede levantar de dos maneras, y las dos acaban en el mismo sitio:
 
 - **Guiada (por defecto)** — el propio `npm start` comprueba que Docker está en marcha y que los contenedores existen y están sanos; si falta algo, te avisa y se ofrece a crearlos con la configuración por defecto. No hace falta saber Docker.
