@@ -9,10 +9,10 @@ import { config } from 'dotenv'
 import { PROJECT_ROOT } from '../graphsql/infrastructure/config/projectRoot'
 config({ path: join(PROJECT_ROOT, '.env') })
 
-import { readFileSync } from 'node:fs'
 import { loadTargetDatabases, sqlDialectFor, type TargetDatabaseConfig } from '../graphsql/infrastructure/config/targetDatabases'
 import { TargetDatabaseFactory } from '../graphsql/infrastructure/targetdb/TargetDatabaseFactory'
 import { executeQuery } from '../graphsql/application/sql/queryExecution'
+import { loadScaleRun } from './scaleRunFile'
 
 const CASES_FILE = process.argv[2] ?? '../docs/evaluacion/escala-casos-coder14b.json'
 
@@ -81,10 +81,7 @@ async function runOn(target: TargetDatabaseConfig, sqlText: string): Promise<Row
 }
 
 async function main(): Promise<void> {
-  const detail = JSON.parse(readFileSync(CASES_FILE, 'utf8')) as Array<{
-    name: string
-    modes: Array<{ mode: string; cases: Array<{ id: string; executionMatchFair: boolean; error?: string; referenceSql: string; generatedSql: string }> }>
-  }>
+  const detail = loadScaleRun(CASES_FILE)
   const targets = loadTargetDatabases()
 
   for (const db of detail) {
@@ -97,6 +94,10 @@ async function main(): Promise<void> {
       for (const c of failing) {
         if (c.error) {
           console.log(`  ${c.id}: ERROR de ejecución → ${c.error.slice(0, 90)}`)
+          continue
+        }
+        if (!c.referenceSql) {
+          console.log(`  ${c.id}: la tirada no guardó referenceSql (formato antiguo); no puedo re-ejecutar`)
           continue
         }
         try {

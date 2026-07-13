@@ -4,7 +4,13 @@
  * uso el cliente de LangChain a propósito: con LM Studio devolvía vectores de ceros
  * (por cómo el SDK maneja base64); pidiendo floats explícitos obtengo el vector real.
  */
+import { z } from 'zod'
 import type { IEmbeddings } from '../../domain/ports/IEmbeddings'
+
+/** Respuesta de `/v1/embeddings`: valida que cada vector sea realmente una lista de números. */
+const embeddingsResponseSchema = z.object({
+  data: z.array(z.object({ embedding: z.array(z.number()) })).optional(),
+})
 
 export interface OpenAICompatibleEmbeddingsConfig {
   apiKey: string
@@ -60,8 +66,11 @@ export class OpenAICompatibleEmbeddings implements IEmbeddings {
       throw new Error(`La API de embeddings respondió ${response.status}: ${detail.slice(0, 300)}`)
     }
 
-    const payload = (await response.json()) as { data?: { embedding: number[] }[] }
-    const vectors = payload.data?.map((item) => item.embedding)
+    const payload = embeddingsResponseSchema.safeParse(await response.json())
+    if (!payload.success) {
+      throw new Error('Respuesta de embeddings inesperada: el cuerpo no tiene el formato de la API (data[].embedding numérico).')
+    }
+    const vectors = payload.data.data?.map((item) => item.embedding)
     if (!vectors || vectors.length !== texts.length) {
       throw new Error(`Respuesta de embeddings inesperada: esperaba ${texts.length} vectores, recibí ${vectors?.length ?? 0}.`)
     }

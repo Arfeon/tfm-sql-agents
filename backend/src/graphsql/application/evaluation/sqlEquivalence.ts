@@ -3,6 +3,7 @@
  * COMPLEMENTARIA a la execution accuracy, nunca la titular: un LLM también se equivoca
  * juzgando equivalencia, así que la reporto al lado, no en su lugar.
  */
+import { z } from 'zod'
 import { ChatModelFactory } from '../../infrastructure/llm/ChatModelFactory'
 import { loadAgentPrompt } from '../../infrastructure/config/agentPrompts'
 import type { IChatModel } from '../../domain/ports/IChatModel'
@@ -13,6 +14,12 @@ export interface EquivalenceVerdict {
   equivalent: boolean
   reason: string
 }
+
+/** La respuesta esperada del juez: `equivalent` es imprescindible; un `reason` ilegible queda vacío. */
+const equivalenceReplySchema = z.object({
+  equivalent: z.boolean(),
+  reason: z.string().catch(''),
+})
 
 export interface SqlEquivalenceDependencies {
   createChatModel(): IChatModel
@@ -29,14 +36,8 @@ export function buildEquivalenceSystemPrompt(dialect: string): string {
 
 /** Una respuesta ilegible cuenta como NO equivalente (conservador: no inflar aciertos). */
 export function parseEquivalenceVerdict(raw: string): EquivalenceVerdict {
-  const fields = extractJsonObject(raw)
-  if (!fields || typeof fields.equivalent !== 'boolean') {
-    return notInterpretable()
-  }
-  return {
-    equivalent: fields.equivalent,
-    reason: typeof fields.reason === 'string' ? fields.reason : '',
-  }
+  const reply = equivalenceReplySchema.safeParse(extractJsonObject(raw))
+  return reply.success ? reply.data : notInterpretable()
 }
 
 function notInterpretable(): EquivalenceVerdict {

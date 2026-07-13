@@ -23,9 +23,9 @@ Lo único que descargas tú a mano es **un fichero de texto**,
 credenciales, orden de arranque). Sin él tendrías que arrancar y cablear los tres
 a mano; con él, es un comando.
 
-Nota importante: no son "dos imágenes a elegir" ni versiones alternativas — las
-tres se usan **a la vez**, cada una con su papel (aplicación / base de datos /
-grafo). El compose las levanta juntas en una sola orden.
+Ojo: no son "dos imágenes a elegir" ni versiones alternativas — las tres se usan
+**a la vez**, cada una con su papel (aplicación / base de datos / grafo). El
+compose las levanta juntas en una sola orden.
 
 ## Paso a paso
 

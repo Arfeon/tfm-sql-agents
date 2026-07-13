@@ -4,6 +4,7 @@ import figlet from 'figlet'
 import gradient from 'gradient-string'
 import ora from 'ora'
 import { listLoadedModels } from '../graphsql/infrastructure/llm/lmStudio'
+import { loadEnv } from '../graphsql/infrastructure/config/env'
 
 export function showHeader(): void {
   const banner = figlet.textSync('GraphSQL', { font: 'Standard' })
@@ -33,7 +34,7 @@ export async function withSpinner<T>(text: string, task: () => Promise<T>): Prom
 }
 
 export async function warnIfLocalModelMissing(kind: 'chat' | 'embeddings', modelId: string): Promise<void> {
-  const baseUrl = process.env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234/v1'
+  const baseUrl = loadEnv().LMSTUDIO_BASE_URL
   let loaded: string[]
   try {
     loaded = await listLoadedModels(baseUrl)

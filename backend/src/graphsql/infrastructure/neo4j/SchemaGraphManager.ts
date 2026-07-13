@@ -3,14 +3,34 @@
  *   (:Table)-[:HAS_COLUMN]->(:Column)
  *   (:Table)-[:REFERENCES {from_column, to_column}]->(:Table)   // por cada FK
  */
-import { fullTableName, type TableSchema, type ColumnSchema, type ForeignKeySchema } from '../../domain/schema/TableSchema'
+import { z } from 'zod'
+import { fullTableName, type TableSchema } from '../../domain/schema/TableSchema'
 import type { Neo4jConnection } from './Neo4jConnection'
 
-export interface SchemaSummary {
-  tables: number
-  columns: number
-  relationships: number
-}
+// Esquemas de las filas de cada consulta de lectura: como acaban en el contexto del
+// generador de SQL, valido los alias del RETURN para no colar prompts corruptos.
+
+const schemaSummaryRow = z.object({
+  tables: z.number(),
+  columns: z.number(),
+  relationships: z.number(),
+})
+
+const tableNamesRow = z.object({
+  names: z.array(z.string()),
+})
+
+/** Fila de `reconstructTables`: `schema`, `description` y `primary_keys` pueden faltar en el nodo (→ null). */
+const tableRow = z.object({
+  name: z.string(),
+  schema: z.string().nullable(),
+  description: z.string().nullable(),
+  primaryKeys: z.array(z.string()).nullable(),
+  columns: z.array(z.object({ name: z.string(), type: z.string(), nullable: z.boolean() })),
+  foreignKeys: z.array(z.object({ column: z.string(), referencesTable: z.string(), referencesColumn: z.string() })),
+})
+
+export type SchemaSummary = z.infer<typeof schemaSummaryRow>
 
 export class SchemaGraphManager {
   constructor(private readonly neo4j: Neo4jConnection) {}
@@ -34,7 +54,7 @@ export class SchemaGraphManager {
   }
 
   async getSchemaSummary(): Promise<SchemaSummary> {
-    const rows = await this.neo4j.run<SchemaSummary>(`
+    const rows = await this.neo4j.runValidated(schemaSummaryRow, `
       MATCH (t:Table)
       OPTIONAL MATCH (t)-[:HAS_COLUMN]->(c:Column)
       OPTIONAL MATCH (t)-[r:REFERENCES]->(:Table)
@@ -55,7 +75,8 @@ export class SchemaGraphManager {
       return []
     }
     // Expando: las candidatas + sus vecinas por FK (un salto, ambos sentidos).
-    const expanded = await this.neo4j.run<{ names: string[] }>(
+    const expanded = await this.neo4j.runValidated(
+      tableNamesRow,
       `MATCH (t:Table) WHERE t.name IN $names
        OPTIONAL MATCH (t)-[:REFERENCES]-(neighbor:Table)
        WITH collect(t.name) + collect(neighbor.name) AS names
@@ -78,7 +99,8 @@ export class SchemaGraphManager {
     }
     // Interpolo el rango (Neo4j no lo admite como parámetro); lo acoto a un entero pequeño.
     const maxLen = Math.min(Math.max(Math.trunc(maxPathLength), 1), 6)
-    const rows = await this.neo4j.run<{ names: string[] }>(
+    const rows = await this.neo4j.runValidated(
+      tableNamesRow,
       `MATCH (a:Table), (b:Table)
        WHERE a.name IN $names AND b.name IN $names AND a.name < b.name
        MATCH path = shortestPath((a)-[:REFERENCES*1..${maxLen}]-(b))
@@ -107,14 +129,8 @@ export class SchemaGraphManager {
     if (names.length === 0) {
       return []
     }
-    const rows = await this.neo4j.run<{
-      name: string
-      schema: string | null
-      description: string | null
-      primaryKeys: string[]
-      columns: ColumnSchema[]
-      foreignKeys: ForeignKeySchema[]
-    }>(
+    const rows = await this.neo4j.runValidated(
+      tableRow,
       `MATCH (t:Table) WHERE t.name IN $names
        RETURN t.name AS name,
               t.schema AS schema,
@@ -128,8 +144,8 @@ export class SchemaGraphManager {
 
     return rows.map((row) => ({
       name: row.name,
-      schema: row.schema ?? null,
-      description: row.description ?? null,
+      schema: row.schema,
+      description: row.description,
       columns: row.columns,
       primaryKeys: row.primaryKeys ?? [],
       foreignKeys: row.foreignKeys,

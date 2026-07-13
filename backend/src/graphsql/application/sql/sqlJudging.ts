@@ -3,6 +3,7 @@
  * las comprobaciones deterministas invalidan; el juez LLM aconseja pero no bloquea,
  * porque da falsos positivos (D-07).
  */
+import { z } from 'zod'
 import { ChatModelFactory } from '../../infrastructure/llm/ChatModelFactory'
 import { loadAgentPrompt } from '../../infrastructure/config/agentPrompts'
 import type { IChatModel } from '../../domain/ports/IChatModel'
@@ -10,7 +11,6 @@ import type { SchemaContext } from '../../domain/schema/SchemaContext'
 import type { SqlStatement } from '../../domain/sql/SqlStatement'
 import {
   type JudgeVerdict,
-  type TablePurpose,
   type PurposeSource,
   securityFailureVerdict,
   syntaxFailureVerdict,
@@ -43,19 +43,58 @@ export function buildJudgeSystemPrompt(dialect: string): string {
   return loadAgentPrompt('judge', { dialect })
 }
 
+const PURPOSE_SOURCES = ['description', 'name', 'columns', 'assumed'] as const satisfies readonly PurposeSource[]
+
+/** Lista tolerante: si no viene una lista, queda vacía; los elementos no-string se descartan. */
+const tolerantStringList = z
+  .array(z.unknown())
+  .catch([])
+  .transform((items) => items.filter((item): item is string => typeof item === 'string'))
+
+/** Una fuente desconocida se trata como "assumed" (conservador); un propósito ilegible, como vacío. */
+const tablePurposeSchema = z.object({
+  table: z.string(),
+  purpose: z.string().catch(''),
+  source: z.enum(PURPOSE_SOURCES).catch('assumed'),
+})
+
+/** Lista tolerante de propósitos: los elementos sin `table` (string) se descartan. */
+const tolerantTablePurposeList = z
+  .array(z.unknown())
+  .catch([])
+  .transform((items) => items.flatMap((item) => tablePurposeSchema.safeParse(item).data ?? []))
+
+/**
+ * La respuesta esperada del juez LLM. Solo `valid` es imprescindible (sin él no hay
+ * veredicto); el resto de campos son tolerantes: si el LLM los omite o los devuelve mal
+ * formados, caen a un valor neutro en vez de invalidar la respuesta entera.
+ */
+const judgeReplySchema = z.object({
+  valid: z.boolean(),
+  confidence: z
+    .number()
+    .transform((value) => Math.min(1, Math.max(0, value)))
+    .optional()
+    .catch(undefined),
+  errors: tolerantStringList,
+  warnings: tolerantStringList,
+  suggestions: tolerantStringList,
+  tables_verified: tolerantStringList,
+  explanation: z.string().catch(''),
+  table_purposes: tolerantTablePurposeList,
+})
+
 /** Lanza `JudgeResponseError` si la respuesta no trae un JSON con `valid` booleano. */
 export function parseJudgeVerdict(raw: string): JudgeVerdict {
-  const fields = extractJsonObject(raw)
-  if (!fields || typeof fields.valid !== 'boolean') {
+  const reply = judgeReplySchema.safeParse(extractJsonObject(raw))
+  if (!reply.success) {
     throw new JudgeResponseError(raw)
   }
+  const fields = reply.data
 
-  const isValid = fields.valid
-  const errors = toStringArray(fields.errors)
-  const tablePurposes = toTablePurposes(fields.table_purposes)
   // El aviso de las tablas usadas "por suposición" lo genero yo a partir de
   // table_purposes, para que sea consistente aunque el LLM no lo redacte (SPEC-14).
-  const assumedWarnings = tablePurposes
+  const assumedWarnings = fields.table_purposes
     .filter((purpose) => purpose.source === 'assumed')
     .map(
       (purpose) =>
@@ -63,55 +102,19 @@ export function parseJudgeVerdict(raw: string): JudgeVerdict {
     )
   // Si el LLM la marca inválida pero no da errores, pongo un motivo por defecto.
   const reportedErrors =
-    isValid || errors.length > 0 ? errors : ['El juez LLM marcó la consulta como no válida sin detallar el motivo.']
+    fields.valid || fields.errors.length > 0
+      ? fields.errors
+      : ['El juez LLM marcó la consulta como no válida sin detallar el motivo.']
   return {
-    valid: isValid,
-    confidence: toConfidence(fields.confidence),
+    valid: fields.valid,
+    confidence: fields.confidence,
     errors: reportedErrors,
-    warnings: [...toStringArray(fields.warnings), ...assumedWarnings],
-    suggestions: toStringArray(fields.suggestions),
-    tablesVerified: toStringArray(fields.tables_verified),
-    explanation: typeof fields.explanation === 'string' ? fields.explanation : '',
-    tablePurposes,
+    warnings: [...fields.warnings, ...assumedWarnings],
+    suggestions: fields.suggestions,
+    tablesVerified: fields.tables_verified,
+    explanation: fields.explanation,
+    tablePurposes: fields.table_purposes,
   }
-}
-
-const PURPOSE_SOURCES: readonly PurposeSource[] = ['description', 'name', 'columns', 'assumed']
-
-/** Interpreto `table_purposes`; una fuente desconocida la trato como "assumed" (conservador). */
-function toTablePurposes(value: unknown): TablePurpose[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  const purposes: TablePurpose[] = []
-  for (const item of value) {
-    if (typeof item !== 'object' || item === null) {
-      continue
-    }
-    const fields = item as Record<string, unknown>
-    if (typeof fields.table !== 'string') {
-      continue
-    }
-    const isKnownSource = PURPOSE_SOURCES.includes(fields.source as PurposeSource)
-    const source: PurposeSource = isKnownSource ? (fields.source as PurposeSource) : 'assumed'
-    purposes.push({
-      table: fields.table,
-      purpose: typeof fields.purpose === 'string' ? fields.purpose : '',
-      source,
-    })
-  }
-  return purposes
-}
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-}
-
-function toConfidence(value: unknown): number | undefined {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return undefined
-  }
-  return Math.min(1, Math.max(0, value))
 }
 
 export async function judgeSqlWithLlm(
