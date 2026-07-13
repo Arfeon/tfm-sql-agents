@@ -189,6 +189,34 @@ Europe          █████████████████████�
 **Listo.** A partir de aquí, la [guía de uso](uso.md) explica cada función (afinar
 consultas, la traza de recuperación, los gráficos…).
 
+## Alternativa: la demo solo con Docker (sin instalar Node)
+
+Si solo quieres **evaluar la demo** y no tienes (ni quieres) Node en la máquina, el
+proyecto incluye una imagen Docker del CLI: la aplicación entera corre en un
+contenedor y habla con Postgres y Neo4j por la red interna de Docker. Solo
+necesitas **Docker y Git**:
+
+```bash
+git clone https://github.com/Arfeon/tfm-sql-agents.git
+cd tfm-sql-agents
+cp .env.example .env            # pon tu OPENAI_API_KEY (o LLM_PROVIDER=local)
+docker compose --profile demo build
+docker compose --profile demo run --rm cli
+```
+
+El `run` levanta Postgres y Neo4j si hacen falta (el primer arranque carga las
+bases de prueba, igual que en el camino normal), espera a que estén sanos y abre
+el mismo menú de siempre. Desde ahí, sigue por [Escanea el esquema](#4-escanea-el-esquema-solo-la-primera-vez).
+
+Dos matices de esta vía:
+
+- El proveedor **local** (LM Studio) corre en tu máquina, no en el contenedor; el
+  contenedor lo alcanza solo en `http://host.docker.internal:1234/v1`, así que en
+  LM Studio activa la opción de servir en la red local si no responde.
+- La imagen lleva la configuración de ejemplo. Tu `.env` de la raíz se respeta
+  para lo esencial (proveedor, API key, contraseñas); para afinar el resto de
+  variables dentro del contenedor, edita el servicio `cli` del `docker-compose.yml`.
+
 ## Si algo no cuadra
 
 - **Lo veo sin colores, o los menús de flechas no responden** (Windows) → lo abriste en

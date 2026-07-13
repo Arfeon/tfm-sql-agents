@@ -58,6 +58,48 @@ services:
       retries: 12
       start_period: 120s
 
+  # La demo "solo con Docker": el CLI empaquetado en una imagen (ver Dockerfile), para
+  # evaluar el proyecto sin instalar Node. Va bajo el profile `demo` a propósito: el
+  # `docker compose up -d` de siempre NO lo toca (ni el preflight del CLI local). Uso:
+  #   docker compose --profile demo build
+  #   docker compose --profile demo run --rm cli
+  # Es interactivo (menús), por eso `run` y no `up`.
+  cli:
+    build: .
+    image: graphsql-cli
+    profiles: ["demo"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    environment:
+      # Hosts de la red interna de compose (el .env de la imagen apunta a localhost).
+      POSTGRES_HOST: postgres
+      NEO4J_URI: neo4j://neo4j:7687
+      TARGET_DB_1_HOST: postgres
+      TARGET_DB_2_HOST: postgres
+      # Credenciales: las MISMAS expresiones con las que se crean postgres y neo4j,
+      # para que siempre cuadren, haya o no un .env en la máquina anfitriona.
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      TARGET_DB_1_USER: ${POSTGRES_USER:-postgres}
+      TARGET_DB_1_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      TARGET_DB_2_USER: ${POSTGRES_USER:-postgres}
+      TARGET_DB_2_PASSWORD: ${POSTGRES_PASSWORD:-Patata1234$$}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-Patata1234$$}
+      # Proveedor de LLM: se toma del .env del anfitrión si existe (compose lo lee para
+      # interpolar). Para OpenAI basta con OPENAI_API_KEY; para LM Studio, el servidor
+      # corre en el anfitrión, de ahí el host.docker.internal.
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LMSTUDIO_BASE_URL: http://host.docker.internal:1234/v1
+    extra_hosts:
+      # En Docker Desktop (Windows/Mac) ya existe; esta línea lo añade también en Linux.
+      - "host.docker.internal:host-gateway"
+
 volumes:
   postgres_data:
   neo4j_data:

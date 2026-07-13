@@ -34,6 +34,11 @@ Esto arranca dos servicios:
 | `postgres` | PostgreSQL **con pgvector**   | `localhost:5432`               |
 | `neo4j`    | Base de datos de grafos Neo4j | `localhost:7474` (navegador)   |
 
+Hay un tercer servicio, `cli`, bajo el profile `demo`: la aplicación empaquetada en
+una imagen Docker para evaluar la demo sin Node (`docker compose --profile demo run
+--rm cli`). El `up -d` de siempre no lo toca; el detalle está en la
+[guía de instalación](instalacion.md).
+
 Para comprobar su estado en cualquier momento:
 
 ```bash
