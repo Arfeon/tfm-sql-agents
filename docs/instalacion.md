@@ -9,18 +9,56 @@ Todo funciona igual en **Windows, Linux y macOS**; donde hay alguna diferencia
 
 ## ¿Qué vía elijo?
 
-Hay tres maneras de poner GraphSQL en marcha. Esta guía cubre la primera de
-principio a fin; las otras dos tienen su sección o su guía propia:
+Hay cuatro maneras de poner GraphSQL en marcha:
 
 | Vía | Para quién | Necesitas | Dónde |
 |-----|------------|-----------|-------|
-| **Guiada** (recomendada) | Uso normal del proyecto | Node 20+, Docker, Git | Esta guía, §1–§5 |
+| **Instalador, un comando** (recomendada) | Instalarlo como herramienta y usarlo | Node 20+, Docker, Git | [Justo debajo](#instalación-en-un-comando) |
+| **Guiada paso a paso** | Lo mismo, pero viendo (y controlando) cada paso | Node 20+, Docker, Git | Esta guía, §1–§5 |
 | **Demo solo con Docker** | Evaluarlo sin instalar Node | Docker, Git | [Sección al final](#alternativa-la-demo-solo-con-docker-sin-instalar-node) |
-| **Manual avanzada** | Controlar cada pieza a mano (compose, verificaciones, regenerar datos) | Node 20+, Docker, Git | [Guía avanzada](instalacion-avanzada.md) |
+| **Manual avanzada** | Mirar debajo del capó (compose, verificaciones, regenerar datos) | Node 20+, Docker, Git | [Guía avanzada](instalacion-avanzada.md) |
 
-Además, la vía guiada tiene un complemento opcional: registrar el **comando global
-`gsql`** para invocar el CLI desde cualquier carpeta ([§3](#opcional-el-comando-gsql-para-invocarlo-desde-cualquier-carpeta)).
 Para usar el programa una vez instalado, la [guía de uso](uso.md).
+
+## Instalación en un comando
+
+Un solo comando descarga el proyecto, lo configura y lo deja invocable como `gsql`.
+Solo necesitas los [requisitos del §1](#1-instala-los-requisitos-una-sola-vez) (Git,
+Node 20+ y Docker); el instalador los comprueba y te avisa si falta alguno.
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.ps1 | iex
+```
+
+**Linux / macOS**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.sh | bash
+```
+
+El instalador pregunta (todo con un valor por defecto sensato, Enter y sigue):
+
+1. **Dónde instalarlo** — por defecto `%LOCALAPPDATA%\GraphSQL` en Windows,
+   `~/graphsql` en Linux/macOS.
+2. **Tu proveedor de IA** — `openai` (te pide la clave y la deja en el `.env`) o
+   `local` (LM Studio, sin coste y sin que nada salga de tu máquina).
+3. **Si registra el comando global `gsql`** — para invocarlo desde cualquier carpeta.
+
+Y termina donde empieza el programa: escribe `gsql` y, la primera vez, GraphSQL
+monta su propia infraestructura (contenedores y datos de prueba) guiándote — es
+el [§3 de esta guía](#3-arranca--el-programa-hace-el-resto), a partir del
+*"deberías ver"*. **Actualizar** es volver a ejecutar el mismo comando (hace
+`git pull` y conserva tu `.env`); **desinstalar**, `npm unlink -g graphsql-backend`
+y borrar la carpeta.
+
+Los scripts ([install.ps1](../install.ps1), [install.sh](../install.sh)) están en
+el repo y se leen en dos minutos: nada de binarios opacos.
+
+> El resto de la guía (§1–§5) es esta misma instalación **hecha a mano**, con un
+> *"deberías ver"* en cada paso — útil si prefieres controlar cada pieza o si el
+> instalador te avisa de algo que quieres entender.
 
 ## 1. Instala los requisitos (una sola vez)
 
