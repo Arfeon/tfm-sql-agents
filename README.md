@@ -48,7 +48,19 @@ La pieza central es el **Schema Agent (GraphRAG)**: en vez de darle al LLM el es
 
 ## Puesta en marcha
 
-Necesitas **Node.js 20+**, **Docker** (Desktop en Windows/Mac, Engine + Compose v2 en Linux) y un proveedor de LLM (ver abajo). Cuatro comandos; el paso a paso con qué deberías ver en cada punto, y las notas por sistema operativo, están en la [guía de instalación](docs/instalacion.md):
+Necesitas **Node.js 20+**, **Docker** (Desktop en Windows/Mac, Engine + Compose v2 en Linux) y un proveedor de LLM (ver abajo). La forma recomendada es el **instalador de un comando**, que descarga el proyecto, lo configura preguntándote lo mínimo y registra el comando global **`gsql`**:
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.ps1 | iex
+```
+
+```bash
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.sh | bash
+```
+
+Después, escribe `gsql`: la primera vez, el propio CLI levanta y comprueba su infraestructura (contenedores y datos de prueba) guiándote. La misma instalación **hecha a mano** (cuatro comandos, con qué deberías ver en cada punto y las notas por sistema operativo) está en la [guía de instalación](docs/instalacion.md):
 
 ```bash
 cp .env.example .env         # 1. proveedor de LLM/embeddings (lo demás ya funciona)
@@ -56,8 +68,6 @@ cp descriptions/descriptions.example.json descriptions/descriptions.json   # 2. 
 cd backend && npm install    # 3. el ÚNICO npm install del repo
 npm start                    # 4. abre el CLI, que levanta y comprueba el resto
 ```
-
-Opcionalmente, `npm link` desde `backend/` registra el comando global **`gsql`**: el mismo CLI, invocable desde cualquier carpeta sin `cd` previo (detalle en la [guía de instalación](docs/instalacion.md)).
 
 ¿Solo quieres **evaluar la demo, sin instalar Node**? Hay una imagen Docker del CLI: `docker compose --profile demo build && docker compose --profile demo run --rm cli` levanta el sistema completo (aplicación incluida) solo con Docker. Detalle en la [guía de instalación](docs/instalacion.md).
 
