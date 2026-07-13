@@ -66,7 +66,9 @@ services:
   # Es interactivo (menús), por eso `run` y no `up`.
   cli:
     build: .
-    image: graphsql-cli
+    # El mismo nombre con el que se publica en Docker Hub: `--profile demo build`
+    # produce directamente la imagen publicable (docker push pclota/graphsql-cli).
+    image: pclota/graphsql-cli
     profiles: ["demo"]
     depends_on:
       postgres:

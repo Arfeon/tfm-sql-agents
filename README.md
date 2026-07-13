@@ -69,7 +69,14 @@ cd backend && npm install    # 3. el ÚNICO npm install del repo
 npm start                    # 4. abre el CLI, que levanta y comprueba el resto
 ```
 
-¿Solo quieres **evaluar la demo, sin instalar Node**? Hay una imagen Docker del CLI: `docker compose --profile demo build && docker compose --profile demo run --rm cli` levanta el sistema completo (aplicación incluida) solo con Docker. Detalle en la [guía de instalación](docs/instalacion.md).
+¿Solo quieres **evaluar la demo, sin instalar Node ni clonar el repo**? Las imágenes están publicadas en Docker Hub; basta Docker y un fichero:
+
+```bash
+curl -fsSL -O https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml
+docker compose -f docker-compose.hub.yml run --rm cli
+```
+
+Detalle (y la variante construyendo la imagen desde el repo) en la [guía de instalación](docs/instalacion.md).
 
 La infraestructura (Postgres con las BDs de prueba y Neo4j) se puede levantar de dos maneras, y las dos acaban en el mismo sitio:
 
