@@ -24,37 +24,100 @@ Para usar el programa una vez instalado, la [guía de uso](uso.md).
 
 Un solo comando descarga el proyecto, lo configura y lo deja invocable como `gsql`.
 Solo necesitas los [requisitos del §1](#1-instala-los-requisitos-una-sola-vez) (Git,
-Node 20+ y Docker); el instalador los comprueba y te avisa si falta alguno.
+Node 20+ y Docker); el instalador los comprueba y te avisa si falta alguno. Los
+scripts ([install.ps1](../install.ps1), [install.sh](../install.sh)) están en el
+repo y se leen en dos minutos: nada de binarios opacos.
 
-**Windows** (PowerShell):
+**Windows** — abre PowerShell (no Git Bash) y pega:
 
 ```powershell
 irm https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.ps1 | iex
 ```
 
-**Linux / macOS**:
+**Linux / macOS** — en tu terminal:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/install.sh | bash
 ```
 
-El instalador pregunta (todo con un valor por defecto sensato, Enter y sigue):
+(`irm`/`curl` descargan el script del repo de GitHub y lo ejecutan directamente;
+es el mismo patrón de instalación que usan nvm o rustup.)
 
-1. **Dónde instalarlo** — por defecto `%LOCALAPPDATA%\GraphSQL` en Windows,
-   `~/graphsql` en Linux/macOS.
-2. **Tu proveedor de IA** — `openai` (te pide la clave y la deja en el `.env`) o
-   `local` (LM Studio, sin coste y sin que nada salga de tu máquina).
-3. **Si registra el comando global `gsql`** — para invocarlo desde cualquier carpeta.
+### Qué hace, paso a paso
 
-Y termina donde empieza el programa: escribe `gsql` y, la primera vez, GraphSQL
-monta su propia infraestructura (contenedores y datos de prueba) guiándote — es
-el [§3 de esta guía](#3-arranca--el-programa-hace-el-resto), a partir del
-*"deberías ver"*. **Actualizar** es volver a ejecutar el mismo comando (hace
-`git pull` y conserva tu `.env`); **desinstalar**, `npm unlink -g graphsql-backend`
-y borrar la carpeta.
+Todas las preguntas traen un valor por defecto sensato: **Enter y sigue**.
 
-Los scripts ([install.ps1](../install.ps1), [install.sh](../install.sh)) están en
-el repo y se leen en dos minutos: nada de binarios opacos.
+1. **Comprueba los requisitos.** Git y Node 20+ son imprescindibles: si falta uno,
+   se para y te dice de dónde instalarlo. Docker solo genera un aviso — puedes
+   terminar la instalación sin él, porque quien lo necesita es el programa al
+   arrancar, no el instalador.
+2. **Pregunta dónde instalarlo** — por defecto `%LOCALAPPDATA%\GraphSQL` en
+   Windows, `~/graphsql` en Linux/macOS.
+3. **Descarga el proyecto ahí** (`git clone`). Si esa carpeta ya tiene una
+   instalación de GraphSQL, en vez de clonar la actualiza (`git pull`): **volver a
+   ejecutar el instalador es la forma de actualizar**. Si la carpeta existe con
+   otra cosa dentro, se para sin tocar nada.
+4. **Prepara la configuración.** Crea el `.env` desde el ejemplo y te pregunta el
+   proveedor de IA: `openai` (te pide la clave y la escribe en el `.env`) o
+   `local` (LM Studio, sin coste y sin que nada salga de tu máquina). Si ya
+   tenías un `.env` de antes, lo respeta tal cual.
+5. **Instala las dependencias** (`npm install`, solo en `backend/`).
+6. **Ofrece registrar el comando global `gsql`** (di que sí; abajo explico qué
+   hace exactamente).
+
+**Deberías ver** al final:
+
+```
+  GraphSQL instalado.
+
+  Instalado en:  C:\Users\tu-usuario\AppData\Local\GraphSQL
+  Para arrancar: gsql        (o: cd backend; npm start, desde esa carpeta)
+```
+
+Y de ahí, escribe `gsql`: la primera vez, el propio programa monta su
+infraestructura (contenedores y datos de prueba) guiándote — continúa en el
+[§3 de esta guía](#3-arranca--el-programa-hace-el-resto), a partir del *"deberías
+ver"*.
+
+### Cómo queda registrado el comando `gsql`
+
+No hay magia: el proyecto declara el comando en su `package.json` (campo `"bin"`)
+y el instalador ejecuta `npm link`, el mecanismo estándar de npm para registrar
+CLIs. Lo que hace en cada sistema:
+
+- **Windows** — npm crea tres lanzadores (`gsql.cmd`, `gsql.ps1` y `gsql`) en su
+  carpeta global, `%APPDATA%\npm`. Esa carpeta ya está en tu PATH desde que
+  instalaste Node, así que cualquier terminal nueva encuentra el comando. Los
+  lanzadores apuntan, a través de un enlace en `%APPDATA%\npm\node_modules`, al
+  código del proyecto en tu carpeta de instalación. Compruébalo con:
+
+  ```powershell
+  where.exe gsql        # → C:\Users\...\AppData\Roaming\npm\gsql.cmd
+  ```
+
+- **Linux / macOS** — npm crea un enlace simbólico `gsql` en el `bin` de su
+  prefix global (con nvm: `~/.nvm/versions/node/vXX/bin`, ya en el PATH), que
+  apunta igualmente al código del proyecto. Compruébalo con `which gsql`. Si
+  usas el Node del sistema (apt/dnf), el prefix es `/usr/local` y `npm link`
+  puede fallar por permisos; la salida limpia es un prefix de usuario:
+
+  ```bash
+  npm config set prefix ~/.local     # y añade ~/.local/bin al PATH
+  cd ~/graphsql/backend && npm link  # reintenta
+  ```
+
+El detalle importante: es un **enlace**, no una copia. El comando `gsql` ejecuta
+directamente el código de tu carpeta de instalación, así que cuando el proyecto
+se actualiza (re-ejecutando el instalador o con `git pull`), `gsql` ya es la
+versión nueva sin reinstalar nada.
+
+### Actualizar y desinstalar
+
+- **Actualizar**: vuelve a ejecutar el comando del instalador. Detecta la
+  instalación, hace `git pull`, actualiza dependencias y conserva tu `.env`.
+- **Desinstalar**: `npm unlink -g graphsql-backend` (quita el comando `gsql`) y
+  borra la carpeta de instalación. Los contenedores y sus datos se quitan aparte,
+  si quieres: `docker compose down -v` desde esa carpeta antes de borrarla.
 
 > El resto de la guía (§1–§5) es esta misma instalación **hecha a mano**, con un
 > *"deberías ver"* en cada paso — útil si prefieres controlar cada pieza o si el
@@ -187,28 +250,13 @@ cd backend
 npm link
 ```
 
-Eso instala el comando `gsql` en la carpeta global de npm, que ya está en el
-PATH. A partir de ahí, abre cualquier terminal en cualquier carpeta y escribe:
-
-```bash
-gsql
-```
-
-Es exactamente el mismo programa que `npm start` (mismo menú, misma
-configuración del `.env` del proyecto). El comando queda **enlazado** al repo:
-si actualizas el código con `git pull`, `gsql` ya ejecuta la versión nueva sin
-reinstalar nada. Para quitarlo: `npm unlink -g graphsql-backend`.
-
-Notas por sistema operativo:
-
-- **Windows** — el comando queda en `%APPDATA%\npm` (npm lo añade al PATH al
-  instalar Node). Como siempre, úsalo desde PowerShell o Windows Terminal, no
-  desde Git Bash.
-- **Linux / macOS** — queda en el prefix global de npm. Si instalaste Node con
-  **nvm** (lo habitual), funciona sin más; si usas el Node del sistema (apt/dnf)
-  puede pedir permisos — mejor que un `sudo npm link`, configura un prefix de
-  usuario: `npm config set prefix ~/.local` (y asegúrate de que `~/.local/bin`
-  está en tu PATH).
+A partir de ahí, `gsql` desde cualquier terminal y carpeta abre exactamente el
+mismo programa que `npm start` (mismo menú, misma configuración del `.env` del
+proyecto). Es lo mismo que hace el instalador cuando le dices que sí al comando
+global — dónde queda registrado en cada sistema, cómo comprobarlo y el tema de
+permisos en Linux están explicados en
+[Cómo queda registrado el comando `gsql`](#cómo-queda-registrado-el-comando-gsql).
+Para quitarlo: `npm unlink -g graphsql-backend`.
 
 ## 4. Escanea el esquema (solo la primera vez)
 
@@ -256,53 +304,133 @@ consultas, la traza de recuperación, los gráficos…).
 
 ## Alternativa: la demo solo con Docker (sin instalar Node)
 
-Si solo quieres **evaluar la demo**, las imágenes están publicadas en Docker Hub
-([`pclota/graphsql-cli`](https://hub.docker.com/r/pclota/graphsql-cli) y
-[`pclota/graphsql-postgres-demo`](https://hub.docker.com/r/pclota/graphsql-postgres-demo),
-esta última con las bases de prueba sintéticas ya incluidas). No hace falta Node
-**ni clonar el repo** — solo Docker y un fichero:
+Esta vía es para **evaluar la demo sin instalar nada más que Docker**: ni Node,
+ni Git, ni clonar el repo. La aplicación entera corre dentro de un contenedor.
+
+### Qué te vas a descargar (y de dónde)
+
+El sistema son tres contenedores, y sus imágenes ya están construidas y publicadas
+en Docker Hub — **no tienes que hacer `docker pull` ni `docker build` a mano**, el
+propio compose las descarga la primera vez:
+
+| Imagen | Qué es | De dónde |
+|--------|--------|----------|
+| [`pclota/graphsql-cli`](https://hub.docker.com/r/pclota/graphsql-cli) | **La aplicación**: el CLI completo, con sus dependencias y la configuración de demo | Docker Hub |
+| [`pclota/graphsql-postgres-demo`](https://hub.docker.com/r/pclota/graphsql-postgres-demo) | **La base de datos**: PostgreSQL + pgvector que, en su primer arranque, se carga solo las bases de prueba (arcadia y nebula, datos sintéticos) | Docker Hub |
+| `neo4j:5-community` | El grafo de conocimiento; imagen oficial de Neo4j, tal cual | Docker Hub |
+
+Lo único que descargas tú a mano es **un fichero de texto**,
+`docker-compose.hub.yml`: la pieza que conecta los tres contenedores (red interna,
+credenciales, orden de arranque). Sin él tendrías que arrancar y cablear los tres
+a mano; con él, es un comando.
+
+### Paso a paso
+
+**1. Docker en marcha.** Docker Desktop con "Engine running" en Windows/Mac;
+Docker Engine + Compose v2 y tu usuario en el grupo `docker` en Linux (las notas
+de cada sistema están en el [§1](#notas-por-sistema-operativo)).
+
+**2. Descarga el fichero compose** en una carpeta cualquiera (vacía, por ejemplo
+`graphsql-demo`):
 
 ```bash
+# Linux / macOS
 curl -fsSL -O https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml
-export OPENAI_API_KEY=sk-...     # o elige LM Studio en el menú al arrancar
+```
+
+```powershell
+# Windows (PowerShell)
+irm -OutFile docker-compose.hub.yml https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml
+```
+
+**Deberías ver** el fichero en la carpeta (`ls`): es la única "instalación" de
+esta vía.
+
+**3. Tu proveedor de IA.** Si vas a usar OpenAI, exporta la clave en esa misma
+terminal (el compose se la pasa al contenedor):
+
+```bash
+export OPENAI_API_KEY=sk-...           # Linux / macOS
+```
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."         # Windows (PowerShell)
+```
+
+Si prefieres **LM Studio** (gratis y offline), no exportes nada: arranca su
+servidor en tu máquina con el modelo de chat y el de embeddings cargados, y elige
+"Local" en el menú del programa. Ojo: el contenedor no puede ver `localhost` de tu
+máquina — la aplicación ya viene configurada para alcanzarlo en
+`http://host.docker.internal:1234/v1`, pero en LM Studio activa la opción de
+**servir en la red local** si no responde.
+
+**4. Arranca:**
+
+```bash
 docker compose -f docker-compose.hub.yml run --rm cli
 ```
 
-(En Windows/PowerShell: `irm -OutFile docker-compose.hub.yml https://raw.githubusercontent.com/Arfeon/tfm-sql-agents/main/docker-compose.hub.yml`
-y `$env:OPENAI_API_KEY = "sk-..."`.)
+La primera vez hace tres cosas seguidas, y tarda unos minutos según tu conexión:
+descarga las tres imágenes (~600 MB en total), arranca Postgres y Neo4j (Postgres
+se carga las bases de prueba en este primer arranque) y espera a que los dos estén
+sanos. Después abre el programa.
 
-El `run` descarga las imágenes, levanta Postgres y Neo4j, espera a que estén sanos
-(el primer arranque carga las bases de prueba; después, segundos) y abre el mismo
-menú de siempre. Desde ahí, sigue por [Escanea el esquema](#4-escanea-el-esquema-solo-la-primera-vez).
+**Deberías ver**, tras las líneas de descarga:
 
-Si prefieres **construir la imagen tú** en vez de usar la publicada (o estás
-tocando el código), el repo trae el mismo montaje como profile del compose:
+```
+ Container graphsql-demo-postgres-1  Started
+ Container graphsql-demo-neo4j-1  Started
+   ____                 _     ____   ___  _
+  / ___|_ __ __ _ _ __ | |__ / ___| / _ \| |     ...
+  Tu agente de SQL en lenguaje natural
 
-```bash
-git clone https://github.com/Arfeon/tfm-sql-agents.git
-cd tfm-sql-agents
-cp .env.example .env            # pon tu OPENAI_API_KEY (o LLM_PROVIDER=local)
-docker compose --profile demo build
-docker compose --profile demo run --rm cli
+? ¿Con qué proveedor de LLM quieres trabajar en esta sesión?
 ```
 
-Dos matices de esta vía:
+Elige proveedor y estás en el mismo menú que en cualquier otra instalación: el
+programa te marca que empieces por **Escanear el esquema** — sigue por el
+[§4](#4-escanea-el-esquema-solo-la-primera-vez).
 
-- El proveedor **local** (LM Studio) corre en tu máquina, no en el contenedor; el
-  contenedor lo alcanza solo en `http://host.docker.internal:1234/v1`, así que en
-  LM Studio activa la opción de servir en la red local si no responde.
-- La imagen lleva la configuración de ejemplo. Tu `.env` de la raíz se respeta
-  para lo esencial (proveedor, API key, contraseñas); para afinar el resto de
-  variables dentro del contenedor, edita el servicio `cli` del `docker-compose.yml`.
+### El día a día de esta vía
 
-Notas por sistema operativo:
+- **Volver a entrar**: el mismo `docker compose -f docker-compose.hub.yml run --rm cli`.
+  Las imágenes ya están descargadas y las bases cargadas: segundos.
+- **Al salir del programa**, Postgres y Neo4j siguen en marcha (y tu esquema
+  escaneado persiste en los volúmenes de Docker). Para pararlos:
+  `docker compose -f docker-compose.hub.yml down`.
+- **Empezar de cero** (borra bases de prueba e índice):
+  `docker compose -f docker-compose.hub.yml down -v`.
 
-- **Windows** — necesitas Docker Desktop con el "Engine running" (ver la nota de
-  Windows del §1). Los comandos de arriba funcionan tal cual en PowerShell (`cp`
-  existe como alias).
-- **Linux** — Docker Engine + Compose v2 y tu usuario en el grupo `docker` (§1).
-  El `host.docker.internal` para LM Studio también funciona: el compose lo mapea
-  con `host-gateway`, que en Windows/macOS ya existe de serie.
+### Consultar tu propia base de datos
+
+Las bases de demo sirven para comprobar que todo funciona; lo interesante es
+apuntar a la tuya. No hay que tocar ninguna imagen: se añade como variables de
+entorno del servicio `cli`, editando el `docker-compose.hub.yml` que descargaste:
+
+```yaml
+  cli:
+    environment:
+      # ... lo que ya está ...
+      TARGET_DB_3_TYPE: postgresql          # o mssql
+      TARGET_DB_3_HOST: host.docker.internal # si corre en tu máquina; si no, su host
+      TARGET_DB_3_PORT: "5432"
+      TARGET_DB_3_NAME: tu_base_de_datos
+      TARGET_DB_3_SCHEMA: public
+      TARGET_DB_3_USER: un_usuario_de_solo_lectura
+      TARGET_DB_3_PASSWORD: su-password
+```
+
+Al volver a entrar, tu base aparece en el menú junto a las de demo. Recomendación:
+un usuario de base de datos **de solo lectura** — el programa ya ejecuta todo en
+sesiones read-only, pero la última barrera debe estar en el motor.
+
+### Si estás tocando el código
+
+La misma demo se puede construir desde el repo en vez de usar las imágenes
+publicadas (es lo que hago yo en desarrollo): `git clone`, `cp .env.example .env`,
+y `docker compose --profile demo build && docker compose --profile demo run --rm cli`
+desde la raíz. El profile `demo` existe para eso: el `docker compose up -d` normal
+del repo no toca el contenedor de la aplicación.
 
 ## Si algo no cuadra
 
@@ -321,7 +449,16 @@ Notas por sistema operativo:
 - **El puerto 5432, 7474 o 7687 está ocupado** → tienes otro PostgreSQL/Neo4j corriendo
   en tu máquina; cómo resolverlo está en la [guía avanzada](instalacion-avanzada.md).
 - **Con LM Studio no responde o va vacío** → asegúrate de tener cargados el modelo de
-  chat **y** el de embeddings a la vez, y su servidor arrancado.
-- **Error de credenciales con OpenAI** → revisa la `OPENAI_API_KEY` del `.env`.
+  chat **y** el de embeddings a la vez, y su servidor arrancado. En la **vía Docker**,
+  además, activa en LM Studio la opción de servir en la red local (el contenedor no ve
+  tu `localhost`).
+- **Error de credenciales con OpenAI** → revisa la `OPENAI_API_KEY` del `.env`. En la
+  **vía Docker** no hay `.env`: la clave se exporta en la terminal (`export OPENAI_API_KEY=...`
+  o `$env:OPENAI_API_KEY = "..."`) **antes** del `docker compose run`, y en esa misma
+  terminal.
+- **`gsql` no se encuentra tras instalar** (Windows) → abre una terminal **nueva** (el
+  PATH se lee al abrirla); si sigue sin salir con `where.exe gsql`, revisa que existe
+  `%APPDATA%\npm\gsql.cmd`. En **Linux**, `which gsql` y el tema de permisos/prefix está
+  en [Cómo queda registrado el comando `gsql`](#cómo-queda-registrado-el-comando-gsql).
 - Cualquier otra cosa → [guía avanzada](instalacion-avanzada.md), sección de problemas
   frecuentes.
