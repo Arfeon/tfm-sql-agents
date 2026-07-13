@@ -14,9 +14,9 @@ Eso me dio una confianza que resultó ser falsa. Las bases de prueba tienen nomb
 
 La prueba de verdad llegó al apuntar la recuperación contra el ERP real de la empresa (~800 tablas, nombres opacos, sin descripciones). El caso que lo destapó fue una pregunta tan normal como esta:
 
-> «¿Qué **cliente** tiene más suministros de un tipo concreto?»
+> «¿Qué **abonado** tiene más líneas de fibra?»
 
-La frase habla sobre todo del *tipo de suministro*, así que su embedding queda cerca de las decenas de tablas de ese dominio, y la tabla de clientes —que es **la entidad por la que se pregunta**, el sujeto de la frase— cae al puesto ~179 del ranking. Con un top-K de 5, ni aparece.
+La frase habla sobre todo de las *líneas de fibra*, así que su embedding queda cerca de las decenas de tablas de ese dominio, y la tabla de abonados —que es **la entidad por la que se pregunta**, el sujeto de la frase— cae al puesto ~179 del ranking. Con un top-K de 5, ni aparece.
 
 Lo llamo *entity-pivot*: el sustantivo pivote de la pregunta queda enterrado bajo el tema dominante de la frase. Y lo que me costó ver es que **no era un problema de afinar un parámetro**. Subir el top-K a 30 no trae la tabla de clientes: trae 30 tablas del tema dominante. El recall no mejora porque el ranking está midiendo lo que no debe.
 
