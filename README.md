@@ -2,6 +2,8 @@
 
 > Sistema multi-agente que traduce preguntas en **lenguaje natural** a consultas **SQL de solo lectura**, sin que el usuario conozca el esquema de la base de datos.
 
+**[Instalación](docs/instalacion.md) · [Uso](docs/uso.md) · [Arquitectura](docs/design/arquitectura.md) · [Evaluación](docs/evaluacion/) · [Glosario](docs/glosario.md)**
+
 Escribes *"¿qué 10 juegos se han jugado más este año?"* y GraphSQL localiza las tablas que hacen falta, genera la SQL, comprueba que es segura, te la enseña para que la apruebes y, con tu visto bueno, la ejecuta y te da el resultado. Es un proyecto de I+D (TFM) sobre agentes de IA aplicados a un problema real de empresa, no un producto comercial.
 
 ## El problema que resuelve

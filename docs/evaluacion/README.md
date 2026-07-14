@@ -30,6 +30,7 @@ Cada pregunta se resuelve de tres maneras, y comparo los resultados:
 ## Qué informe es cada cosa
 
 - **`resumen.md`** — la portada: la tabla completa (media de 5 tiradas, las dos BDs) y las cuatro lecturas.
+- **`sesgos.md`** — los sesgos y límites de las métricas (por qué tres cristales: estricta, justa, equivalencia), con el detalle de cada uno. Léelo si un número te choca o antes de citar una cifra.
 - **`auditoria-2026-07-09.md`** — la auditoría caso a caso que corrigió el arnés (referencias con bugs, comparador, juez) y el antes/después de los números. **Léela antes de comparar con números antiguos.**
 - **`descripciones.md`** — qué aportan las descripciones de tablas (2×2 con/sin, media de 5 tiradas), con el foco en la tabla de nombre opaco `t_042`.
 - **`escala.md`** — el informe de la última tirada suelta de la prueba de escala (Arcadia 17 tablas, Nebula 66), con los tokens de contexto por modo.
