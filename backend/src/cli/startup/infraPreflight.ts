@@ -100,7 +100,7 @@ function formatElapsed(ms: number): string {
 
 function showReadyBanner(): void {
   const message = [
-    chalk.green.bold('✔ Infraestructura lista'),
+    chalk.green.bold('Infraestructura lista'),
     '',
     'Postgres y Neo4j están levantados y healthy.',
     chalk.dim('Los contenedores siguen en marcha aunque cierres esta terminal.'),
