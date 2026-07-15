@@ -3,7 +3,14 @@
 # Crea la BD `arcadia`, activa pgvector en ambas bases, y carga el esquema + datos.
 set -euo pipefail
 
-SCRIPT_DIR="$(dirname "$0")"
+# Ruta fija en lugar de dirname "$0": si este script no tiene bit de ejecución, el
+# entrypoint de Postgres lo *sourcea* en vez de ejecutarlo, y entonces "$0" es el del
+# propio entrypoint (/usr/local/bin/docker-entrypoint.sh) → dirname daría /usr/local/bin
+# y los .sql no se encontrarían. Es lo que pasaba en Linux, donde el fichero llega como
+# 0644 (en el bind-mount de Docker Desktop en Windows salía 0777 y sí se ejecutaba). Este
+# es el directorio donde Postgres monta/hornea siempre los scripts de init, así que la
+# ruta es estable tanto si el script se ejecuta como si se sourcea.
+SCRIPT_DIR="/docker-entrypoint-initdb.d"
 PG="psql -v ON_ERROR_STOP=1 --username $POSTGRES_USER"
 
 echo "══════════════════════════════════════"
