@@ -202,6 +202,12 @@ consultas, la traza de recuperación, los gráficos…).
 - **"La infraestructura quedó a medio inicializar"** → pasa si el primer arranque se
   interrumpió (un Ctrl+C durante la carga). El propio programa te ofrece **reiniciarla
   desde cero**: dile que sí y espera (las bases de prueba se regeneran solas).
+- **Veo un `FATAL` y Postgres parece reiniciarse al acabar de montarse** (se nota sobre
+  todo en Linux, donde los logs de Docker quedan a la vista) → es normal, no es un fallo.
+  Para el init, Postgres levanta un servidor temporal que solo escucha por socket local;
+  al terminar lo apaga y arranca el definitivo, ya por red. Los `FATAL` son el healthcheck
+  llamando mientras el servidor aún arranca (`the database system is starting up`). Si
+  acabó en `healthy`, fue bien.
 - **El primer arranque va lento** → en portátiles modestos o con Docker recién
   instalado puede tardar más del minuto habitual. Mientras el progreso en pantalla
   cambie, va bien — el programa no da error por tardar, solo si deja de ver actividad.

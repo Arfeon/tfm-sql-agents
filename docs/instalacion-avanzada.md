@@ -80,6 +80,13 @@ scripts sobre un volumen no vacío, y sin el marcador el fallo sería silencioso
 que responde, bases de prueba que no existen). La recuperación es empezar de cero:
 `docker compose down -v && docker compose up -d --wait` (el CLI lo ofrece él solo).
 
+Un detalle del arranque que despista, sobre todo en Linux (donde los logs de Docker
+quedan a la vista): para correr el init, Postgres usa un servidor temporal que solo
+escucha por socket local; cuando el init acaba, lo **apaga y arranca el definitivo**, ya
+por red. Ese apagado + reinicio, y algún `FATAL: the database system is starting up` del
+healthcheck llamando mientras el servidor aún arranca, son normales — no son un fallo. La
+señal de que todo fue bien es que el contenedor acabe en `healthy`.
+
 Las tres bases resultantes:
 
 - `graphsql_memory` → memoria interna del sistema (índice vectorial y checkpoints).
