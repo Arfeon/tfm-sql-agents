@@ -18,6 +18,15 @@ Todo funciona igual en **Windows, Linux y macOS**; donde hay alguna diferencia
   de tu sistema operativo justo abajo).
 - **Node.js 20 o superior** — https://nodejs.org (la versión LTS vale).
 - **Git** — https://git-scm.com
+- **Un proveedor de IA** — lo eliges y configuras en el §2, pero conviene saber ya qué
+  hará falta según la vía:
+  - **OpenAI (nube)** — nada que instalar, solo tu **clave de API**. El proyecto está
+    medido con `gpt-5-mini`.
+  - **LM Studio (100% local)** — instala https://lmstudio.ai y descarga los dos modelos
+    que verifiqué, para tenerlos cargados a la vez: **`Qwen2.5-Coder-14B`** como chat y
+    **`bge-m3`** (1024 dimensiones) como embeddings. Son los valores por defecto del
+    `.env.example` para el modo local; con otros modelos también funciona, pero estos son
+    los que están medidos.
 
 Comprueba que responden:
 
