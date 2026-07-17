@@ -6,6 +6,12 @@
 
 Escribes *"¿qué 10 juegos se han jugado más este año?"* y GraphSQL localiza las tablas que hacen falta, genera la SQL, comprueba que es segura, te la enseña para que la apruebes y, con tu visto bueno, la ejecuta y te da el resultado. Es un proyecto de I+D (TFM) sobre agentes de IA aplicados a un problema real de empresa, no un producto comercial.
 
+## Vídeo
+https://drive.google.com/file/d/1GgBV_FfgNhEuS0mvEkkYOQAFEkTAZcdC/view?usp=sharing
+
+## Slides
+https://docs.google.com/presentation/d/16LKJP_4HHANkCc18VnEeWul8F6ZdK5LUim754vXnuZk/edit?usp=sharing
+
 ## El problema que resuelve
 
 Las bases de datos relacionales guardan la información de casi cualquier empresa, pero para consultarlas hay que saber SQL, conocer el nombre exacto de tablas y columnas, y entender relaciones que rara vez están documentadas. Eso deja fuera a quien más necesita los datos: los analistas dependen del equipo técnico, los directivos no exploran por su cuenta, y en una base de datos grande (200+ tablas) ni los técnicos se aclaran si no conocen el dominio. GraphSQL pone una capa de lenguaje natural encima para cerrar esa brecha.
