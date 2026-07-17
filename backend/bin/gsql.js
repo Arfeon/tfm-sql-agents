@@ -16,5 +16,7 @@ const backendDir = dirname(dirname(realpathSync(__filename)))
 const mainScript = join(backendDir, 'src', 'cli', 'main.ts')
 const tsxCli = require.resolve('tsx/cli', { paths: [backendDir] })
 
+console.log('Arrancando GraphSQL... (la primera carga de tsx tarda unos segundos)')
+
 const child = spawn(process.execPath, [tsxCli, mainScript], { stdio: 'inherit' })
 child.on('exit', (code) => process.exit(code ?? 0))
