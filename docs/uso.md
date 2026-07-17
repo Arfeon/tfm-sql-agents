@@ -266,12 +266,15 @@ elige el razonamiento del selector.
 | `TARGET_DB_n_PUBLIC` | `true` si la BD es pública (muestra un aviso de posible contaminación del LLM). |
 | `EVAL_TARGET` | Qué BD evalúa `npm run evaluate` (por defecto Arcadia). |
 | `LLM_PROVIDER` | `openai` o `local` (LM Studio). Es el **valor por defecto** del selector que sale al arrancar; puedo cambiarlo por sesión ahí sin tocar el `.env`. |
-| `OPENAI_API_KEY`, `OPENAI_MODEL` | Credenciales y modelo de OpenAI. |
-| `LMSTUDIO_BASE_URL`, `LMSTUDIO_MODEL` | URL y modelo de LM Studio (local). |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | Credenciales y modelo de OpenAI (medido con `gpt-5-mini`). |
+| `LMSTUDIO_BASE_URL`, `LMSTUDIO_MODEL` | URL del servidor de LM Studio y modelo de chat local (verificado con `qwen2.5-coder-14b-instruct`). |
 | `EMBEDDING_PROVIDER` | `openai` o `local`: con qué se vectoriza (se elige también al escanear). |
+| `OPENAI_EMBEDDING_MODEL`, `LMSTUDIO_EMBEDDING_MODEL` | Modelo de embeddings de cada proveedor (`text-embedding-3-small` / `text-embedding-bge-m3`), con su dimensión en la variable `*_DIMENSIONS` correspondiente. |
 
 > Con LM Studio (local) necesito tener cargados **a la vez** el modelo de chat y el de
-> embeddings; el sistema avisa si falta alguno antes de usarlo.
+> embeddings — los dos que verifiqué: `Qwen2.5-Coder-14B` y `bge-m3` —; el sistema avisa
+> si falta alguno antes de usarlo. Cómo instalarlos y dejar el servidor listo está en
+> [Modo local: los modelos de LM Studio](instalacion.md#modo-local-los-modelos-de-lm-studio).
 
 ---
 
