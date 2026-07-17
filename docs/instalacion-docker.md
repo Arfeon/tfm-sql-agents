@@ -61,8 +61,10 @@ $env:OPENAI_API_KEY = "sk-..."         # Windows (PowerShell)
 ```
 
 Si prefieres **LM Studio** (gratis y offline), no exportes nada: arranca su
-servidor en tu máquina con el modelo de chat y el de embeddings cargados, y elige
-"Local" en el menú del programa. Ojo: el contenedor no puede ver `localhost` de tu
+servidor en tu máquina con el modelo de chat y el de embeddings cargados **a la
+vez** — los dos verificados son `Qwen2.5-Coder-14B` y `bge-m3`; el detalle está en
+[Modo local: los modelos de LM Studio](instalacion.md#modo-local-los-modelos-de-lm-studio) —
+y elige "Local" en el menú del programa. Ojo: el contenedor no puede ver `localhost` de tu
 máquina — la aplicación ya viene configurada para alcanzarlo en
 `http://host.docker.internal:1234/v1`, pero en LM Studio activa la opción de
 **servir en la red local** si no responde.
@@ -93,7 +95,8 @@ sanos. Después abre el programa.
 Elige proveedor y estás en el mismo menú que en cualquier otra instalación: el
 programa te marca que empieces por **Escanear el esquema** — sigue por
 [§4 de la guía paso a paso](instalacion-paso-a-paso.md#4-escanea-el-esquema-solo-la-primera-vez)
-(el menú es idéntico, da igual la vía por la que hayas llegado).
+(el menú es idéntico, da igual la vía por la que hayas llegado). Y para el resto
+de funciones, la [guía de uso](uso.md).
 
 ## El día a día de esta vía
 

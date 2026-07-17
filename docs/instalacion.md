@@ -55,8 +55,9 @@ Todas las preguntas traen un valor por defecto sensato: **Enter y sigue**.
    otra cosa dentro, se para sin tocar nada.
 4. **Prepara la configuración.** Crea el `.env` desde el ejemplo y te pregunta el
    proveedor de IA: `openai` (te pide la clave y la escribe en el `.env`) o
-   `local` (LM Studio, sin coste y sin que nada salga de tu máquina). Si ya
-   tenías un `.env` de antes, lo respeta tal cual.
+   `local` (LM Studio, sin coste y sin que nada salga de tu máquina — los dos
+   modelos que necesita están en [Modo local: los modelos de LM Studio](#modo-local-los-modelos-de-lm-studio)).
+   Si ya tenías un `.env` de antes, lo respeta tal cual.
 5. **Instala las dependencias** (`npm install`, solo en `backend/`).
 6. **Ofrece registrar el comando global `gsql`** (di que sí; abajo explico qué
    hace exactamente).
@@ -73,7 +74,9 @@ Todas las preguntas traen un valor por defecto sensato: **Enter y sigue**.
 Y de ahí, escribe `gsql`: la primera vez, el propio programa monta su
 infraestructura (contenedores y datos de prueba) guiándote — es el mismo arranque
 que describe [la guía paso a paso, §3](instalacion-paso-a-paso.md#3-arranca--el-programa-hace-el-resto),
-a partir del *"deberías ver"*.
+a partir del *"deberías ver"*. Con el programa ya en marcha, cada función
+(consultar con revisión, escanear el esquema, depurar la recuperación) está
+explicada en la [guía de uso](uso.md).
 
 ### Cómo queda registrado el comando `gsql`
 
@@ -158,6 +161,47 @@ hacerlos a mano, en este orden y desde la carpeta de instalación.
 El orden importa poco entre el paso 1 y el 2, pero haz el 3 el último: los pasos
 1 y 2 necesitan el `docker-compose.yml` y el `package.json` que hay dentro de esa
 carpeta.
+
+## Modo local: los modelos de LM Studio
+
+Da igual la vía de instalación: si eliges el proveedor `local`, quien pone los
+modelos es [LM Studio](https://lmstudio.ai), que expone en tu máquina una API
+compatible con OpenAI — sin coste, sin clave, y sin que ni las preguntas ni el
+esquema salgan de tu equipo. El sistema necesita **dos modelos cargados a la
+vez** (LM Studio lo permite), porque cada uno hace un trabajo distinto:
+
+| Papel | Modelo que verifiqué | Variable del `.env` |
+|-------|----------------------|---------------------|
+| **Chat** — razona, escribe y juzga la SQL | `qwen2.5-coder-14b-instruct` (Qwen2.5-Coder-14B) | `LMSTUDIO_MODEL` |
+| **Embeddings** — vectoriza el esquema para la búsqueda | `bge-m3`, 1024 dimensiones | `LMSTUDIO_EMBEDDING_MODEL` (`text-embedding-bge-m3`) |
+
+Para dejarlo listo:
+
+1. **Instala LM Studio** y descarga los dos modelos desde su buscador:
+   **Qwen2.5-Coder-14B** (instruct) y **bge-m3**.
+2. **Cárgalos los dos a la vez** y **arranca el servidor local** (en LM Studio,
+   pestaña *Developer* → *Start server*; queda en `http://localhost:1234`, que
+   es justo lo que espera el `.env`).
+3. En el `.env`, pon `LLM_PROVIDER=local` y `EMBEDDING_PROVIDER=local`. Los
+   nombres de modelo ya vienen puestos así en el `.env.example`, no hay que
+   tocar nada más.
+
+Notas:
+
+- **Con otros modelos también funciona** (cualquiera que sirva LM Studio), pero
+  estos dos son los que verifiqué y con los que medí la evaluación en local. Si
+  cambias el de embeddings, ajusta `LMSTUDIO_EMBEDDING_DIMENSIONS` a su
+  dimensión y re-escanea el esquema: el índice vectorial se construye con un
+  modelo concreto y no se mezcla con otro.
+- **Si falta un modelo**, el síntoma típico es que el programa no responde o
+  devuelve vacío. El sistema lo comprueba y avisa antes de usarlo, pero la
+  solución es siempre la misma: los dos modelos cargados y el servidor en marcha.
+- **En la vía de la demo con Docker** hay un matiz de red (el contenedor no ve
+  el `localhost` de tu máquina): está resuelto y explicado en
+  [su guía](instalacion-docker.md#paso-a-paso).
+- Opcional: se puede usar un modelo distinto por rol (uno para razonar qué
+  tablas hacen falta, otro para escribir la SQL) con `LMSTUDIO_MODEL_REASONING`
+  y `LMSTUDIO_MODEL_GENERATION`; el propio `.env.example` lo documenta.
 
 ## Si algo no cuadra
 

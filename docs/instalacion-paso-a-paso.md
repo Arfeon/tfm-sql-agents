@@ -26,7 +26,9 @@ Todo funciona igual en **Windows, Linux y macOS**; donde hay alguna diferencia
     que verifiqué, para tenerlos cargados a la vez: **`Qwen2.5-Coder-14B`** como chat y
     **`bge-m3`** (1024 dimensiones) como embeddings. Son los valores por defecto del
     `.env.example` para el modo local; con otros modelos también funciona, pero estos son
-    los que están medidos.
+    los que están medidos. El detalle completo (qué hace cada modelo, variables del
+    `.env`, servidor) está en
+    [Modo local: los modelos de LM Studio](instalacion.md#modo-local-los-modelos-de-lm-studio).
 
 Comprueba que responden:
 
@@ -89,9 +91,10 @@ OPENAI_API_KEY=sk-...
 ```
 
 **b) 100% local (LM Studio)** — sin coste y sin que nada salga de tu máquina:
-instala https://lmstudio.ai, descarga y carga **a la vez** un modelo de chat
-(recomendado: `Qwen2.5-Coder-14B`) y uno de embeddings (`bge-m3`), arranca su
-servidor local, y en el `.env` cambia:
+instala https://lmstudio.ai, descarga y carga **a la vez** el modelo de chat
+(`Qwen2.5-Coder-14B`) y el de embeddings (`bge-m3`) — el detalle de los dos está en
+[Modo local: los modelos de LM Studio](instalacion.md#modo-local-los-modelos-de-lm-studio) —,
+arranca su servidor local, y en el `.env` cambia:
 
 ```ini
 LLM_PROVIDER=local
