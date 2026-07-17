@@ -94,8 +94,8 @@ La infraestructura (Postgres con las BDs de prueba y Neo4j) se puede levantar de
 En el CLI: primero **"Escanear el esquema"** (construye el grafo y el índice), luego **"Consultar en lenguaje natural"**. Guía paso a paso en [`docs/uso.md`](docs/uso.md).
 
 **Proveedor de LLM** (se elige al arrancar el CLI, que muestra el modelo para que siempre sepas cuál usas):
-- **Nube (OpenAI)**: rápido, con coste; el proyecto está medido con `gpt-5-mini`.
-- **Local (LM Studio), 100% offline y sin coste**: recomiendo `Qwen2.5-Coder-14B` como chat y `bge-m3` como embeddings. Pensado para que ni las preguntas ni el esquema salgan de la red.
+- **Nube (OpenAI)**: rápido, con coste; el proyecto está medido con `gpt-5-mini`. Necesitas poner tu clave en el `.env` (`OPENAI_API_KEY`); el instalador te la pide y la escribe él.
+- **Local (LM Studio), 100% offline y sin coste**: recomiendo `Qwen2.5-Coder-14B` como chat y `bge-m3` como embeddings, con el servidor de LM Studio arrancado y **los dos modelos cargados a la vez** ([cómo dejarlo listo](docs/instalacion.md#modo-local-los-modelos-de-lm-studio)). Pensado para que ni las preguntas ni el esquema salgan de la red.
 
 **¿Usuario y contraseña?** GraphSQL no tiene login: es un CLI local. Las únicas credenciales son las de la infraestructura de demo (Postgres y Neo4j), y ya vienen puestas en `.env.example` con un valor que funciona tal cual (usuarios `postgres` / `neo4j`, contraseña `graphsql_local`). No hace falta cambiarlas: los contenedores son locales y desechables.
 
