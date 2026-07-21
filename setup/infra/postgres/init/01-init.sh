@@ -17,11 +17,12 @@ echo "════════════════════════�
 echo "  GraphSQL — Init de Postgres"
 echo "══════════════════════════════════════"
 
-# ── 1. Crear BDs arcadia y nebula ─────────────────────────────────────────────
-echo "[1/3] Creando bases de datos arcadia y nebula..."
+# ── 1. Crear BDs arcadia, nebula y meridian ───────────────────────────────────
+echo "[1/3] Creando bases de datos arcadia, nebula y meridian..."
 $PG --dbname postgres <<-EOSQL
     CREATE DATABASE arcadia;
     CREATE DATABASE nebula;
+    CREATE DATABASE meridian;
 EOSQL
 
 # ── 2. Activar pgvector en ambas bases ───────────────────────────────────────
@@ -44,6 +45,15 @@ $PG --dbname nebula -f "$SCRIPT_DIR/sql/04-nebula-schema.sql"
 echo "      Cargando datos de nebula (05-nebula-dataset.sql)..."
 $PG --dbname nebula -q -f "$SCRIPT_DIR/sql/05-nebula-dataset.sql"
 echo "      Nebula lista (66 tablas, datos ligeros)."
+
+# Meridian: BD objetivo de DOMINIO NUEVO (ERP de distribución mayorista, ~41 tablas).
+# Dominio a propósito distinto del de arcadia/nebula (videojuegos) para validar si el
+# schema-linking y la generación de SQL generalizan. Esquema + datos sembrados (seed=42).
+echo "      Cargando esquema de meridian (06-meridian-schema.sql)..."
+$PG --dbname meridian -f "$SCRIPT_DIR/sql/06-meridian-schema.sql"
+echo "      Cargando datos de meridian (07-meridian-dataset.sql)..."
+$PG --dbname meridian -q -f "$SCRIPT_DIR/sql/07-meridian-dataset.sql"
+echo "      Meridian lista (41 tablas, datos ligeros)."
 
 # ── 4. Datos (con monitor de progreso) ───────────────────────────────────────
 # El dump usa INSERTs por lotes de 1000 filas (pg_dump --rows-per-insert=1000):

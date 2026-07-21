@@ -20,6 +20,7 @@
     "evaluate:review": "tsx src/evaluation/reviewCases.ts",
     "seed": "tsx src/datasets/seedArcadia.ts",
     "seed:nebula": "tsx src/datasets/seedNebula.ts",
+    "seed:meridian": "tsx src/datasets/seedMeridian.ts",
     "prepare": "cd .. && husky backend/.husky"
   },
   "dependencies": {
