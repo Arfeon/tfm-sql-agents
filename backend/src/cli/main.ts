@@ -11,6 +11,7 @@ import { buildMainMenuChoices, checkVectorIndexExists, type MainAction } from '.
 import { ensureInfrastructureReady } from './startup/infraPreflight'
 import { selectLlmProvider } from './startup/providerSelection'
 import { runSchemaScan } from './flows/schemaScan'
+import { runGenerateDescriptions } from './flows/generateDescriptions'
 import { runSqlPipeline } from './flows/sqlPipeline'
 import { runRetrievalDebug } from './flows/retrievalDebug'
 import { runConversation } from './flows/conversation'
@@ -53,6 +54,9 @@ async function main(): Promise<void> {
         return
       case 'scan':
         await runSchemaScan()
+        break
+      case 'describe':
+        await runGenerateDescriptions()
         break
       case 'query':
         await runSqlPipeline()
