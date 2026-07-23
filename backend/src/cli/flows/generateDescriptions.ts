@@ -11,7 +11,7 @@
 import { existsSync } from 'node:fs'
 import chalk from 'chalk'
 import ora from 'ora'
-import { confirm, select } from '@inquirer/prompts'
+import { confirm, input, select } from '@inquirer/prompts'
 import { loadTargetDatabases, targetDatabaseLabel } from '../../graphsql/infrastructure/config/targetDatabases'
 import { LlmProvider } from '../../graphsql/infrastructure/llm/LlmProvider'
 import { resolveModelName } from '../../graphsql/infrastructure/llm/modelSelection'
@@ -55,6 +55,12 @@ export async function runGenerateDescriptions(): Promise<void> {
     return
   }
 
+  // Contexto de negocio opcional: una frase que orienta al "analista" sobre de qué va la
+  // BD (dominio, tipo de negocio). Ayuda cuando los nombres de tabla son opacos.
+  const businessContext = (
+    await input({ message: 'Contexto de negocio para orientar a la IA (opcional, Enter para omitir):', default: '' })
+  ).trim()
+
   console.log(
     chalk.bold(
       `\nGeneraré una descripción por tabla con el modelo de razonamiento ${model} (${providerLabel(provider)}).`,
@@ -86,7 +92,7 @@ export async function runGenerateDescriptions(): Promise<void> {
   try {
     const results = await generateDescriptions(
       target,
-      { includeSamples: includeSamples === 'include', sampleSize: SAMPLE_SIZE },
+      { includeSamples: includeSamples === 'include', sampleSize: SAMPLE_SIZE, businessContext },
       {
         ...defaultGenerateDescriptionsDependencies,
         onProgress: (done, total, tableName) => {

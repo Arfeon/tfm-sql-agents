@@ -1,21 +1,19 @@
 /**
  * Construcción del prompt para describir una tabla (SPEC de descripciones automáticas).
- * Función pura: recibe el esquema de la tabla y, opcionalmente, una muestra de filas, y
- * devuelve los mensajes de chat. Separo esto del caso de uso para poder probar el prompt
- * sin LLM ni base de datos. La descripción se pide en ESPAÑOL, de una sola frase, igual
- * que las descripciones escritas a mano que ya consume la vectorización.
+ * El system prompt vive en `agents/describe-tables.md` (como el resto de agentes), con un
+ * hueco `{{businessContext}}` para dar al "analista" un contexto de negocio opcional. Lo
+ * demás (columnas y muestra) se arma aquí, para poder probar el prompt sin LLM ni BD. La
+ * descripción se pide en ESPAÑOL, de una sola frase, igual que las escritas a mano.
  */
 import type { ChatMessage } from '../../domain/ports/IChatModel'
 import type { TableSchema } from '../../domain/schema/TableSchema'
+import { loadAgentPrompt } from '../../infrastructure/config/agentPrompts'
 
-const SYSTEM_PROMPT = [
-  'Eres un analista de datos que documenta el esquema de una base de datos.',
-  'Te doy una tabla (su nombre, columnas y claves) y, a veces, una muestra de filas.',
-  'Devuelve UNA sola frase en español que explique el PROPÓSITO DE NEGOCIO de la tabla:',
-  'qué representa cada fila y para qué sirve. Sé concreto y evita rodeos.',
-  'Reglas: responde solo con la frase, sin comillas, sin prefijos como "Descripción:",',
-  'sin listar las columnas una a una y sin inventar relaciones que no estén en los datos.',
-].join(' ')
+/** El contexto de negocio, si lo hay, como una línea para el system prompt; vacío si no. */
+function renderBusinessContext(businessContext?: string): string {
+  const trimmed = businessContext?.trim()
+  return trimmed ? `Contexto de negocio de esta base de datos: ${trimmed}` : ''
+}
 
 /** Una línea por columna: nombre, tipo, y marca de PK / FK (lo que orienta a un modelo de razonamiento). */
 export function renderColumns(table: TableSchema): string {
@@ -54,6 +52,7 @@ export function renderSampleRows(rows: Record<string, unknown>[]): string {
 export function buildDescriptionPrompt(
   table: TableSchema,
   sampleRows?: Record<string, unknown>[],
+  businessContext?: string,
 ): ChatMessage[] {
   const sections = [`Tabla: ${table.name}`, '', 'Columnas:', renderColumns(table)]
 
@@ -62,7 +61,7 @@ export function buildDescriptionPrompt(
   }
 
   return [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: loadAgentPrompt('describe-tables', { businessContext: renderBusinessContext(businessContext) }) },
     { role: 'user', content: sections.join('\n') },
   ]
 }

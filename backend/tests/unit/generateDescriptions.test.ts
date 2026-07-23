@@ -69,6 +69,16 @@ describe('buildDescriptionPrompt', () => {
     expect(user.content).toContain('Muestra de 1 fila(s):')
     expect(user.content).toContain('"ACME"')
   })
+
+  it('inyecta el contexto de negocio en el system prompt cuando se da', () => {
+    const [system] = buildDescriptionPrompt(CUSTOMER, undefined, 'ERP de distribución mayorista')
+    expect(system.content).toContain('ERP de distribución mayorista')
+  })
+
+  it('sin contexto de negocio: no deja el placeholder suelto', () => {
+    const [system] = buildDescriptionPrompt(CUSTOMER)
+    expect(system.content).not.toContain('{{businessContext}}')
+  })
 })
 
 describe('cleanDescription', () => {

@@ -27,6 +27,8 @@ export interface GenerateDescriptionsOptions {
   includeSamples: boolean
   /** Cuántas filas por tabla como muestra. */
   sampleSize: number
+  /** Contexto de negocio opcional para orientar al modelo (p. ej. "ERP de distribución"). */
+  businessContext?: string
 }
 
 export interface GenerateDescriptionsDependencies {
@@ -78,7 +80,10 @@ export async function generateDescriptions(
   const results: GeneratedDescription[] = []
   for (const [index, table] of tables.entries()) {
     const sampleRows = options.includeSamples ? samples.get(table.name) : undefined
-    const description = cleanDescription(await deps.chat(buildDescriptionPrompt(table, sampleRows)))
+    // Cada tabla es una llamada independiente (system + esa tabla): no acumulo contexto
+    // de las anteriores, así el prompt se mantiene pequeño y no se contaminan entre sí.
+    const prompt = buildDescriptionPrompt(table, sampleRows, options.businessContext)
+    const description = cleanDescription(await deps.chat(prompt))
     results.push({ tableName: table.name, description })
     deps.onProgress?.(index + 1, tables.length, table.name)
   }
