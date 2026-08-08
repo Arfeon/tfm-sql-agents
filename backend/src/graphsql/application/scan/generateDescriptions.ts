@@ -83,7 +83,15 @@ export async function generateDescriptions(
     // Cada tabla es una llamada independiente (system + esa tabla): no acumulo contexto
     // de las anteriores, así el prompt se mantiene pequeño y no se contaminan entre sí.
     const prompt = buildDescriptionPrompt(table, sampleRows, options.businessContext)
-    const description = cleanDescription(await deps.chat(prompt))
+    // Una tabla que falle al llamar al modelo (timeout, contexto excedido…) no aborta el
+    // resto ni tira lo ya generado: la dejo con descripción vacía y sigo. Mismo aislamiento
+    // por tabla que `readSamples`; `saveDescriptions` ya descarta las vacías al escribir.
+    let description = ''
+    try {
+      description = cleanDescription(await deps.chat(prompt))
+    } catch {
+      description = ''
+    }
     results.push({ tableName: table.name, description })
     deps.onProgress?.(index + 1, tables.length, table.name)
   }

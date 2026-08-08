@@ -37,12 +37,20 @@ export function renderColumns(table: TableSchema): string {
  */
 export function renderSampleRows(rows: Record<string, unknown>[]): string {
   const MAX_TEXT = 80
+  // Normalizo cada valor antes de serializar: un Buffer (bytea/varbinary) volcaría todo su
+  // array de bytes en el prompt, y un bigint nativo haría LANZAR a JSON.stringify. Ninguno
+  // aporta al modelo, así que binario → marcador corto y bigint → texto.
+  const normalize = (value: unknown): unknown => {
+    if (Buffer.isBuffer(value)) return `<binary ${value.length} bytes>`
+    if (typeof value === 'bigint') return value.toString()
+    if (typeof value === 'string' && value.length > MAX_TEXT) return `${value.slice(0, MAX_TEXT)}…`
+    return value
+  }
   return rows
     .map((row) => {
       const trimmed: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(row)) {
-        trimmed[key] =
-          typeof value === 'string' && value.length > MAX_TEXT ? `${value.slice(0, MAX_TEXT)}…` : value
+        trimmed[key] = normalize(value)
       }
       return JSON.stringify(trimmed)
     })

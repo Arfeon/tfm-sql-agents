@@ -70,6 +70,15 @@ describe('buildDescriptionPrompt', () => {
     expect(user.content).toContain('"ACME"')
   })
 
+  it('normaliza valores no serializables de la muestra (Buffer y bigint)', () => {
+    const [, user] = buildDescriptionPrompt(CUSTOMER, [
+      { id: 1, blob: Buffer.from('hello'), big: 9007199254740993n },
+    ])
+    expect(user.content).toContain('<binary 5 bytes>')
+    expect(user.content).toContain('"9007199254740993"')
+    expect(user.content).not.toContain('"type":"Buffer"')
+  })
+
   it('inyecta el contexto de negocio en el system prompt cuando se da', () => {
     const [system] = buildDescriptionPrompt(CUSTOMER, undefined, 'ERP de distribución mayorista')
     expect(system.content).toContain('ERP de distribución mayorista')
@@ -152,6 +161,27 @@ describe('generateDescriptions', () => {
     await generateDescriptions(TARGET, { includeSamples: false, sampleSize: 10 }, deps)
     expect(sampled).toBe(false)
     expect(prompts[0]).not.toContain('Muestra')
+  })
+
+  it('un fallo del modelo en una tabla no aborta el resto (descripción vacía y sigue)', async () => {
+    const tables: TableSchema[] = [CUSTOMER, { ...CUSTOMER, name: 'invoice' }, { ...CUSTOMER, name: 'payment' }]
+    const seen: string[] = []
+    const deps: GenerateDescriptionsDependencies = {
+      readSchema: async () => tables,
+      readSamples: async () => new Map(),
+      chat: async (messages) => {
+        if (messages[1].content.includes('Tabla: invoice')) throw new Error('boom')
+        return 'ok'
+      },
+      onProgress: (_done, _total, name) => seen.push(name),
+    }
+    const result = await generateDescriptions(TARGET, { includeSamples: false, sampleSize: 10 }, deps)
+    expect(result).toEqual([
+      { tableName: 'customer', description: 'ok' },
+      { tableName: 'invoice', description: '' },
+      { tableName: 'payment', description: 'ok' },
+    ])
+    expect(seen).toEqual(['customer', 'invoice', 'payment'])
   })
 
   it('reporta progreso por tabla', async () => {
