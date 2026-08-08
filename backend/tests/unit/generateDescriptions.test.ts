@@ -79,6 +79,23 @@ describe('buildDescriptionPrompt', () => {
     expect(user.content).not.toContain('"type":"Buffer"')
   })
 
+  it('normaliza valores anidados (array y objeto plano) sin lanzar', () => {
+    const build = () =>
+      buildDescriptionPrompt(CUSTOMER, [
+        { id: 1, tags: ['a', 123n], meta: { blob: Buffer.from('x'), n: 5n } },
+      ])
+    expect(build).not.toThrow()
+    const [, user] = build()
+    expect(user.content).toContain('"123"') // bigint dentro de un array
+    expect(user.content).toContain('<binary 1 bytes>') // Buffer dentro de un objeto
+    expect(user.content).toContain('"5"') // bigint dentro de un objeto
+  })
+
+  it('no toca los Date anidados: se serializan como ISO, no como {}', () => {
+    const [, user] = buildDescriptionPrompt(CUSTOMER, [{ when: new Date('2024-01-01T00:00:00Z') }])
+    expect(user.content).toContain('2024-01-01T00:00:00.000Z')
+  })
+
   it('inyecta el contexto de negocio en el system prompt cuando se da', () => {
     const [system] = buildDescriptionPrompt(CUSTOMER, undefined, 'ERP de distribución mayorista')
     expect(system.content).toContain('ERP de distribución mayorista')

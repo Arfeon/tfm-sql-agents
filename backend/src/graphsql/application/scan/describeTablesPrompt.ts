@@ -37,13 +37,23 @@ export function renderColumns(table: TableSchema): string {
  */
 export function renderSampleRows(rows: Record<string, unknown>[]): string {
   const MAX_TEXT = 80
-  // Normalizo cada valor antes de serializar: un Buffer (bytea/varbinary) volcaría todo su
-  // array de bytes en el prompt, y un bigint nativo haría LANZAR a JSON.stringify. Ninguno
-  // aporta al modelo, así que binario → marcador corto y bigint → texto.
+  // Solo recurro en arrays y objetos PLANOS (los que trae un array SQL o un jsonb): así un
+  // Date (que pg devuelve para timestamps) o cualquier instancia de clase pasa intacta a
+  // JSON.stringify, que ya la serializa bien. Recorrer sus props lo convertiría en `{}`.
+  const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && [Object.prototype, null].includes(Object.getPrototypeOf(v))
+
+  // Normalizo cada valor (también los anidados) antes de serializar: un Buffer (bytea)
+  // volcaría todo su array de bytes en el prompt, y un bigint nativo haría LANZAR a
+  // JSON.stringify. Ninguno aporta al modelo: binario → marcador corto, bigint → texto.
   const normalize = (value: unknown): unknown => {
     if (Buffer.isBuffer(value)) return `<binary ${value.length} bytes>`
     if (typeof value === 'bigint') return value.toString()
     if (typeof value === 'string' && value.length > MAX_TEXT) return `${value.slice(0, MAX_TEXT)}…`
+    if (Array.isArray(value)) return value.map(normalize)
+    if (isPlainObject(value)) {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, normalize(v)]))
+    }
     return value
   }
   return rows
