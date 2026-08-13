@@ -38,7 +38,7 @@ Preguntas para arrancar:
 **Nebula (66 tablas, la de la prueba de escala)** — el mismo universo de Arcadia
 extendido (más catálogo, comercio, telemetría, social, reseñas, eventos, soporte) para
 medir cómo se comporta la recuperación con un esquema mucho más grande. No está pensada
-para explorar preguntas de negocio a mano; existe para la evaluación de escala (§7). Si
+para explorar preguntas de negocio a mano; existe para la evaluación de escala (§8). Si
 la escaneas y preguntas igualmente, funciona, pero el interés está en comparar el
 tamaño del contexto entre las dos BDs, no en el dominio en sí. Conserva su propia
 `t_042` (misma lista de deseos), por si quieres repetir la prueba de arriba a escala.
@@ -54,7 +54,7 @@ Para que todo funcione necesito, en este orden:
    `docker compose up -d --wait` desde la raíz.
 2. **Dependencias instaladas** — `cd backend && npm install`.
 3. **El `.env` con un proveedor de LLM y de embeddings** — como mínimo `LLM_PROVIDER`
-   (`openai` o `local`) con su clave/URL, y `EMBEDDING_PROVIDER`. Ver §5.
+   (`openai` o `local`) con su clave/URL, y `EMBEDDING_PROVIDER`. Ver §6.
 4. **El esquema escaneado y vectorizado** — la primera vez, y cada vez que cambie el
    esquema, hay que escanear (menú → *Escanear el esquema*, §3). Sin índice vectorial, la
    recuperación no encuentra tablas y la consulta falla.
@@ -193,7 +193,7 @@ sistema **avisa** (la recuperación devolvería tablas de otra BD) y ofrece **es
 mismo** con el mismo modelo de embeddings del índice, o cancelar — si cancelo, la consulta
 no sigue: nunca se genera SQL con el índice de otra BD. Este escaneo inline hace la **misma
 pregunta de descripciones** que el del menú cuando la BD es la principal; si no lo es, avisa
-de que las descripciones no le aplican. La evaluación multi-BD, en cambio, usa `EVAL_TARGET` (§7).
+de que las descripciones no le aplican. La evaluación multi-BD, en cambio, usa `EVAL_TARGET` (§8).
 
 ---
 
@@ -227,7 +227,48 @@ y **cada vez que cambie el esquema** o quiera cambiar de BD/proveedor de embeddi
 
 ---
 
-## 4. Depurar la recuperación (ver el circuito)
+## 4. Generar descripciones de tablas con IA (opcional)
+
+Escribir a mano una descripción por tabla es lo que más sube la recuperación en esquemas
+opacos, pero no es viable con cientos de tablas. Esta opción se las pide a un LLM: por cada
+tabla le paso su **nombre y sus columnas** (con las claves) y, si lo autorizo, una **muestra
+de las 10 primeras filas**; devuelve una frase por tabla y las guarda en
+`descriptions/<bd>.json`, que es de donde el escaneo ya las lee.
+
+Es **totalmente opcional**: solo corre si elijo esta opción del menú, la muestra de filas se
+pregunta aparte, y el escaneo sigue preguntándome si quiero incluir las descripciones.
+
+### Qué me pregunta (en este orden)
+
+1. **Qué BD describir** — la lista sale del catálogo del `.env`.
+2. **Si incluir una muestra de filas** — ayuda al modelo a entender qué guarda cada tabla.
+   Con un LLM **local** viene marcado que sí (los datos no salen de la máquina). Con un LLM
+   **en la nube** viene marcado que no, y si digo que sí aparece un **aviso de privacidad**
+   que pide confirmación explícita: se enviarían las 10 primeras filas de *cada* tabla a un
+   tercero, así que conviene revisar antes la política de protección de datos. Si lo declino,
+   me ofrece generarlas **solo con el nombre y las columnas**, sin enviar ningún dato.
+3. **Contexto de negocio** (opcional, Enter para omitir) — una frase del estilo "ERP de
+   distribución mayorista" que orienta al modelo cuando los nombres de tabla no dicen mucho.
+4. **Confirmación** — antes enseña qué modelo va a usar (el de **razonamiento**) y, si es
+   OpenAI, avisa del coste: es una llamada por tabla.
+5. **Escanear ahora** — al acabar, ofrece lanzar el escaneo (§3) para vectorizarlas, que es
+   lo que hace que surtan efecto.
+
+### Importante
+
+- Usa el modelo de **razonamiento** (`LMSTUDIO_MODEL_REASONING` / `OPENAI_MODEL_REASONING`;
+  si no los defino, el modelo base del proveedor).
+- **Tarda**: va tabla a tabla. Con el modelo local, una BD de ~40 tablas son unos 20 minutos.
+- Si una tabla falla (o no se puede muestrear), se queda sin descripción y **el resto sigue**.
+- El fichero de esa BD **se reescribe** entero: si he editado descripciones a mano, conviene
+  hacer copia antes de regenerar.
+- Conviene **revisarlas**: son un punto de partida bueno, no una verdad revelada. El JSON es
+  texto plano y se edita a mano; para re-vectorizar solo lo que cambie está el modo
+  incremental del escaneo (§3).
+
+---
+
+## 5. Depurar la recuperación (ver el circuito)
 
 Enseña **por qué** entran las tablas que entran, sin generar SQL. Útil para entender el GraphRAG
 o para afinar una pregunta. Escribo una pregunta y ejecuta la recuperación **con las mismas
@@ -256,7 +297,7 @@ elige el razonamiento del selector.
 
 ---
 
-## 5. Elegir base de datos y proveedor (variables del `.env`)
+## 6. Elegir base de datos y proveedor (variables del `.env`)
 
 | Variable | Para qué |
 |----------|----------|
@@ -278,7 +319,7 @@ elige el razonamiento del selector.
 
 ---
 
-## 6. Comandos útiles
+## 7. Comandos útiles
 
 Todos desde `backend/` salvo los de Docker (desde la raíz):
 
@@ -292,7 +333,7 @@ npm run typecheck               # comprueba tipos (tsc --noEmit)
 npm run test:diagnostic         # comprueba que Postgres/pgvector y Arcadia están listos (necesita Docker)
 npm run test:integration        # tests de integración (necesita Docker)
 
-# Evaluación experimental (opt-in: necesitan Docker + LLM) — ver §7 y docs/evaluacion/README.md
+# Evaluación experimental (opt-in: necesitan Docker + LLM) — ver §8 y docs/evaluacion/README.md
 npm run evaluate                # ablation de 3 modos sobre la BD de EVAL_TARGET (Arcadia por defecto)
 npm run evaluate:descriptions   # ablation 2×2 con/sin descripciones
 npm run evaluate:scale          # prueba de escala Arcadia (17 tablas) vs Nebula (66)
@@ -313,7 +354,7 @@ docker compose down -v          # borrar TODO, incluidos los datos (empezar de c
 
 ---
 
-## 7. Lanzar y leer la evaluación
+## 8. Lanzar y leer la evaluación
 
 La evaluación mide, sobre un *golden set* de preguntas con su SQL de referencia, si la
 recuperación GraphRAG aporta frente a alternativas más pobres. Es **opt-in** (necesita Docker y
@@ -336,7 +377,7 @@ La lectura neutra y los **sesgos conocidos de las métricas** están en [`arquit
 
 ---
 
-## 8. Problemas frecuentes
+## 9. Problemas frecuentes
 
 - **"No encontré tablas relevantes" / la consulta falla al recuperar** → el esquema no está
   vectorizado (o se vectorizó con otro modelo). Escanéalo: menú → *Escanear el esquema* (§3).

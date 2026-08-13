@@ -11,7 +11,7 @@ import { PROJECT_ROOT } from './projectRoot'
 /** Carpeta de prompts, en la raíz del repo (independiente de desde dónde se ejecute). */
 export const AGENTS_DIR = join(PROJECT_ROOT, 'agents')
 
-export type AgentPromptName = 'sql-generator' | 'equivalence-judge' | 'judge' | 'chat' | 'schema-selector'
+export type AgentPromptName = 'sql-generator' | 'equivalence-judge' | 'judge' | 'chat' | 'schema-selector' | 'describe-tables'
 
 export function loadAgentPrompt(
   name: AgentPromptName,

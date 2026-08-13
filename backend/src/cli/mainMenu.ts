@@ -7,7 +7,7 @@
 import chalk from 'chalk'
 import { getIndexedModel } from '../graphsql/application/scan/getIndexedModel'
 
-export type MainAction = 'chat' | 'query' | 'scan' | 'debug' | 'exit'
+export type MainAction = 'chat' | 'query' | 'scan' | 'describe' | 'debug' | 'exit'
 
 export interface MainMenuChoice {
   name: string
@@ -35,6 +35,7 @@ export function buildMainMenuChoices(hasIndex: boolean | null): MainMenuChoice[]
   if (hasIndex === false) {
     return [
       { name: `Escanear el esquema de la BD objetivo ${chalk.yellow('← empieza por aquí (primera vez)')}`, value: 'scan' },
+      { name: 'Generar descripciones de tablas con IA', value: 'describe' },
       { name: 'Consultar en lenguaje natural (con revisión humana)', value: 'query', disabled: NEEDS_INDEX },
       { name: 'Depurar recuperación (ver el circuito)', value: 'debug', disabled: NEEDS_INDEX },
       { name: 'Salir', value: 'exit' },
@@ -43,6 +44,7 @@ export function buildMainMenuChoices(hasIndex: boolean | null): MainMenuChoice[]
   return [
     { name: 'Consultar en lenguaje natural (con revisión humana)', value: 'query' },
     { name: 'Escanear el esquema de la BD objetivo', value: 'scan' },
+    { name: 'Generar descripciones de tablas con IA', value: 'describe' },
     { name: 'Depurar recuperación (ver el circuito)', value: 'debug' },
     { name: 'Salir', value: 'exit' },
   ]

@@ -13,9 +13,10 @@ function valuesOf(choices: ReturnType<typeof buildMainMenuChoices>): string[] {
 describe('buildMainMenuChoices', () => {
   it('sin índice (primera vez): escanear va primero y consultar/depurar quedan deshabilitadas con motivo', () => {
     const choices = buildMainMenuChoices(false)
-    expect(valuesOf(choices)).toEqual(['scan', 'query', 'debug', 'exit'])
+    expect(valuesOf(choices)).toEqual(['scan', 'describe', 'query', 'debug', 'exit'])
     const byValue = Object.fromEntries(choices.map((c) => [c.value, c]))
     expect(byValue.scan.disabled).toBeUndefined()
+    expect(byValue.describe.disabled).toBeUndefined()
     expect(byValue.exit.disabled).toBeUndefined()
     expect(byValue.query.disabled).toContain('esquema escaneado')
     expect(byValue.debug.disabled).toContain('esquema escaneado')
@@ -24,13 +25,13 @@ describe('buildMainMenuChoices', () => {
 
   it('con índice: el menú normal, consultar primero y nada deshabilitado', () => {
     const choices = buildMainMenuChoices(true)
-    expect(valuesOf(choices)).toEqual(['query', 'scan', 'debug', 'exit'])
+    expect(valuesOf(choices)).toEqual(['query', 'scan', 'describe', 'debug', 'exit'])
     expect(choices.every((c) => c.disabled === undefined)).toBe(true)
   })
 
   it('estado desconocido (pgvector inaccesible): no se bloquea nada', () => {
     const choices = buildMainMenuChoices(null)
-    expect(valuesOf(choices)).toEqual(['query', 'scan', 'debug', 'exit'])
+    expect(valuesOf(choices)).toEqual(['query', 'scan', 'describe', 'debug', 'exit'])
     expect(choices.every((c) => c.disabled === undefined)).toBe(true)
   })
 })

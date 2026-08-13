@@ -2,8 +2,8 @@
  * Descripciones opcionales de tablas para enriquecer la vectorización: ficheros JSON
  * `[{ tableName, description }]` en `descriptions/`; los `*.example.json` se ignoran.
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { PROJECT_ROOT } from './projectRoot'
 
@@ -24,6 +24,23 @@ export function parseDescriptions(json: string): Map<string, string> {
 
 export function hasDescriptionsFile(dir: string = DESCRIPTIONS_DIR): boolean {
   return findDescriptionFiles(dir).length > 0
+}
+
+/** Ruta del fichero de descripciones de una BD (un JSON por BD, p. ej. `descriptions/meridian.json`). */
+export function descriptionsFilePathFor(dbName: string, dir: string = DESCRIPTIONS_DIR): string {
+  return join(dir, `${dbName}.json`)
+}
+
+/**
+ * Guarda las descripciones generadas como `[{ tableName, description }]`. Es el mismo
+ * formato que lee `loadDescriptions`, así que el escaneo las recoge sin más. Solo escribo
+ * las que tienen texto (una descripción vacía no aporta nada al índice).
+ */
+export function saveDescriptions(entries: { tableName: string; description: string }[], filePath: string): number {
+  const nonEmpty = entries.filter((entry) => entry.description.trim().length > 0)
+  mkdirSync(dirname(filePath), { recursive: true })
+  writeFileSync(filePath, `${JSON.stringify(nonEmpty, null, 2)}\n`, 'utf8')
+  return nonEmpty.length
 }
 
 export function loadDescriptions(dir: string = DESCRIPTIONS_DIR): Map<string, string> {
