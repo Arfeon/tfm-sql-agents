@@ -9,6 +9,7 @@ import { LlmProvider } from './LlmProvider'
 import type { LlmRole } from './modelSelection'
 import { OpenAIChatModel } from './OpenAIChatModel'
 import { LocalChatModel } from './LocalChatModel'
+import { GatewayChatModel } from './GatewayChatModel'
 
 export class ChatModelFactory {
   static create(provider: LlmProvider, role?: LlmRole): IChatModel {
@@ -26,12 +27,14 @@ export class ChatModelFactory {
     return ChatModelFactory.buildAdapter(provider, role).langChainModel
   }
 
-  private static buildAdapter(provider: LlmProvider, role?: LlmRole): OpenAIChatModel | LocalChatModel {
+  private static buildAdapter(provider: LlmProvider, role?: LlmRole): OpenAIChatModel | LocalChatModel | GatewayChatModel {
     switch (provider) {
       case LlmProvider.OpenAI:
         return OpenAIChatModel.fromEnv(role)
       case LlmProvider.Local:
         return LocalChatModel.fromEnv(role)
+      case LlmProvider.Gateway:
+        return GatewayChatModel.fromEnv(role)
       default:
         throw new Error(
           `Proveedor LLM no soportado: "${provider}". Valores válidos: ${Object.values(LlmProvider).join(', ')}.`,

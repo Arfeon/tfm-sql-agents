@@ -31,5 +31,17 @@ describe('resolveModelName', () => {
     const env = {} as NodeJS.ProcessEnv
     expect(resolveModelName(LlmProvider.Local, 'reasoning', env)).toBe('local-model')
     expect(resolveModelName(LlmProvider.OpenAI, 'generation', env)).toBe('gpt-4o-mini')
+    expect(resolveModelName(LlmProvider.Gateway, 'generation', env)).toBe('gateway-model')
+  })
+
+  it('el gateway tiene sus propias variables, sin mezclarse con las de local', () => {
+    const env = {
+      GATEWAY_MODEL: 'qwen2.5-coder-32b',
+      GATEWAY_MODEL_REASONING: 'gpt-5',
+      LMSTUDIO_MODEL: 'qwen2.5-coder-14b',
+    } as NodeJS.ProcessEnv
+    expect(resolveModelName(LlmProvider.Gateway, 'reasoning', env)).toBe('gpt-5')
+    expect(resolveModelName(LlmProvider.Gateway, 'generation', env)).toBe('qwen2.5-coder-32b')
+    expect(resolveModelName(LlmProvider.Local, 'generation', env)).toBe('qwen2.5-coder-14b')
   })
 })

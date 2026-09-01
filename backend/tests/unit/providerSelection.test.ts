@@ -15,6 +15,8 @@ beforeEach(() => {
   delete process.env.OPENAI_MODEL_GENERATION
   delete process.env.LMSTUDIO_MODEL_REASONING
   delete process.env.LMSTUDIO_MODEL_GENERATION
+  delete process.env.GATEWAY_MODEL_REASONING
+  delete process.env.GATEWAY_MODEL_GENERATION
 })
 afterEach(() => {
   process.env = { ...savedEnv }
@@ -24,6 +26,7 @@ describe('resolveDefaultProvider', () => {
   it('usa el valor del .env cuando es válido', () => {
     expect(resolveDefaultProvider('local')).toBe(LlmProvider.Local)
     expect(resolveDefaultProvider('openai')).toBe(LlmProvider.OpenAI)
+    expect(resolveDefaultProvider('gateway')).toBe(LlmProvider.Gateway)
   })
   it('cae en OpenAI si el valor falta o es inválido', () => {
     expect(resolveDefaultProvider(undefined)).toBe(LlmProvider.OpenAI)
@@ -50,5 +53,6 @@ describe('providerLabel', () => {
   it('da una etiqueta legible por proveedor', () => {
     expect(providerLabel(LlmProvider.Local)).toMatch(/Local/)
     expect(providerLabel(LlmProvider.OpenAI)).toMatch(/OpenAI/)
+    expect(providerLabel(LlmProvider.Gateway)).toMatch(/Gateway/)
   })
 })

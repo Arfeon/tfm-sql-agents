@@ -96,6 +96,7 @@ En el CLI: primero **"Escanear el esquema"** (construye el grafo y el índice), 
 **Proveedor de LLM** (se elige al arrancar el CLI, que muestra el modelo para que siempre sepas cuál usas):
 - **Nube (OpenAI)**: rápido, con coste; el proyecto está medido con `gpt-5-mini`. Necesitas poner tu clave en el `.env` (`OPENAI_API_KEY`); el instalador te la pide y la escribe él.
 - **Local (LM Studio), 100% offline y sin coste**: recomiendo `Qwen2.5-Coder-14B` como chat y `bge-m3` como embeddings, con el servidor de LM Studio arrancado y **los dos modelos cargados a la vez** ([cómo dejarlo listo](docs/instalacion.md#modo-local-los-modelos-de-lm-studio)). Pensado para que ni las preguntas ni el esquema salgan de la red.
+- **Gateway corporativo (LiteLLM y compatibles)**: un servidor propio de la organización que habla la API de OpenAI y decide él qué modelo hay detrás. Es el modo pensado para empresa: las preguntas y el esquema no salen del perímetro, y el gateway concentra la clave, la cuota y la traza. Se configura con `GATEWAY_BASE_URL`, `GATEWAY_API_KEY` y `GATEWAY_MODEL` (el *alias* que publica el gateway).
 
 **¿Usuario y contraseña?** GraphSQL no tiene login: es un CLI local. Las únicas credenciales son las de la infraestructura de demo (Postgres y Neo4j), y ya vienen puestas en `.env.example` con un valor que funciona tal cual (usuarios `postgres` / `neo4j`, contraseña `graphsql_local`). No hace falta cambiarlas: los contenedores son locales y desechables.
 
@@ -121,7 +122,7 @@ Lo medible y sólido — el detalle y **cómo se interpretan las métricas** est
 
 ## Stack
 
-**TypeScript** (Node.js 20+) · **LangGraph.js** (orquestación) · **Neo4j** (esquema como grafo de conocimiento) · **PostgreSQL + pgvector** (búsqueda semántica y checkpoints) · **LLM configurable** (OpenAI o LM Studio) · **CLI** (`@inquirer/prompts`, `boxen`, `chalk`).
+**TypeScript** (Node.js 20+) · **LangGraph.js** (orquestación) · **Neo4j** (esquema como grafo de conocimiento) · **PostgreSQL + pgvector** (búsqueda semántica y checkpoints) · **LLM configurable** (OpenAI, LM Studio o un gateway corporativo) · **CLI** (`@inquirer/prompts`, `boxen`, `chalk`).
 
 En desarrollo usé **LangSmith** (capa gratuita de la suite LangChain) para trazar y depurar los grafos; es opcional, se activa por variables de entorno y va **apagado por defecto** — con esquemas reales lo coherente con el despliegue on-premise es no encenderlo (o auto-alojar una alternativa como Langfuse). Detalle en [`arquitectura.md` §7](docs/design/arquitectura.md).
 

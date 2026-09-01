@@ -12,6 +12,7 @@ export type LlmRole = 'reasoning' | 'generation'
 
 const DEFAULT_LOCAL_MODEL = 'local-model'
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
+const DEFAULT_GATEWAY_MODEL = 'gateway-model'
 
 /** Modelos del proveedor: el base (fallback) y el específico de cada rol si está configurado. */
 function modelsFor(provider: LlmProvider, vars: BackendEnv) {
@@ -20,6 +21,13 @@ function modelsFor(provider: LlmProvider, vars: BackendEnv) {
       base: vars.LMSTUDIO_MODEL ?? DEFAULT_LOCAL_MODEL,
       reasoning: vars.LMSTUDIO_MODEL_REASONING,
       generation: vars.LMSTUDIO_MODEL_GENERATION,
+    }
+  }
+  if (provider === LlmProvider.Gateway) {
+    return {
+      base: vars.GATEWAY_MODEL ?? DEFAULT_GATEWAY_MODEL,
+      reasoning: vars.GATEWAY_MODEL_REASONING,
+      generation: vars.GATEWAY_MODEL_GENERATION,
     }
   }
   return {

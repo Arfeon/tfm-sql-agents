@@ -33,6 +33,10 @@ describe('EmbeddingsFactory', () => {
     expect(EmbeddingsFactory.create(EmbeddingProvider.Local)).toBeInstanceOf(OpenAICompatibleEmbeddings)
   })
 
+  it('create_providerGateway_devuelveAdaptador', () => {
+    expect(EmbeddingsFactory.create(EmbeddingProvider.Gateway)).toBeInstanceOf(OpenAICompatibleEmbeddings)
+  })
+
   it('create_providerDesconocido_lanzaError', () => {
     expect(() => EmbeddingsFactory.create('cohere' as EmbeddingProvider)).toThrow(/no soportado/)
   })

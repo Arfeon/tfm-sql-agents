@@ -13,7 +13,7 @@ import { EmbeddingsFactory } from '../../graphsql/infrastructure/embeddings/Embe
 import { EmbeddingProvider } from '../../graphsql/infrastructure/embeddings/EmbeddingProvider'
 import { hasDescriptionsFile, loadDescriptions, DESCRIPTIONS_DIR } from '../../graphsql/infrastructure/config/descriptions'
 import type { IEmbeddings } from '../../graphsql/domain/ports/IEmbeddings'
-import { warnIfLocalModelMissing, withSpinner } from '../ui'
+import { warnIfGatewayModelMissing, warnIfLocalModelMissing, withSpinner } from '../ui'
 
 export async function runSchemaScan(): Promise<void> {
   const targets = loadTargetDatabases()
@@ -134,6 +134,7 @@ function askEmbeddingProvider(): Promise<EmbeddingProvider> {
     choices: [
       { name: 'OpenAI (nube)', value: EmbeddingProvider.OpenAI },
       { name: 'LM Studio (local)', value: EmbeddingProvider.Local },
+      { name: 'Gateway corporativo', value: EmbeddingProvider.Gateway },
     ],
   })
 }
@@ -142,6 +143,9 @@ function askEmbeddingProvider(): Promise<EmbeddingProvider> {
 async function confirmScan(provider: EmbeddingProvider, embeddings: IEmbeddings): Promise<boolean> {
   if (provider === EmbeddingProvider.Local) {
     await warnIfLocalModelMissing('embeddings', embeddings.model)
+  }
+  if (provider === EmbeddingProvider.Gateway) {
+    await warnIfGatewayModelMissing('embeddings', embeddings.model)
   }
 
   const indexed = await getIndexedModel()
