@@ -66,3 +66,31 @@ describe('checkSqlSafety — patrones de inyección', () => {
     expect(checkSqlSafety(sql).valid).toBe(false)
   })
 })
+
+describe('checkSqlSafety — las reglas miran la SQL, no los datos', () => {
+  it.each([
+    ['un "--" dentro de un literal', "SELECT * FROM incidencia WHERE nota ILIKE '%alta -- urgente%'"],
+    ['una palabra peligrosa dentro de un literal', "SELECT * FROM evento WHERE tipo = 'CREATE'"],
+    ['un ";" dentro de un literal', "SELECT * FROM cliente WHERE nombre = 'Pérez; Hnos'"],
+    ['un "/* */" dentro de un literal', "SELECT * FROM nota WHERE cuerpo LIKE '%/* ojo */%'"],
+    ['una comilla escapada ("") dentro de un literal', "SELECT * FROM cliente WHERE nombre = 'O''Brien -- socio'"],
+    ['una palabra peligrosa como identificador entrecomillado', 'SELECT "create" FROM auditoria'],
+  ])('acepta %s', (_caso, sql) => {
+    expect(checkSqlSafety(sql).valid).toBe(true)
+  })
+
+  it.each([
+    ['el ";" está fuera del literal', "SELECT * FROM t WHERE x = 'a'; DROP TABLE t"],
+    ['el "--" está fuera del literal', "SELECT * FROM t WHERE x = 'a' -- y ahora comento"],
+    ['la palabra peligrosa está fuera del literal', "SELECT * FROM t WHERE x = 'crear' UNION SELECT 1; DROP TABLE t"],
+  ])('sigue rechazando cuando %s', (_caso, sql) => {
+    expect(checkSqlSafety(sql).valid).toBe(false)
+  })
+
+  it('rechaza una comilla sin cerrar en vez de enmascarar hasta el final', () => {
+    // Si el enmascarado se tragara el resto, este `; DROP TABLE t` quedaría oculto.
+    const verdict = checkSqlSafety("SELECT * FROM t WHERE x = 'abc; DROP TABLE t")
+    expect(verdict.valid).toBe(false)
+    expect(verdict.errors.some((error) => error.includes('comilla sin cerrar'))).toBe(true)
+  })
+})
