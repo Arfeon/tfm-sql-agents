@@ -10,7 +10,9 @@
 #
 # Ejecutado con `irm | iex` no puede recibir parámetros, así que todo se pregunta de
 # forma interactiva; para automatizarlo (o probarlo), cada pregunta se puede fijar por
-# variable de entorno: GRAPHSQL_INSTALL_DIR, GRAPHSQL_PROVIDER (openai|local),
+# variable de entorno: GRAPHSQL_INSTALL_DIR, GRAPHSQL_PROVIDER (openai|local|gateway),
+# GRAPHSQL_GATEWAY_URL, GRAPHSQL_GATEWAY_KEY, GRAPHSQL_GATEWAY_MODEL,
+# GRAPHSQL_GATEWAY_EMBEDDING_MODEL,
 # GRAPHSQL_OPENAI_KEY, GRAPHSQL_REGISTER_GSQL (yes|no) y GRAPHSQL_REPO_URL.
 # Compatible con Windows PowerShell 5.1 (el que trae Windows) y con PowerShell 7.
 
@@ -92,12 +94,37 @@ if (Test-Path $envFile) {
 } else {
     Copy-Item (Join-Path $installDir '.env.example') $envFile
 
-    $provider = (Ask 'Proveedor de IA: "openai" (nube, necesita clave) o "local" (LM Studio, gratis y offline)' 'openai' $env:GRAPHSQL_PROVIDER).ToLower()
+    $provider = (Ask 'Proveedor de IA: "openai" (nube, necesita clave), "local" (LM Studio, gratis y offline) o "gateway" (servidor LLM de tu organizacion)' 'openai' $env:GRAPHSQL_PROVIDER).ToLower()
     $content = Get-Content $envFile -Raw
     if ($provider -eq 'local') {
         $content = $content -replace '(?m)^LLM_PROVIDER=.*', 'LLM_PROVIDER=local'
         $content = $content -replace '(?m)^EMBEDDING_PROVIDER=.*', 'EMBEDDING_PROVIDER=local'
         Write-Ok 'Configurado para LM Studio. Recuerda: modelo de chat + modelo de embeddings cargados y servidor arrancado.'
+    } elseif ($provider -eq 'gateway') {
+        # El gateway publica ALIAS de modelo propios, asi que pregunto el nombre en vez de
+        # suponerlo: se ven con `curl -H "Authorization: Bearer <clave>" <URL>/models`.
+        $gwUrl = Ask 'URL del gateway (terminada en /v1)' 'http://localhost:4000/v1' $env:GRAPHSQL_GATEWAY_URL
+        $gwKey = Ask 'Clave del gateway (dejalo vacio para ponerla luego a mano en el .env)' '' $env:GRAPHSQL_GATEWAY_KEY
+        $gwModel = Ask 'Alias del modelo de chat que publica el gateway' '' $env:GRAPHSQL_GATEWAY_MODEL
+        $gwEmbedding = Ask 'Alias del modelo de embeddings (vacio si los embeddings no van por el gateway)' '' $env:GRAPHSQL_GATEWAY_EMBEDDING_MODEL
+        $content = $content -replace '(?m)^LLM_PROVIDER=.*', 'LLM_PROVIDER=gateway'
+        $content = $content -replace '(?m)^GATEWAY_BASE_URL=.*', "GATEWAY_BASE_URL=$gwUrl"
+        $content = $content -replace '(?m)^GATEWAY_API_KEY=.*', "GATEWAY_API_KEY=$gwKey"
+        $content = $content -replace '(?m)^GATEWAY_MODEL=.*', "GATEWAY_MODEL=$gwModel"
+        if ($gwEmbedding) {
+            $content = $content -replace '(?m)^EMBEDDING_PROVIDER=.*', 'EMBEDDING_PROVIDER=gateway'
+            $content = $content -replace '(?m)^GATEWAY_EMBEDDING_MODEL=.*', "GATEWAY_EMBEDDING_MODEL=$gwEmbedding"
+            Write-Warning2 "Revisa GATEWAY_EMBEDDING_DIMENSIONS en ${envFile}: debe ser la dimension real de $gwEmbedding (1024 para bge-m3, 1536 para text-embedding-3-small)."
+        } else {
+            Write-Warning2 "Los embeddings siguen configurados con OpenAI: o pones tu OPENAI_API_KEY en $envFile, o cambias EMBEDDING_PROVIDER a local/gateway."
+        }
+        if (-not $gwKey) {
+            Write-Warning2 "Sin clave aun: antes de usarlo, edita $envFile y pon tu GATEWAY_API_KEY."
+        }
+        if (-not $gwModel) {
+            Write-Warning2 "Sin modelo aun: edita $envFile y pon en GATEWAY_MODEL uno de los alias que publique tu gateway."
+        }
+        Write-Ok "Configurado para el gateway en $gwUrl."
     } else {
         $apiKey = Ask 'Tu OPENAI_API_KEY (dejalo vacio para ponerla luego a mano en el .env)' '' $env:GRAPHSQL_OPENAI_KEY
         if ($apiKey) {

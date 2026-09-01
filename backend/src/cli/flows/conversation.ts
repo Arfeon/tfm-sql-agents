@@ -13,6 +13,7 @@ function askProvider(): Promise<LlmProvider> {
     choices: [
       { name: 'OpenAI (nube)', value: LlmProvider.OpenAI },
       { name: 'LM Studio (local)', value: LlmProvider.Local },
+      { name: 'Gateway corporativo', value: LlmProvider.Gateway },
     ],
   })
 }
