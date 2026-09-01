@@ -54,9 +54,11 @@ Todas las preguntas traen un valor por defecto sensato: **Enter y sigue**.
    ejecutar el instalador es la forma de actualizar**. Si la carpeta existe con
    otra cosa dentro, se para sin tocar nada.
 4. **Prepara la configuración.** Crea el `.env` desde el ejemplo y te pregunta el
-   proveedor de IA: `openai` (te pide la clave y la escribe en el `.env`) o
+   proveedor de IA: `openai` (te pide la clave y la escribe en el `.env`),
    `local` (LM Studio, sin coste y sin que nada salga de tu máquina — los dos
-   modelos que necesita están en [Modo local: los modelos de LM Studio](#modo-local-los-modelos-de-lm-studio)).
+   modelos que necesita están en [Modo local: los modelos de LM Studio](#modo-local-los-modelos-de-lm-studio))
+   o `gateway` (el servidor LLM de tu organización: te pide su URL, la clave y el
+   alias del modelo — detalle en [Modo gateway](#modo-gateway-un-servidor-llm-de-la-organización)).
    Si ya tenías un `.env` de antes, lo respeta tal cual.
 5. **Instala las dependencias** (`npm install`, solo en `backend/`).
 6. **Ofrece registrar el comando global `gsql`** (di que sí; abajo explico qué

@@ -12,7 +12,9 @@
 # Ejecutado con `curl | bash` el stdin es el propio script, así que las preguntas leen
 # de /dev/tty; sin terminal (CI), cada pregunta cae a su valor por defecto. Todas se
 # pueden fijar por variable de entorno: GRAPHSQL_INSTALL_DIR, GRAPHSQL_PROVIDER
-# (openai|local), GRAPHSQL_OPENAI_KEY, GRAPHSQL_REGISTER_GSQL (yes|no) y GRAPHSQL_REPO_URL.
+# (openai|local|gateway), GRAPHSQL_OPENAI_KEY, GRAPHSQL_GATEWAY_URL, GRAPHSQL_GATEWAY_KEY,
+# GRAPHSQL_GATEWAY_MODEL, GRAPHSQL_GATEWAY_EMBEDDING_MODEL, GRAPHSQL_REGISTER_GSQL (yes|no)
+# y GRAPHSQL_REPO_URL.
 
 set -euo pipefail
 
@@ -83,13 +85,36 @@ if [ -f "$ENV_FILE" ]; then
 else
   cp "$INSTALL_DIR/.env.example" "$ENV_FILE"
 
-  PROVIDER="$(ask 'Proveedor de IA: "openai" (nube, necesita clave) o "local" (LM Studio, gratis y offline)' 'openai' "${GRAPHSQL_PROVIDER:-}")"
+  PROVIDER="$(ask 'Proveedor de IA: "openai" (nube, necesita clave), "local" (LM Studio, gratis y offline) o "gateway" (servidor LLM de tu organizacion)' 'openai' "${GRAPHSQL_PROVIDER:-}")"
   PROVIDER="$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')"
   if [ "$PROVIDER" = "local" ]; then
     # sed -i.bak funciona igual en GNU (Linux) y BSD (macOS); el .bak se borra después.
     sed -i.bak 's/^LLM_PROVIDER=.*/LLM_PROVIDER=local/; s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=local/' "$ENV_FILE"
     rm -f "$ENV_FILE.bak"
     green "Configurado para LM Studio. Recuerda: modelo de chat + modelo de embeddings cargados y servidor arrancado."
+  elif [ "$PROVIDER" = "gateway" ]; then
+    # El gateway publica ALIAS de modelo propios, así que pregunto el nombre en vez de
+    # suponerlo: se ven con `curl -H "Authorization: Bearer <clave>" <URL>/models`.
+    GW_URL="$(ask 'URL del gateway (terminada en /v1)' 'http://localhost:4000/v1' "${GRAPHSQL_GATEWAY_URL:-}")"
+    GW_KEY="$(ask 'Clave del gateway (déjalo vacío para ponerla luego a mano en el .env)' '' "${GRAPHSQL_GATEWAY_KEY:-}")"
+    GW_MODEL="$(ask 'Alias del modelo de chat que publica el gateway' '' "${GRAPHSQL_GATEWAY_MODEL:-}")"
+    GW_EMB="$(ask 'Alias del modelo de embeddings (vacío si los embeddings no van por el gateway)' '' "${GRAPHSQL_GATEWAY_EMBEDDING_MODEL:-}")"
+    sed -i.bak "s/^LLM_PROVIDER=.*/LLM_PROVIDER=gateway/; s|^GATEWAY_BASE_URL=.*|GATEWAY_BASE_URL=$GW_URL|; s|^GATEWAY_API_KEY=.*|GATEWAY_API_KEY=$GW_KEY|; s|^GATEWAY_MODEL=.*|GATEWAY_MODEL=$GW_MODEL|" "$ENV_FILE"
+    rm -f "$ENV_FILE.bak"
+    if [ -n "$GW_EMB" ]; then
+      sed -i.bak "s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=gateway/; s|^GATEWAY_EMBEDDING_MODEL=.*|GATEWAY_EMBEDDING_MODEL=$GW_EMB|" "$ENV_FILE"
+      rm -f "$ENV_FILE.bak"
+      yellow "Revisa GATEWAY_EMBEDDING_DIMENSIONS en $ENV_FILE: debe ser la dimensión real de $GW_EMB (1024 para bge-m3, 1536 para text-embedding-3-small)."
+    else
+      yellow "Los embeddings siguen configurados con OpenAI: o pones tu OPENAI_API_KEY en $ENV_FILE, o cambias EMBEDDING_PROVIDER a local/gateway."
+    fi
+    if [ -z "$GW_KEY" ]; then
+      yellow "Sin clave aún: antes de usarlo, edita $ENV_FILE y pon tu GATEWAY_API_KEY."
+    fi
+    if [ -z "$GW_MODEL" ]; then
+      yellow "Sin modelo aún: edita $ENV_FILE y pon en GATEWAY_MODEL uno de los alias que publique tu gateway."
+    fi
+    green "Configurado para el gateway en $GW_URL."
   else
     API_KEY="$(ask 'Tu OPENAI_API_KEY (déjalo vacío para ponerla luego a mano en el .env)' '' "${GRAPHSQL_OPENAI_KEY:-}")"
     if [ -n "$API_KEY" ]; then
