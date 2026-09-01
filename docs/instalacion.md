@@ -203,6 +203,51 @@ Notas:
   tablas hacen falta, otro para escribir la SQL) con `LMSTUDIO_MODEL_REASONING`
   y `LMSTUDIO_MODEL_GENERATION`; el propio `.env.example` lo documenta.
 
+## Modo gateway: un servidor LLM de la organización
+
+Es el modo pensado para empresa, y el punto medio entre los otros dos: ni la
+nube de un tercero ni lo que cabe en un portátil, sino un servidor propio que
+habla la API de OpenAI y decide él qué modelo hay detrás. El caso típico es
+[LiteLLM](https://docs.litellm.ai/docs/proxy/docker_quick_start) por delante de
+uno o varios modelos alojados en las GPUs de la organización, de la propia
+OpenAI con la clave de la empresa, o de ambas cosas a la vez.
+
+Desde GraphSQL no se nota la diferencia: pido un nombre de modelo y el gateway
+sirve lo que toque. Lo que sí importa es que ese nombre es el **alias** que
+publica el gateway, no el del modelo real. Para verlos:
+
+```bash
+curl -H "Authorization: Bearer <tu-clave>" https://tu-gateway/v1/models
+```
+
+Con esos nombres, en el `.env`:
+
+| Variable | Qué es |
+|----------|--------|
+| `GATEWAY_BASE_URL` | La URL del gateway, terminada en `/v1` |
+| `GATEWAY_API_KEY` | La clave que emite el propio gateway (en LiteLLM, una *virtual key*) |
+| `GATEWAY_MODEL` | El alias del modelo de chat |
+| `GATEWAY_EMBEDDING_MODEL` | El alias del modelo de embeddings, si el gateway también los sirve |
+| `GATEWAY_EMBEDDING_DIMENSIONS` | La dimensión de ese modelo (1024 para `bge-m3`, 1536 para `text-embedding-3-small`) |
+
+Y elige `Gateway corporativo` en el menú al arrancar (y también al escanear, si
+quieres vectorizar por ahí). Notas:
+
+- **`GATEWAY_EMBEDDING_SEND_DIMENSIONS` vale `false` por defecto**, que es lo
+  correcto salvo que detrás haya un `text-embedding-3` de OpenAI: solo esa
+  familia admite recortar la dimensión, y pedírselo a un modelo propio es un
+  error. Si la dimensión no cuadra con la real, el programa lo dice claro antes
+  de guardar nada.
+- **Cambiar de proveedor de embeddings obliga a re-escanear.** El índice guarda
+  con qué proveedor se construyó y las consultas se hacen con ese mismo, aunque
+  el modelo se llame igual en los dos sitios: comparar vectores de espacios
+  distintos no tiene sentido.
+- Igual que en local, se puede usar **un modelo distinto por rol** con
+  `GATEWAY_MODEL_REASONING` (elegir tablas) y `GATEWAY_MODEL_GENERATION`
+  (escribir la SQL).
+- Si el alias está mal escrito o la clave no da acceso a ese modelo, el programa
+  consulta el `/models` del gateway y te dice cuáles sí tienes disponibles.
+
 ## Si algo no cuadra
 
 Cada guía tiene su propia sección de problemas frecuentes, adaptada a esa vía:
