@@ -21,7 +21,9 @@ export function modelNameFor(provider: LlmProvider): string {
 
 /** Etiqueta legible del proveedor para los mensajes. */
 export function providerLabel(provider: LlmProvider): string {
-  return provider === LlmProvider.Local ? 'Local (LM Studio)' : 'OpenAI (nube)'
+  if (provider === LlmProvider.Local) return 'Local (LM Studio)'
+  if (provider === LlmProvider.Gateway) return 'Gateway corporativo'
+  return 'OpenAI (nube)'
 }
 
 /** El proveedor por defecto sale del .env; si trae un valor inválido, caigo en OpenAI. */
@@ -41,6 +43,7 @@ export async function selectLlmProvider(): Promise<LlmProvider> {
     choices: [
       { name: `OpenAI (nube) — ${modelNameFor(LlmProvider.OpenAI)}`, value: LlmProvider.OpenAI },
       { name: `Local / LM Studio — ${modelNameFor(LlmProvider.Local)}`, value: LlmProvider.Local },
+      { name: `Gateway corporativo — ${modelNameFor(LlmProvider.Gateway)}`, value: LlmProvider.Gateway },
     ],
   })
 

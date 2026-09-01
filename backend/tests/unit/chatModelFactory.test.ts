@@ -9,6 +9,7 @@ import { ChatModelFactory } from '../../src/graphsql/infrastructure/llm/ChatMode
 import { LlmProvider } from '../../src/graphsql/infrastructure/llm/LlmProvider'
 import { OpenAIChatModel } from '../../src/graphsql/infrastructure/llm/OpenAIChatModel'
 import { LocalChatModel } from '../../src/graphsql/infrastructure/llm/LocalChatModel'
+import { GatewayChatModel } from '../../src/graphsql/infrastructure/llm/GatewayChatModel'
 
 describe('ChatModelFactory', () => {
   it('create_providerOpenai_devuelveAdaptadorOpenAI', () => {
@@ -17,6 +18,10 @@ describe('ChatModelFactory', () => {
 
   it('create_providerLocal_devuelveAdaptadorLocal', () => {
     expect(ChatModelFactory.create(LlmProvider.Local)).toBeInstanceOf(LocalChatModel)
+  })
+
+  it('create_providerGateway_devuelveAdaptadorGateway', () => {
+    expect(ChatModelFactory.create(LlmProvider.Gateway)).toBeInstanceOf(GatewayChatModel)
   })
 
   it('create_providerDesconocido_lanzaError', () => {

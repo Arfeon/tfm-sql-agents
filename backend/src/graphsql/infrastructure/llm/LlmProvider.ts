@@ -4,4 +4,5 @@
 export enum LlmProvider {
   OpenAI = 'openai',
   Local = 'local',
+  Gateway = 'gateway',
 }

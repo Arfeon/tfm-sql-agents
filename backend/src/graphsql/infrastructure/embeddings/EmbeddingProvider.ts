@@ -5,4 +5,5 @@
 export enum EmbeddingProvider {
   OpenAI = 'openai',
   Local = 'local',
+  Gateway = 'gateway',
 }

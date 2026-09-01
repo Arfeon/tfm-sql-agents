@@ -26,6 +26,14 @@ export class EmbeddingsFactory {
           baseUrl: vars.LMSTUDIO_BASE_URL,
           sendDimensions: false, // el modelo local tiene su dimensión nativa fija
         })
+      case EmbeddingProvider.Gateway:
+        return new OpenAICompatibleEmbeddings({
+          apiKey: vars.GATEWAY_API_KEY,
+          model: vars.GATEWAY_EMBEDDING_MODEL,
+          dimensions: vars.GATEWAY_EMBEDDING_DIMENSIONS,
+          baseUrl: vars.GATEWAY_BASE_URL,
+          sendDimensions: vars.GATEWAY_EMBEDDING_SEND_DIMENSIONS, // depende del modelo que sirva el gateway
+        })
       default:
         throw new Error(
           `Proveedor de embeddings no soportado: "${provider}". Valores válidos: ${Object.values(EmbeddingProvider).join(', ')}.`,
@@ -64,6 +72,14 @@ export class EmbeddingsFactory {
           dimensions: indexed.dimensions,
           baseUrl: vars.LMSTUDIO_BASE_URL,
           sendDimensions: false,
+        })
+      case EmbeddingProvider.Gateway:
+        return new OpenAICompatibleEmbeddings({
+          apiKey: vars.GATEWAY_API_KEY,
+          model: indexed.model,
+          dimensions: indexed.dimensions,
+          baseUrl: vars.GATEWAY_BASE_URL,
+          sendDimensions: vars.GATEWAY_EMBEDDING_SEND_DIMENSIONS,
         })
       default:
         throw new Error(

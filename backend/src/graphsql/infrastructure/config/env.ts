@@ -40,6 +40,11 @@ const envSchema = z.object({
   LMSTUDIO_MODEL: z.string().optional(),
   LMSTUDIO_MODEL_REASONING: z.string().optional(),
   LMSTUDIO_MODEL_GENERATION: z.string().optional(),
+  GATEWAY_BASE_URL: z.string().default('http://localhost:4000/v1'),
+  GATEWAY_API_KEY: z.string().default(''),
+  GATEWAY_MODEL: z.string().optional(),
+  GATEWAY_MODEL_REASONING: z.string().optional(),
+  GATEWAY_MODEL_GENERATION: z.string().optional(),
 
   // Embeddings.
   EMBEDDING_PROVIDER: z.string().optional(),
@@ -47,6 +52,15 @@ const envSchema = z.object({
   OPENAI_EMBEDDING_DIMENSIONS: positiveInt.default(1536),
   LMSTUDIO_EMBEDDING_MODEL: z.string().default('text-embedding-bge-m3'),
   LMSTUDIO_EMBEDDING_DIMENSIONS: positiveInt.default(1024),
+  GATEWAY_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
+  GATEWAY_EMBEDDING_DIMENSIONS: positiveInt.default(1536),
+  // Solo la familia text-embedding-3 admite recortar la dimensión; si detrás del gateway
+  // hay un modelo propio (bge-m3 y compañía), pedirle `dimensions` es un error, así que
+  // por defecto no lo mando y quien sepa que su gateway lo soporta lo enciende.
+  GATEWAY_EMBEDDING_SEND_DIMENSIONS: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
 
   // Varios.
   GRAPHSQL_SKIP_INFRA_PREFLIGHT: z

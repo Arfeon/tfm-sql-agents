@@ -52,3 +52,30 @@ export async function warnIfLocalModelMissing(kind: 'chat' | 'embeddings', model
     )
   }
 }
+
+/**
+ * El mismo aviso para el gateway, pero con su propio texto: aquí el nombre no es un modelo
+ * que yo cargue, sino un alias que publica el gateway, y el fallo típico es escribirlo mal
+ * o no tener permiso sobre él.
+ */
+export async function warnIfGatewayModelMissing(kind: 'chat' | 'embeddings', modelId: string): Promise<void> {
+  const vars = loadEnv()
+  let published: string[]
+  try {
+    published = await listLoadedModels(vars.GATEWAY_BASE_URL, vars.GATEWAY_API_KEY)
+  } catch (error) {
+    console.log(chalk.yellow(`⚠ No pude consultar los modelos del gateway en ${vars.GATEWAY_BASE_URL}.`))
+    console.log(
+      chalk.dim(
+        `¿La URL y la clave (GATEWAY_API_KEY) son correctas? Detalle: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
+    return
+  }
+  if (!published.includes(modelId)) {
+    console.log(chalk.yellow(`⚠ El gateway no publica el modelo de ${kind} "${modelId}".`))
+    console.log(
+      chalk.dim(`Modelos disponibles: ${published.join(', ') || '(ninguno)'}. Usa uno de esos nombres tal cual.`),
+    )
+  }
+}
