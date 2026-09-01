@@ -29,6 +29,7 @@ export const GOLDEN_SET_PATH = '../setup/datasets/arcadia/golden_set.yaml'
 const GOLDEN_SET_BY_TARGET: Record<string, string> = {
   arcadia: GOLDEN_SET_PATH,
   nebula: '../setup/datasets/nebula/golden_set.yaml',
+  meridian: '../setup/datasets/meridian/golden_set.yaml',
 }
 
 export function goldenSetPathFor(targetName: string): string {
