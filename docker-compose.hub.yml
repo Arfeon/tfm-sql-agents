@@ -78,6 +78,17 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LMSTUDIO_BASE_URL: http://host.docker.internal:1234/v1
+      # Gateway corporativo: a diferencia de LM Studio, vive en la red, no en el anfitrión,
+      # así que la URL sale del .env tal cual. El defecto sirve para un LiteLLM de pruebas
+      # levantado en tu propia máquina.
+      GATEWAY_BASE_URL: ${GATEWAY_BASE_URL:-http://host.docker.internal:4000/v1}
+      GATEWAY_API_KEY: ${GATEWAY_API_KEY:-}
+      GATEWAY_MODEL: ${GATEWAY_MODEL:-}
+      GATEWAY_MODEL_REASONING: ${GATEWAY_MODEL_REASONING:-}
+      GATEWAY_MODEL_GENERATION: ${GATEWAY_MODEL_GENERATION:-}
+      GATEWAY_EMBEDDING_MODEL: ${GATEWAY_EMBEDDING_MODEL:-text-embedding-3-small}
+      GATEWAY_EMBEDDING_DIMENSIONS: ${GATEWAY_EMBEDDING_DIMENSIONS:-1536}
+      GATEWAY_EMBEDDING_SEND_DIMENSIONS: ${GATEWAY_EMBEDDING_SEND_DIMENSIONS:-false}
     extra_hosts:
       # En Docker Desktop (Windows/Mac) ya existe; esta línea lo añade también en Linux.
       - "host.docker.internal:host-gateway"

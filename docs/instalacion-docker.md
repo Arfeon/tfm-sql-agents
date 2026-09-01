@@ -69,6 +69,13 @@ máquina — la aplicación ya viene configurada para alcanzarlo en
 `http://host.docker.internal:1234/v1`, pero en LM Studio activa la opción de
 **servir en la red local** si no responde.
 
+Si en tu organización hay un **gateway LLM** (LiteLLM y compatibles), exporta sus
+variables antes del `run` (`GATEWAY_BASE_URL`, `GATEWAY_API_KEY`, `GATEWAY_MODEL`) o
+ponlas en el `.env`: el compose se las pasa al contenedor. Al vivir en la red y no en tu
+máquina, aquí no hace falta ningún truco de `host.docker.internal` — salvo que estés
+probando un LiteLLM levantado en tu propio equipo, que es justo lo que asume el defecto.
+Detalle en [Modo gateway](instalacion.md#modo-gateway-un-servidor-llm-de-la-organización).
+
 **4. Arranca:**
 
 ```bash
