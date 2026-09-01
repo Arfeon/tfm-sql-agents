@@ -1,0 +1,231 @@
+# =====================================================================
+# Golden set — Meridian (ERP de distribución mayorista B2B, dominio nuevo)
+# =====================================================================
+# Mismo formato que arcadia y nebula: preguntas en ESPAÑOL, esquema en INGLÉS.
+# Meridian es un dominio a propósito distinto (ERP, no videojuegos), así que este
+# golden set mide si el schema-linking recall y la execution accuracy aguantan
+# cuando el LLM se enfrenta a un esquema que no ha "visto" (~41 tablas).
+# Meridian está sembrada (seed=42, dump commiteado), así que la `sql` de referencia
+# SE EJECUTA y se compara el RESULTADO. Las preguntas "por/cada X" siguen la
+# interpretación inclusiva de D-13 (LEFT JOIN: las categorías vacías salen).
+# =====================================================================
+
+# ── Fáciles: una sola tabla ──────────────────────────────────────────
+- id: M-01
+  question: "¿Cuántos productos hay en el catálogo?"
+  difficulty: easy
+  tables: [product]
+  sql: |
+    SELECT COUNT(*) FROM product;
+
+- id: M-02
+  question: "Dame los 5 productos más pesados con su peso en kilos."
+  difficulty: easy
+  tables: [product]
+  sql: |
+    SELECT name, weight_kg FROM product ORDER BY weight_kg DESC NULLS LAST LIMIT 5;
+
+- id: M-03
+  question: "¿Cuántos clientes están activos?"
+  difficulty: easy
+  tables: [customer]
+  sql: |
+    SELECT COUNT(*) FROM customer WHERE is_active = TRUE;
+
+- id: M-04
+  question: "Lista las condiciones de pago con sus días de vencimiento."
+  difficulty: easy
+  tables: [payment_term]
+  sql: |
+    SELECT name, days FROM payment_term ORDER BY days;
+
+- id: M-05
+  question: "¿Cuántos almacenes hay?"
+  difficulty: easy
+  tables: [warehouse]
+  sql: |
+    SELECT COUNT(*) FROM warehouse;
+
+- id: M-06
+  question: "¿Cuántas facturas están vencidas?"
+  difficulty: easy
+  tables: [invoice]
+  sql: |
+    SELECT COUNT(*) FROM invoice WHERE status = 'overdue';
+
+# ── Medias: uno o dos joins, agrupación ──────────────────────────────
+- id: M-07
+  question: "¿Cuántos clientes hay en cada país?"
+  difficulty: medium
+  tables: [customer, country]
+  sql: |
+    SELECT co.name, COUNT(c.customer_id)
+    FROM country co LEFT JOIN customer c ON c.country_id = co.country_id
+    GROUP BY co.name;
+  note: "Interpretación inclusiva (D-13): 'cada país' incluye países con 0 clientes (LEFT JOIN)."
+
+- id: M-08
+  question: "¿Cuántos productos hay en cada categoría?"
+  difficulty: medium
+  tables: [product, product_category]
+  sql: |
+    SELECT pc.name, COUNT(p.product_id)
+    FROM product_category pc LEFT JOIN product p ON p.category_id = pc.category_id
+    GROUP BY pc.name;
+  note: "Inclusiva (D-13): las categorías padre (sin productos directos) salen con 0."
+
+- id: M-09
+  question: "¿Cuál es el importe total facturado?"
+  difficulty: medium
+  tables: [invoice]
+  sql: |
+    SELECT SUM(total) AS total_invoiced FROM invoice;
+
+- id: M-10
+  question: "Dame los 5 clientes con mayor importe facturado."
+  difficulty: medium
+  tables: [invoice, customer]
+  sql: |
+    SELECT c.name, SUM(i.total) AS total_invoiced
+    FROM customer c JOIN invoice i ON i.customer_id = c.customer_id
+    GROUP BY c.name ORDER BY total_invoiced DESC LIMIT 5;
+
+- id: M-11
+  question: "¿Cuántos proveedores hay en España?"
+  difficulty: medium
+  tables: [supplier, country]
+  sql: |
+    SELECT COUNT(*)
+    FROM supplier s JOIN country co ON co.country_id = s.country_id
+    WHERE co.name = 'Spain';
+
+- id: M-12
+  question: "Existencias totales disponibles por almacén."
+  difficulty: medium
+  tables: [stock_level, warehouse]
+  sql: |
+    SELECT w.name, SUM(sl.quantity_on_hand - sl.quantity_reserved) AS available
+    FROM warehouse w LEFT JOIN stock_level sl ON sl.warehouse_id = w.warehouse_id
+    GROUP BY w.name ORDER BY available DESC;
+  note: "Disponible = on_hand - reserved. Inclusiva: almacenes sin existencias también."
+
+- id: M-13
+  question: "¿Cuántos envíos ha gestionado cada transportista?"
+  difficulty: medium
+  tables: [shipment, carrier]
+  sql: |
+    SELECT ca.name, COUNT(sh.shipment_id)
+    FROM carrier ca LEFT JOIN shipment sh ON sh.carrier_id = ca.carrier_id
+    GROUP BY ca.name ORDER BY COUNT(sh.shipment_id) DESC;
+  note: "Inclusiva (D-13): transportistas sin envíos salen con 0."
+
+- id: M-14
+  question: "¿Cuántas devoluciones hay por cada motivo?"
+  difficulty: medium
+  tables: [return_order]
+  sql: |
+    SELECT reason, COUNT(*) FROM return_order GROUP BY reason ORDER BY COUNT(*) DESC;
+
+- id: M-15
+  question: "Número de órdenes de compra por estado."
+  difficulty: medium
+  tables: [purchase_order]
+  sql: |
+    SELECT status, COUNT(*) FROM purchase_order GROUP BY status ORDER BY COUNT(*) DESC;
+
+# ── Difíciles: varios joins y agregaciones ───────────────────────────
+- id: M-16
+  question: "Importe total de ventas por comercial, de mayor a menor."
+  difficulty: hard
+  tables: [sales_order, sales_order_line, sales_rep, employee]
+  sql: |
+    SELECT e.first_name || ' ' || e.last_name AS rep,
+           SUM(sol.quantity * sol.unit_price * (1 - sol.discount_pct / 100)) AS sales
+    FROM sales_rep sr
+    JOIN employee e ON e.employee_id = sr.employee_id
+    JOIN sales_order so ON so.sales_rep_id = sr.sales_rep_id
+    JOIN sales_order_line sol ON sol.order_id = so.order_id
+    GROUP BY rep ORDER BY sales DESC;
+
+- id: M-17
+  question: "Dame los 5 productos más vendidos por unidades."
+  difficulty: hard
+  tables: [sales_order_line, product]
+  sql: |
+    SELECT p.name, SUM(sol.quantity) AS units
+    FROM product p JOIN sales_order_line sol ON sol.product_id = p.product_id
+    GROUP BY p.name ORDER BY units DESC LIMIT 5;
+
+- id: M-18
+  question: "¿Qué productos no tienen ninguna variante?"
+  difficulty: hard
+  tables: [product, product_variant]
+  sql: |
+    SELECT p.product_id, p.name
+    FROM product p LEFT JOIN product_variant pv ON pv.product_id = p.product_id
+    WHERE pv.variant_id IS NULL;
+
+- id: M-19
+  question: "Valor del inventario a coste por almacén, usando el coste mínimo de proveedor de cada producto."
+  difficulty: hard
+  tables: [stock_level, warehouse, product_supplier]
+  sql: |
+    SELECT w.name,
+           SUM(sl.quantity_on_hand * cost.min_cost) AS stock_value
+    FROM stock_level sl
+    JOIN warehouse w ON w.warehouse_id = sl.warehouse_id
+    JOIN (SELECT product_id, MIN(cost_price) AS min_cost FROM product_supplier GROUP BY product_id) cost
+      ON cost.product_id = sl.product_id
+    GROUP BY w.name ORDER BY stock_value DESC;
+
+- id: M-20
+  question: "Clientes con facturas vencidas y el total pendiente de cada uno."
+  difficulty: hard
+  tables: [customer, invoice]
+  sql: |
+    SELECT c.name, SUM(i.total) AS overdue_total
+    FROM customer c JOIN invoice i ON i.customer_id = c.customer_id
+    WHERE i.status = 'overdue'
+    GROUP BY c.name ORDER BY overdue_total DESC;
+
+- id: M-21
+  question: "¿Cuántas unidades se han recibido de cada proveedor?"
+  difficulty: hard
+  tables: [goods_receipt_line, goods_receipt, purchase_order, supplier]
+  sql: |
+    SELECT s.name, SUM(grl.quantity_received) AS units_received
+    FROM supplier s
+    JOIN purchase_order po ON po.supplier_id = s.supplier_id
+    JOIN goods_receipt gr ON gr.po_id = po.po_id
+    JOIN goods_receipt_line grl ON grl.receipt_id = gr.receipt_id
+    GROUP BY s.name ORDER BY units_received DESC;
+
+- id: M-22
+  question: "Lista los productos de la familia de categorías 'Beverages'."
+  difficulty: hard
+  tables: [product, product_category]
+  sql: |
+    SELECT p.name
+    FROM product p
+    JOIN product_category child ON child.category_id = p.category_id
+    JOIN product_category parent ON parent.category_id = child.parent_category_id
+    WHERE parent.name = 'Beverages';
+  note: "Los productos cuelgan de subcategorías; hay que subir al padre por parent_category_id."
+
+- id: M-23
+  question: "Ticket medio de las facturas pagadas."
+  difficulty: medium
+  tables: [invoice]
+  sql: |
+    SELECT AVG(total) AS avg_ticket FROM invoice WHERE status = 'paid';
+
+- id: M-24
+  question: "Diferencia entre lo contado y lo esperado en los recuentos de inventario, por almacén."
+  difficulty: hard
+  tables: [inventory_count, inventory_count_line, warehouse]
+  sql: |
+    SELECT w.name, SUM(icl.counted_qty - icl.expected_qty) AS variance
+    FROM inventory_count ic
+    JOIN warehouse w ON w.warehouse_id = ic.warehouse_id
+    JOIN inventory_count_line icl ON icl.count_id = ic.count_id
+    GROUP BY w.name ORDER BY variance;

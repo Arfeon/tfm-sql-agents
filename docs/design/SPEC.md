@@ -101,7 +101,7 @@ Todo acceso a un recurso externo (BD objetivo, LLM, embeddings, store de vectore
 | SPEC-24 | Widgets bajo demanda: SQL aprobada ejecutada sin LLM para dashboards | 🔮 Futuro (fuera del MVP; especificada) |
 | SPEC-25 | Consultas favoritas: guardar con nombre, listar y reejecutar directamente (sin agentes, con la barrera de seguridad) | 🔮 Futuro (fuera del MVP; comparte la tabla `saved_queries` con SPEC-09, D-15) |
 | SPEC-26 | Recuperación por capas para esquemas grandes: ranking léxico + expansión por grafo + selector LLM, sobre el ERP real (~800 tablas) | ✅ Cerrada |
-| SPEC-27 | Generador automático de descripciones de tabla (con un LLM, a partir del esquema ya escaneado) | 🔮 Futuro (fuera del MVP; especificada) |
+| SPEC-27 | Generador automático de descripciones de tabla (con un LLM, desde columnas, claves y una muestra opcional de filas) | ✅ Cerrada |
 | SPEC-28 | Arranque guiado del CLI: preflight de infraestructura (Docker, contenedores healthy) y primera vez sin índice vectorial | ✅ Cerrada |
 | SPEC-29 | Actualización incremental de descripciones: re-vectoriza solo las tablas cuya descripción cambió | ✅ Cerrada |
 | SPEC-30 | Observabilidad local del pipeline con Arize Phoenix + OpenTelemetry, auto-alojado y opt-in | 🔮 Futuro (fuera del MVP) |
@@ -1135,36 +1135,43 @@ cd backend && npm test    # unit de listar/reejecutar/renombrar/borrar favoritas
 
 ---
 
-### SPEC-27 — Generador automático de descripciones de tabla 🔮 *Futuro (fuera del MVP)*
+### SPEC-27 — Generador automático de descripciones de tabla ✅ *Hecho*
 
 **Objetivo.** La medición sobre el ERP real de ~800 tablas (SPEC-26) deja claro que en esquemas grandes sin documentar el techo de la recuperación es la **descripción de tabla**: con una frase de descripción, una tabla sube del puesto ~60 al top del ranking (medido, antes/después). Describir 800 tablas a mano no es viable, así que quiero un generador que, dado el esquema ya escaneado (columnas y FKs reales en Neo4j), redacte con un LLM una descripción por tabla y la deje en `descriptions/<bd>.json`, de donde el escaneo ya la recoge (no toca la vectorización, que ya sabe embeber descripciones). Es a la vez la palanca que cierra el problema del ERP real y un artefacto del TFM (auto-documentación de esquema para NL2SQL).
 
 **Contrato.**
 
-- *Entrada.* Una BD objetivo ya escaneada (su esquema en Neo4j) y, opcionalmente, un límite `N` (describir solo las `N` tablas más conectadas, para validar barato antes de lanzar sobre todas) o una lista blanca de nombres.
-- *Por cada tabla.* Leo sus columnas y FKs reales y pido al **modelo de razonamiento** (rol `reasoning`, SPEC-26) una descripción de una línea centrada en *qué es y con qué se relaciona* (no un volcado de columnas: las columnas ya van aparte en el texto de búsqueda). La descripción se ancla en datos reales del esquema, no en suposiciones.
-- *Salida.* Escribo/actualizo `descriptions/<bd>.json` (`[{tableName, description}]`), fusionando con lo que ya haya (respeto descripciones escritas a mano). El escaneo posterior las embebe en pgvector y las guarda en Neo4j (flujo de SPEC-04/§6, sin cambios).
-- *Caso de uso testable (D-05).* Deps inyectadas: leer esquema, elegir tablas (por conectividad/lista), el LLM, escribir el fichero. Reales por defecto; dobles en los tests.
-- *Fuera de alcance.* La calidad "de negocio" de cada descripción (un humano puede pulirla después); el particionado por dominios/clusters (segundo nivel, otra spec); traducir la descripción a varios idiomas.
+- *Entrada.* Una BD objetivo del catálogo. El esquema se lee **en vivo** de la propia BD (no hace falta índice previo), así que sirve igual para documentar una BD que aún no se ha escaneado.
+- *Por cada tabla.* Nombre + columnas (tipo, `NOT NULL`, marca de PK y de FK con su destino) y, si se autoriza, una **muestra de las 10 primeras filas**. Pido al **modelo de razonamiento** (rol `reasoning`, SPEC-26) una descripción de UNA frase centrada en el propósito de negocio (qué representa cada fila y para qué sirve), no un volcado de columnas. Cada tabla es una llamada independiente: no acumulo contexto entre tablas, así el prompt se mantiene pequeño y no se contaminan entre sí.
+- *Guardarraíl de privacidad.* La muestra son datos REALES. Con LLM **local** se incluye sin fricción (no sale de la máquina). Con LLM **remoto** exijo consentimiento explícito antes de enviarla, avisando de que se mandan las 10 primeras filas de cada tabla a un tercero y de que conviene revisar la política de protección de datos; si se declina, ofrezco generar solo con nombre y columnas, o cancelar. Todo el flujo es **opt-in**: nada de esto ocurre si no se elige la opción.
+- *Contexto de negocio opcional.* Una frase del usuario ("ERP de distribución mayorista B2B") que se inyecta en el prompt para orientar al modelo cuando los nombres son opacos.
+- *Salida.* `descriptions/<bd>.json` (`[{tableName, description}]`), el mismo formato que ya consume el escaneo; las descripciones vacías no se escriben. Al terminar ofrezco lanzar el escaneo para vectorizarlas (con índice previo, el incremental de SPEC-29).
+- *Aislamiento de fallos.* Una tabla que falle —al muestrear o al llamar al modelo— se queda sin descripción y **no aborta el resto** ni tira lo ya generado.
+- *Prompt externo.* `agents/describe-tables.md`, con hueco `{{businessContext}}` (mismo patrón que los demás agentes).
+- *Caso de uso testable (D-05).* `generateDescriptions(target, options, deps)` con deps inyectadas (leer esquema, leer muestras, chat, progreso); reales por defecto, dobles en los tests.
+- *Fuera de alcance.* Elegir un subconjunto de tablas (por conectividad o lista blanca); fusionar con descripciones escritas a mano (hoy el fichero de esa BD se reescribe); previsualizar y editar antes de guardar; describir columnas; paralelizar. Todo ello queda en el backlog.
 
 **Pasos**
 
-1. Selección de tablas a describir: por límite `N` de conectividad (grado de FK en el grafo) o por lista blanca.
-2. Prompt del agente en `agents/table-describer.md` (o similar), con nombre + columnas + FKs de la tabla.
-3. Caso de uso `generateTableDescriptions(target, opts, deps)`: recorre las tablas elegidas, llama al LLM (rol razonamiento), acumula y escribe `descriptions/<bd>.json` fusionando con lo existente.
-4. Entrada de CLI: elegir BD, `N` o lista, previsualizar y confirmar antes de escribir; recordar que hay que re-escanear para que surtan efecto.
-5. Tests con dobles: se describen solo las tablas pedidas, la descripción se ancla en las columnas reales dadas, la fusión respeta las manuales, un fallo del LLM en una tabla no aborta el resto.
+1. `sampleTableRows`: `SELECT *` capado por motor (`fetchCapped`) con el identificador citado según dialecto; la conexión es la de solo lectura de siempre.
+2. `describeTablesPrompt`: funciones puras para las columnas, la muestra y la limpieza de la respuesta. Los valores de la muestra se normalizan antes de serializar (Buffer → marcador corto, bigint → texto, también anidados; `Date` y demás instancias intactas).
+3. Caso de uso `generateDescriptions` con deps inyectadas y progreso por tabla.
+4. `saveDescriptions` + `descriptionsFilePathFor` en `config/descriptions.ts`.
+5. Flujo de CLI con el guardarraíl, el contexto de negocio y el puente al escaneo; su opción en el menú principal.
+6. Tests con dobles y documentación en `docs/uso.md`.
 
 **Criterios de aceptación**
 
-- [ ] Genera `descriptions/<bd>.json` describiendo las `N` tablas más conectadas (o la lista dada) a partir de sus columnas/FKs reales
-- [ ] Usa el modelo de rol `reasoning` (SPEC-26) y no bloquea el conjunto si una tabla falla
-- [ ] Fusiona con las descripciones existentes sin pisar las escritas a mano
-- [ ] Tras re-escanear, las tablas descritas suben en la traza de recuperación (verificable en el modo depuración)
-- [ ] Suite unitaria verde con dobles, sin Docker ni LLM
+- [X] Genera `descriptions/<bd>.json` a partir del esquema real y, si se autoriza, de una muestra de filas (verificado en vivo sobre Meridian: 41/41 tablas con el modelo local)
+- [X] Usa el modelo de rol `reasoning` (SPEC-26) y enseña cuál va a usar antes de lanzar
+- [X] Con LLM remoto no se envía ninguna muestra sin consentimiento explícito; declinarlo deja generar solo con nombre y columnas
+- [X] Un fallo en una tabla (muestra o modelo) no aborta el resto
+- [X] La muestra no rompe la serialización (Buffer, bigint, anidados) ni vuelca binario en el prompt
+- [X] El fichero generado lo recoge el mismo cargador que usa el escaneo (verificado: `loadDescriptions()` lo fusiona con las de las demás BDs)
+- [X] Suite unitaria verde con dobles, sin Docker ni LLM (246 tests)
 
 ```bash
-cd backend && npm test    # unit del generador (con dobles de esquema y LLM)
+cd backend && npm test    # unit del generador (con dobles de esquema, muestra y LLM)
 ```
 
 ---
@@ -1421,6 +1428,16 @@ Ideas que veo venir pero que aún no voy a implementar. Las aparco aquí en una 
 - *Pool del selector relleno desde el ranking global.* Hoy el pool sale solo de la expansión (anclas + vecinas + conectores): si la expansión trae 12 tablas, el selector ve 12, no ~30. Rellenarlo con las siguientes del ranking fusionado hasta `SELECTOR_POOL_SIZE` es el cambio barato que más recall le da al selector (el pivote entraría aunque el léxico y el grafo fallen a la vez).
 - *Presupuesto en el completado por grafo de la selección.* `completeSelectionForJoins` no tiene tope: si el LLM elige muchas tablas y cada una referencia varias dimensiones, el contexto puede superar de largo `maxTables`. Acotarlo con la misma prioridad (elegidas > destinos FK > conectores).
 - *Parseo del selector más estricto.* El fallback de troceo por tokens puede colar una tabla que el LLM menciona precisamente para descartarla ("no incluyo X porque…"). Exigir la lista JSON y reintentar una vez antes de caer al recorte.
+
+**Descripciones automáticas (SPEC-27, hecho — lo que queda).**
+
+- *Medir cuánto aportan las generadas.* El arnés de la ablación (`evaluate:descriptions`, 2×2 vectorial/GraphRAG × con/sin descripciones) lee `descriptions/` tal cual, así que ya se pueden medir las de una BD descrita por IA y compararlas con el caso sin descripciones. Es el paso más barato y el que dice si merece la pena todo lo demás.
+- *Concurrencia acotada + guardado incremental.* Hoy va tabla a tabla y solo escribe el fichero al final: en Meridian son ~20 min con el modelo local, y en el ERP real de ~800 tablas serían horas que un Ctrl+C tira enteras. Un puñado de llamadas en paralelo y un guardado por tabla (o por lote) lo vuelven reanudable y lo bajan a minutos.
+- *Reanudar y no repetir.* Saltar las tablas que ya tienen descripción para completar solo los huecos, que es el modo natural de trabajar sobre un esquema grande.
+- *Fusionar en vez de reescribir.* El fichero de la BD se sobrescribe entero, así que una segunda pasada pisa lo que se haya editado a mano. Respetar las manuales (como pedía el contrato original) y tocar solo lo que falta.
+- *Revisión antes de escribir.* Previsualizar y aceptar/editar tabla a tabla, en la línea de la revisión humana del resto del sistema, en vez de escribir primero y avisar de que se revise después.
+- *Avisar de las tablas que fallaron.* Una tabla sin descripción se descarta en silencio al guardar; el resumen debería decir cuáles quedaron fuera para poder reintentarlas.
+- *Descripciones de columna, no solo de tabla.* Es la palanca grande para esquemas opacos —el experimento de confusión (SPEC-21) ofusca precisamente las columnas (`c1..c5`)—, pero es una spec en sí misma, no un afinado de esta.
 
 **Escala (esquemas de cientos de tablas, como el ERP real de SPEC-26).**
 

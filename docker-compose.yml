@@ -1,9 +1,11 @@
 # Infraestructura local del TFM: Postgres+pgvector y Neo4j.
 # Levanto todo con `docker compose up -d`. Las credenciales cuadran con mi .env.
 #
-# Postgres expone dos bases en la misma instancia:
+# Postgres expone varias bases en la misma instancia:
 #   - graphsql_memory  -> memoria/checkpoints de LangGraph + pgvector
 #   - arcadia          -> BD objetivo que consulto en lenguaje natural (setup/datasets/arcadia)
+#   - nebula           -> BD grande sintética para la prueba de escala (setup/datasets/nebula)
+#   - meridian         -> ERP de otro dominio (~41 tablas) para validar generalización (setup/datasets/meridian)
 # La imagen pgvector/pgvector ya trae el binario de pgvector instalado, pero cada
 # base hay que activarla con `CREATE EXTENSION vector`. Eso lo hace automáticamente
 # el script setup/infra/postgres/init/01-init.sh en las dos bases, en el primer arranque.
